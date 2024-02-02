@@ -1,0 +1,1 @@
+gl_FragCoord = [ 1.23e-5, -nan, inf, 3.14 ]
