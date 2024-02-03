@@ -1,6 +1,9 @@
 module;
 #include <cctype> // for std::isspace
-#include <limits>
+#include <cmath>
+#include <concepts> // for std::integral
+#include <cstdint> // for uint32_t and int32_t
+#include <limits> // for inf and nan
 #include <map>
 #include <iostream>
 #include <iterator>
@@ -10,6 +13,22 @@ module;
 import value;
 export module toml;
 
+
+bool parse_int_max(std::integral auto& val, const std::integral auto max, std::string& line, unsigned start, unsigned end) {
+    for (unsigned i = start; i < end; ++i) {
+        // Since we pre-checked the input, we know the char is 0-9
+        char digit = line[i] - '0';
+        if (max / 10 < val) {
+            return false;
+        }
+        val *= 10;
+        if (max - digit < val) {
+            return false;
+        }
+        val += digit;
+    }
+    return true;
+}
 
 export class Toml {
 
@@ -31,9 +50,157 @@ private:
 
     // Putting these functions in the class allows them to be reference each other recursively
 
-    static Value* parse_number(std::string& line, unsigned& i, int sign) {
+    /// @brief Parse a number from the given index in the provided line
+    /// @param line the string to parse from
+    /// @param i the starting index in the line
+    /// @param bool the sign of the number (true if prefixed by + or no prefix, false if prefixed by -).
+    ///             The sign, if present, must be the first character.
+    /// @return the number parsed (could be signed, unsigned, or float)
+    static Value* parse_number(std::string& line, unsigned& i, bool sign) {
+        // First, check for inf and nan
+        if (line.length() > i + 3) {
+            if (line[i] == 'i' && line[i + 1] == 'n' && line[i + 2] == 'f') {
+                i += 3;
+                return new Primitive(std::numeric_limits<float>::infinity() * (sign? 1: -1));
+            } else if (line[i] == 'n' && line[i + 1] == 'a' && line[i + 2] == 'n') {
+                i += 3;
+                return new Primitive(std::numeric_limits<float>::quiet_NaN() * (sign? 1: -1));
+            }
+        }
 
-        return nullptr;
+        bool has_dot = false;
+        int e_sign = 0;
+        unsigned e;
+        unsigned end = i;
+        for (; end < line.length(); ++end) {
+            char c = line[end];
+            if (c >= '0' || c <= '9')
+                continue;
+            else if (c == '.') {
+                if (has_dot) {
+                    std::cerr << "Found number with multiple decimals! \"" << line.substr(i) << "\"" << std::endl;
+                    return nullptr;
+                } else if (e_sign != 0) {
+                    std::cerr << "Ill-formatted number with decimal in exponent! \"" << line.substr(i) << "\"" << std::endl;
+                    return nullptr;
+                }
+                has_dot = true;
+            } else if (c == 'e' || c == 'E') {
+                if (e_sign == 0) {
+                    e = end;
+                    // Look ahead to find the exponent's sign
+                    if (++end < line.length()) {
+                        c = line[end];
+                        if (c == '-')
+                            e_sign = -1;
+                        else if (c == '+' || (c >= '0' && c <= '9'))
+                            e_sign = 1;
+                        else {
+                            std::cerr << "Unexpected character (" << c << ") found in exponent of number!" << std::endl;
+                            return nullptr;
+                        }
+                    } else {
+                        std::cerr << "Missing exponent in number after " << line[e] << "!" << std::endl;
+                        return nullptr;
+                    }
+                } else {
+                    std::cerr << "Ill-formatted number! \"" << line.substr(i) << "\"" << std::endl;
+                    return nullptr;
+                }
+            } else if (std::isspace(c))
+                break;
+            else {
+                std::cerr << "Unexpected character (" << c << ") in number!" << std::endl;
+            }
+        }
+        if (i == end) {
+            // No characters were accepted!
+            std::cerr << "No number found before break!" << std::endl;
+            return nullptr;
+        }
+        // Here at the end, we want to parse out from the indices we have learned
+        if (!has_dot && e_sign == 0) {
+            // Integral type- use either int or uint
+            if (sign) {
+                // Assume the larger uint type
+                uint32_t val = 0;
+                if (!parse_int_max(val, UINT32_MAX, line, i, end)) {
+                    std::cerr << "Value parsed is too big to fit in a 32-bit uint!" << std::endl;
+                    return nullptr;
+                }
+                i = end;
+                return new Primitive(val);
+            } else {
+                // Use int to apply the negation
+                int32_t val = 0;
+                bool too_small = false;
+                // compare with logic in parse_int_max
+                for (unsigned ii = i; ii < end; ++ii) {
+                    char digit = line[ii] - '0';
+                    if (INT32_MIN / 10 > val) {
+                        too_small = true;
+                        break;
+                    }
+                    val *= 10;
+                    if (INT32_MIN + digit > val) {
+                        too_small = true;
+                        break;
+                    }
+                    val -= digit;
+                }
+                if (too_small) {
+                    std::cerr << "Value parsed is too small to fit in a 32-bit int!" << std::endl;
+                    return nullptr;
+                }
+                i = end;
+                return new Primitive(val);
+            }
+        }else {
+            // float parsing, which may include exponent after the first digit
+            float val = 0;
+            unsigned early_end = end;
+            float move_dec = 0;
+            if (e_sign != 0)
+                early_end = e;
+            for (unsigned ii = i; ii < early_end; ++ii) {
+                char c = line[ii];
+                if (c >= '0' && c <= '9') {
+                    val *= 10;
+                } else if (c == '.') {
+                    unsigned to_move = early_end - (ii + 1);
+                    move_dec = -static_cast<float>(to_move);
+                    continue; // We will move the decimal later
+                }
+            }
+            i = end; // float parsing cannot fail from here out
+            if (!sign)
+                val *= -1;
+            // Process exponent, if any
+            if (e_sign != 0) {
+                int exp = 0;
+                unsigned ii = e + 1; // skip the e
+                if (e_sign > 0 && line[ii] == '+') // may be a prefixed + to skip
+                    ++ii;
+                if (!parse_int_max(exp, std::numeric_limits<int>::max(), line, ii, end)) {
+                    // If the exponent was out of bounds, we can do some approximation
+                    // Out of bounds positive exponent -> inf
+                    // Out of bounds negative exponent -> 0
+                    // multiply by val to keep the original sign
+                    val *= (e_sign >= 0) ? std::numeric_limits<float>::infinity(): 0.0;
+                    return new Primitive(val);
+                }
+                // Otherwise, the exponent was in bounds, so we can move the decimal appropriately
+                // Relies on signed int having a |min| >= |max|
+                // (Or in other words, loses a miniscule amount of precision for -exp)
+                // In fact, I am confident float cannot hold an exponent large enough to make any
+                // difference here.
+
+                move_dec += exp * (e_sign >= 0? 1 : -1);
+            }
+            // Finally, adjust the decimal (there is a decimal because otherwise we would parse integral)
+            val *= std::pow(10, move_dec);
+            return new Primitive(val);
+        }
     }
 
     template<typename Ite, typename Sen>
@@ -94,13 +261,13 @@ private:
                     continue;
                 
                 if (c == '+' || c == '-')
-                    return parse_number(line, ++i, (c == '+')? 1 : -1);
+                    return parse_number(line, ++i, c == '+');
                 else if (c == '.' || (c >= '0' && c <= '9'))
-                    return parse_number(line, i, 0);
+                    return parse_number(line, i, true);
                 else if (c == '[')
-                    return parse_array(line, i, begin, end);
+                    return parse_array(line, ++i, begin, end);
                 else if (c == '{')
-                    return parse_struct(line, i, begin, end);
+                    return parse_struct(line, ++i, begin, end);
                 // It would be convenient to throw all parsing of inf and nan into parse_number
                 // now, but we don't know with certainty that what starts with i or n isn't
                 // actually the beginning of an identifier until we test it

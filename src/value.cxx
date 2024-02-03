@@ -1,6 +1,6 @@
 module;
 #include <cassert>
-#include <cstdint>
+#include <cstdint> // for uint32_t and int32_t
 #include <iterator>
 #include <map>
 #include <optional>
