@@ -8,14 +8,7 @@
                OpMemoryModel Logical GLSL450
                OpEntryPoint Fragment %4 "main" %9
                OpExecutionMode %4 OriginUpperLeft
-               OpSource GLSL 460 "#version 460
-
-layout(location = 0) out vec3 outColor;
-
-void main() {
-    outColor = vec3(0.0);
-}
-"
+               OpSource GLSL 460
                OpName %4 "main"
                OpName %9 "outColor"
                OpDecorate %9 Location 0

@@ -1,4 +1,5 @@
 module;
+#include <cassert>
 #include <string>
 
 export module utils;
@@ -31,6 +32,15 @@ export namespace Utils {
         std::string& str() {
             assert(val == nullptr);
             return msg;
+        }
+
+        /// @brief Deletes the data stored in the May
+        /// May does *not* own the data, but if you want to delete it, this will and turn itself into none
+        void del() {
+            assert(val != nullptr);
+            delete val;
+            val = nullptr;
+            msg = "deleted";
         }
     };
 

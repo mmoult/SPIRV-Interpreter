@@ -1,23 +1,31 @@
+#include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
 
+import program;
 import toml;
+import utils;
 import value;
 
 enum ReturnCodes : int {
     OK = 0,
     INFO = 1,
     BAD_ARGS = 2,
+    BAD_FILE = 3,
+    BAD_PARSE = 4,
+    BAD_PROG_INPUT = 5,
+    FAILED_EXE = 6,
 };
 
 int main(int argc, char* argv[]) {
     std::string format, in, out;
     bool verbose = false;
     ValueMap inputs;
-    std::vector<std::string> spvasms;
+    std::optional<std::string> spv;
 
     bool args_only = false;
     for (int i = 0; i < argc; ++i) {
@@ -35,11 +43,9 @@ int main(int argc, char* argv[]) {
         } else if (arg == "-h" || arg == "--help") {
             std::cout << "spirv-run - Interpret SPIR-V shaders" << std::endl;
             std::cout << std::endl;
-            std::cout << "Usage: spirv-run [options] SPV+" << std::endl;
+            std::cout << "Usage: spirv-run [options] SPV" << std::endl;
             std::cout << std::endl;
-            std::cout << "where 'SPV' is a path to a spvasm file. One or more spvasm files may be " << std::endl;
-            std::cout << "provided. If multiple input files have an OpEntry, the first appearing will be" << std::endl;
-            std::cout << "used for the execution." << std::endl;
+            std::cout << "where 'SPV' is a path to a spv file, which must have an OpEntry instruction." << std::endl;
             std::cout << std::endl;
             std::cout << "Options:" << std::endl;
             std::cout << "  -f / --format TOML  creates a template input file with stubs for all needed" << std::endl;
@@ -89,14 +95,51 @@ int main(int argc, char* argv[]) {
             std::cout << "SPIRV-Interpreter version 0.0.1" << std::endl;
             return ReturnCodes::INFO;
         } else {
-            spvasms.push_back(arg);
+            if (spv.has_value()) {
+                // There may only be one
+                std::cerr << "Multiple spv inputs given! Second input is " << arg << "." << std::endl;
+                return ReturnCodes::BAD_ARGS;
+            } else {
+                spv = std::optional(arg);
+            }
         }
     }
 
-    if (spvasms.empty()) {
-        std::cout << "Missing spvasm input!" << std::endl;
+    if (!spv.has_value()) {
+        std::cerr << "Missing spv input!" << std::endl;
         return ReturnCodes::BAD_ARGS;
     }
+
+    // Load the SPIR-V input file:
+    std::ifstream ifs(spv.value(), std::ios::binary);
+    if (ifs.is_open()) {
+        std::cerr << "Could not open file \"" << spv.value() << "\"!" << std::endl;
+        return ReturnCodes::BAD_FILE;
+    }
+    // get its size:
+    ifs.seekg (0, ifs.end);
+    int length = ifs.tellg();
+    ifs.seekg (0, ifs.beg);
+    // allocate memory:
+    char* buffer = new char[length];
+    // read data as a block:
+    ifs.read(buffer, length);
+    ifs.close();
+
+    Utils::May<Spv::Program> program = Spv::Program::parse(buffer, length);
+    if (!program.is()) {
+        std::cerr << program.str() << std::endl;
+        return ReturnCodes::BAD_PARSE;
+    }
+    delete[] buffer;
+
+    // Verify that the inputs loaded match what the program expects
+    // ...
+
+    // Run the program
+    // ...
+
+    program.del();
 
     return ReturnCodes::OK;
 }

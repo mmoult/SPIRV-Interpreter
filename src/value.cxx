@@ -14,6 +14,7 @@ enum DataType : unsigned {
     INT = 2,
     BOOL = 3,
     COMPOSITE = 4,
+    UNKNOWN = 5, // for empty arrays
 };
 
 export class Type {
@@ -38,6 +39,11 @@ public:
     void incrementSize() {
         assert(arrayElement != nullptr);
         arraySize++;
+    }
+    void setElement(Type* e) {
+        assert(arrayElement != nullptr);
+        assert(e != nullptr);
+        arrayElement = e;
     }
 
     bool operator==(const Type& rhs) const {
@@ -78,7 +84,7 @@ export class Array : public Value  {
     Type elementType;
     std::vector<const Value*> elements;
 public:
-    Array(Type element_type): elementType(element_type) {}
+    Array(): elementType(Type(DataType::UNKNOWN)) {}
 
     virtual ~Array() {
         for (const auto& e : elements)
@@ -87,12 +93,18 @@ public:
     Array(const Array& other) = delete;
     Array& operator=(const Array& other) = delete;
 
-    void addElement(Value* e) {
-        assert(elementType == e->getType());
+    bool addElement(Value* e) {
+        // Set the element type to the intersection of all
+        // If cannot cast any elements to some intersection type, we have a problem
+        // TODO casting of elements and what not
+        elementType = e->getType();
+
         elements.push_back(e);
-        if (cachedType.has_value()) {
+        if (cachedType.has_value()) { // update the cached type, if any
             cachedType->incrementSize();
+            // The element type, even if modified, is at the same pointer location: nothing to update!
         }
+        return true;
     }    
 
 protected:

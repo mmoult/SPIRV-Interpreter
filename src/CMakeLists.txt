@@ -15,6 +15,9 @@ target_sources(build
       toml.cxx
       utils.cxx
       value.cxx
+      spv/instructions.cxx
+      spv/program.cxx
+      spv/tokens.cxx
 )
 # Add regular files (if any)
 target_sources(build
