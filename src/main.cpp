@@ -1,3 +1,5 @@
+#include <bit>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -126,7 +128,8 @@ int main(int argc, char* argv[]) {
     ifs.read(buffer, length);
     ifs.close();
 
-    Utils::May<Spv::Program> program = Spv::Program::parse(buffer, length);
+    // The type of char is implementation defined. Use uint8_t to remove ambiguity
+    Utils::May<Spv::Program> program = Spv::Program::parse(std::bit_cast<uint8_t*>(buffer), length);
     if (!program.is()) {
         std::cerr << program.str() << std::endl;
         return ReturnCodes::BAD_PARSE;

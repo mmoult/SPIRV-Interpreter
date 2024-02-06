@@ -2122,10 +2122,10 @@ enum Op {
     OpMax = 0x7fffffff,
 };
 
-inline void HasResultAndType(Op opcode, bool *hasResult, bool *hasResultType) {
+inline bool HasResultAndType(Op opcode, bool *hasResult, bool *hasResultType) {
     *hasResult = *hasResultType = false;
     switch (opcode) {
-    default: /* unknown opcode */ break;
+    default: /* unknown opcode */ return false;
     case OpNop: *hasResult = false; *hasResultType = false; break;
     case OpUndef: *hasResult = true; *hasResultType = true; break;
     case OpSourceContinued: *hasResult = false; *hasResultType = false; break;
@@ -2844,6 +2844,7 @@ inline void HasResultAndType(Op opcode, bool *hasResult, bool *hasResultType) {
     case OpMaskedGatherINTEL: *hasResult = true; *hasResultType = true; break;
     case OpMaskedScatterINTEL: *hasResult = false; *hasResultType = false; break;
     }
+    return true;
 }
 
 // Overload bitwise operators for mask bit combining

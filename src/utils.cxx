@@ -12,7 +12,7 @@ export namespace Utils {
 
         May(S* val, std::string msg): val(val), msg(msg) {}
     public:
-        static May some(S val) {
+        static May some(S& val) {
             return May(&val, "");
         }
         static May none(std::string str) {
