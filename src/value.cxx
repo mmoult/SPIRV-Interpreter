@@ -105,7 +105,7 @@ public:
             // The element type, even if modified, is at the same pointer location: nothing to update!
         }
         return true;
-    }    
+    }
 
 protected:
     virtual Type describeType() const override {

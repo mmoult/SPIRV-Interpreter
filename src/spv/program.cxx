@@ -38,7 +38,7 @@ export namespace Spv {
         }
 
         bool getWord(uint32_t& res) {
-            if (idx + 4 >= length)
+            if (idx + 4 > length)
                 return false;
 
             res = 0;
@@ -82,7 +82,7 @@ export namespace Spv {
 
             REQUIRE(program->determineEndian(), "Corrupted binary! Magic number missing.");
             REQUIRE(program->skip(2), "Corrupted binary! Version and/or generator missing.");
-            
+
             uint32_t bound;
             REQUIRE(program->getWord(bound), "Corrupted binary! Missing bound.");
             REQUIRE(program->skip(1), "Corrupted binary! Missing reserved word.");
@@ -98,7 +98,7 @@ export namespace Spv {
                 uint16_t opcode = control & 0xffff;
 
                 std::vector<uint32_t> words;
-                for (; word_count > 0; --word_count) {
+                for (; word_count > 1; --word_count) { // first word in count is the control (already parsed)
                     uint32_t word;
                     REQUIRE(program->getWord(word), "Corrupted binary! Missing data in instruction stream!");
                     words.push_back(word);

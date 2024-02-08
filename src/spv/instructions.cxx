@@ -20,10 +20,21 @@ export namespace Spv {
         std::vector<Token> operands;
         bool hasResult;
         bool hasResultType;
-        
-        static bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {
 
-            return false;
+        static bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {
+            // UTF-8 encoding with four codepoints per word, 0 terminated
+            for (; i < words.size(); ++i) {
+                uint32_t word = words[i];
+                for (unsigned ii = 0; ii < 4; ++ii) {
+                    char code = static_cast<char>((word >> (ii * 8)) & 0xff);
+                    if (code == 0) {
+                        ++i; // this word was used, queue up the next
+                        return true;
+                    }
+                    str << code;
+                }
+            }
+            return false; // we reached the end of string before expected (no 0 termination)!
         }
 
         static void handleTypes(const Token::Type& type, Instruction& inst, const std::vector<uint32_t>& words, unsigned& i) {
@@ -61,7 +72,7 @@ export namespace Spv {
             spv::Op op = static_cast<spv::Op>(opcode);
             if (!spv::HasResultAndType(static_cast<spv::Op>(opcode), &has_result, &has_type))
                 return Utils::May<Instruction>::none("Cannot parse invalid SPIR-V opcode!");
-            
+
             // Create token operands from the words available and for the given opcode
             std::vector<Token::Type> to_load;
             std::vector<Token::Type> optional;
@@ -95,6 +106,10 @@ export namespace Spv {
                 break;
             case spv::OpExtInstImport: // 11
                 to_load.push_back(Token::Type::STRING);
+                break;
+            case spv::OpMemoryModel: // 14
+                to_load.push_back(Token::Type::CONST);
+                to_load.push_back(Token::Type::CONST);
                 break;
             case spv::OpEntryPoint: // 15
                 to_load.push_back(Token::Type::CONST);
@@ -140,6 +155,7 @@ export namespace Spv {
                 repeating = true;
                 break;
             case spv::OpTypePointer: // 32
+            case spv::OpFunction: // 54
                 to_load.push_back(Token::Type::CONST);
                 to_load.push_back(Token::Type::REF);
                 break;
@@ -173,6 +189,13 @@ export namespace Spv {
                 optional.push_back(Token::Type::UINT);
                 repeating = true;
                 break;
+            case spv::OpVectorShuffle: // 79
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::UINT);
+                optional.push_back(Token::Type::UINT);
+                repeating = true;
+                break;
             }
 
             Instruction& inst = insts.emplace_back(op, has_result, has_type);
@@ -181,20 +204,29 @@ export namespace Spv {
 
             // If the op has a result type, that comes first
             if (has_type) {
-                if (i >= words.size())
-                    return Utils::May<Instruction>::none("Missing words while parsing instruction result type!");
+                if (i >= words.size()) {
+                    std::stringstream err;
+                    err << "Missing words while parsing result type of instruction " << opcode << "!";
+                    return Utils::May<Instruction>::none(err.str());
+                }
                 inst.operands.emplace_back(Token::Type::REF, words[i++]);
             }
             // Then the result comes next
             if (has_result) {
-                if (i >= words.size())
-                    return Utils::May<Instruction>::none("Missing words while parsing instruction result!");
+                if (i >= words.size()) {
+                    std::stringstream err;
+                    err << "Missing words while parsing result of instruction " << opcode << "!";
+                    return Utils::May<Instruction>::none(err.str());
+                }
                 inst.operands.emplace_back(Token::Type::REF, words[i++]);
             }
 
             for (const auto& type : to_load) {
-                if (i >= words.size())
-                    return Utils::May<Instruction>::none("Missing words while parsing instruction!");
+                if (i >= words.size()) {
+                    std::stringstream err;
+                    err << "Missing words while parsing instruction " << opcode << "!";
+                    return Utils::May<Instruction>::none(err.str());
+                }
 
                 handleTypes(type, inst, words, i);
             }
@@ -213,8 +245,11 @@ export namespace Spv {
             after_optional:
 
             // Verify that there are no extra words
-            if (i < words.size())
-                return Utils::May<Instruction>::none("Extra words while parsing instruction!");
+            if (i < words.size()) {
+                std::stringstream err;
+                err << "Extra words while parsing instruction " << opcode << "!";
+                return Utils::May<Instruction>::none(err.str());
+            }
 
             return Utils::May<Instruction>::some(inst);
         }

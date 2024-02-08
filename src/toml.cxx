@@ -35,16 +35,16 @@ class LineHandler {
     Ite* begin;
     Sen* end;
 
-    std::string* line;
+    const std::string* pLine;
     unsigned idx;
 
     using MayChar = std::tuple<char, bool>;
 
 public:
-    LineHandler(std::string* start_line, unsigned start_idx, Ite* begin, Sen* end):
+    LineHandler(const std::string* start_line, unsigned start_idx, Ite* begin, Sen* end):
         begin(begin),
         end(end),
-        line(start_line),
+        pLine(start_line),
         idx(start_idx) {}
 
     MayChar next() {
@@ -56,15 +56,16 @@ public:
     /// @brief Try to match current location to the given string.
     /// If it is a match, advance the handler's pointer for the next parse. Also, check that the string to match is
     /// independent in the search line, that is, there are no other identifier characters immediately after it.
-    /// @param match 
-    /// @param len 
-    /// @return 
+    /// @param match the string to match current location against
+    /// @param len the length of string match
+    /// @return whether the match was successful
     bool matchId(const char* match, unsigned len) {
-        if (idx + len > line->length()) // if the match string is longer than remaining length on line
+        const auto& line = *pLine;
+        if (idx + len > line.length()) // if the match string is longer than remaining length on line
             return false;
         // speculatively look ahead
         for (unsigned i = 0; i < len; ++i) {
-            if ((*line)[i + idx] != match[i])
+            if (line[i + idx] != match[i])
                 return false;
         }
         // We need to verify that the character after len (if any) is not alphanumeric
@@ -72,7 +73,7 @@ public:
 
         // Either the match goes to the end of line (in which case, there are no chars after) OR
         // there is another character to check at (idx + len)
-        if (idx + len == line->length() || is_ident((*line)[idx + len], false) == IdValidity::VALID) {
+        if (idx + len == line.length() || is_ident(line[idx + len], false) != IdValidity::VALID) {
             idx += len; // update the index to point to after the constant name
             return true;
         }
@@ -83,8 +84,8 @@ public:
     /// Specifically, return the current line and index. The iterator (if any) is modified in place and the iterator end
     /// should not have been modified.
     /// @return the info for variables changed during line handling
-    std::tuple<std::string*, unsigned> update() {
-        return std::make_tuple(line, idx);
+    std::tuple<const std::string*, unsigned> update() {
+        return std::make_tuple(pLine, idx);
     }
 
     void skip(unsigned delta) {
@@ -96,34 +97,41 @@ public:
 
     MayChar peek() {
         while (true) {
-            if (line == nullptr) {
+            if (pLine == nullptr) {
                 // fetch a new line
                 if (begin == nullptr || *begin == *end)
                     return std::make_tuple(0, false);
                 ++(*begin);
-                line = &(**begin);
+                pLine = &(**begin);
                 idx = 0; // reset point to front
             }
 
-            for (; idx < line->length(); ++idx) {
-                char c = (*line)[idx];
+            const auto& line = *pLine;
+            for (; idx < line.length(); ++idx) {
+                char c = line[idx];
                 if (c == '#')
                     break; // beginning of line comment, skip rest of line
                 if (std::isspace(c))
                     continue;
-                
+
                 return std::make_tuple(c, true);
             }
 
-            line = nullptr; // reset to ask for new line
+            pLine = nullptr; // reset to ask for new line
         }
     }
 };
 
-bool parse_int_max(std::integral auto& val, const std::integral auto max, std::string* line, unsigned start, unsigned end) {
+bool parse_int_max(
+    std::integral auto& val,
+    const std::integral auto max,
+    const std::string& line,
+    unsigned start,
+    unsigned end
+) {
     for (unsigned i = start; i < end; ++i) {
         // Since we pre-checked the input, we know the char is 0-9
-        char digit = (*line)[i] - '0';
+        char digit = line[i] - '0';
         if (max / 10 < val) {
             return false;
         }
@@ -158,7 +166,7 @@ private:
         // Very first, we may see a sign signifier
         bool sign = true;
         if (c == '+' || c == '-') {
-            sign = c == '+';
+            sign = (c == '+');
             // character accepted, move on to next
             handler.skip(1);
         }
@@ -171,15 +179,16 @@ private:
         }
 
         // From here, we need more details than line handler gives us, so we take control
-        auto [line, idx] = handler.update();
+        auto [pline, idx] = handler.update();
+        const auto& line = *pline;
 
         bool has_dot = false;
         int e_sign = 0;
         unsigned e;
         unsigned end = idx;
-        for (; end < line->length(); ++end) {
-            char c = (*line)[end];
-            if (c >= '0' || c <= '9')
+        for (; end < line.length(); ++end) {
+            char c = line[end];
+            if (c >= '0' && c <= '9')
                 continue;
             else if (c == '.') {
                 if (has_dot) {
@@ -194,8 +203,8 @@ private:
                 if (e_sign == 0) {
                     e = end;
                     // Look ahead to find the exponent's sign
-                    if (++end < line->length()) {
-                        c = (*line)[end];
+                    if (++end < line.length()) {
+                        c = line[end];
                         if (c == '-')
                             e_sign = -1;
                         else if (c == '+' || (c >= '0' && c <= '9'))
@@ -205,17 +214,18 @@ private:
                             return nullptr;
                         }
                     } else {
-                        std::cerr << "Missing exponent in number after " << (*line)[e] << "!" << std::endl;
+                        std::cerr << "Missing exponent in number after " << line[e] << "!" << std::endl;
                         return nullptr;
                     }
                 } else {
                     std::cerr << "Ill-formatted number!" << std::endl;
                     return nullptr;
                 }
-            } else if (std::isspace(c))
+            } else if (std::isspace(c) || c == ',' || c == ']' || c == '}')
                 break;
             else {
                 std::cerr << "Unexpected character (" << c << ") in number!" << std::endl;
+                return nullptr;
             }
         }
         if (idx == end) {
@@ -241,7 +251,7 @@ private:
                 bool too_small = false;
                 // compare with logic in parse_int_max
                 for (unsigned ii = idx; ii < end; ++ii) {
-                    char digit = (*line)[ii] - '0';
+                    char digit = line[ii] - '0';
                     if (INT32_MIN / 10 > val) {
                         too_small = true;
                         break;
@@ -268,9 +278,10 @@ private:
             if (e_sign != 0)
                 early_end = e;
             for (unsigned ii = idx; ii < early_end; ++ii) {
-                char c = (*line)[ii];
+                char c = line[ii];
                 if (c >= '0' && c <= '9') {
                     val *= 10;
+                    val += c - '0';
                 } else if (c == '.') {
                     unsigned to_move = early_end - (ii + 1);
                     move_dec = -static_cast<float>(to_move);
@@ -284,7 +295,9 @@ private:
             if (e_sign != 0) {
                 int exp = 0;
                 unsigned ii = e + 1; // skip the e
-                if (e_sign > 0 && (*line)[ii] == '+') // may be a prefixed + to skip
+                // if the exponent was negative, there must be a '-' to skip
+                // if positive, check for an optional sign
+                if (e_sign < 0 || line[ii] == '+')
                     ++ii;
                 if (!parse_int_max(exp, std::numeric_limits<int>::max(), line, ii, end)) {
                     // If the exponent was out of bounds, we can do some approximation
@@ -318,18 +331,21 @@ private:
     template<typename Ite, typename Sen>
     static Value* parse_array(LineHandler<Ite, Sen>& handler) {
         Array* arr = new Array();
-        // Assume [ has been seen already
-        bool first = true;
+        // skip over the [, which should have been seen already
+        handler.next();
         while (true) {
-            auto [c, valid] = handler.next();
+            auto [c, valid] = handler.peek();
             if (!valid) {
                 delete arr;
                 std::cerr << "End found while parsing array!" << std::endl;
                 return nullptr;
             }
 
-            if (c == ']')
+            if (c == ']') {
+                // Consume the ]
+                handler.skip(1);
                 break;
+            }
 
             // Parse out an element
             Value* element = parse(handler);
@@ -369,7 +385,7 @@ private:
         // 4. struct (using {member = value} syntax)
         // Strings and dates (in TOML spec) not supported
         while (true) {
-            auto [c, valid] = handler.next();
+            auto [c, valid] = handler.peek();
             if (!valid)
                 break;
 
@@ -383,7 +399,7 @@ private:
                 return new Primitive(true);
             else if (handler.matchId("false", 4))
                 return new Primitive(false);
-            
+
             // If it isn't an array, struct, or bool, it must be a number!
             return parse_number(handler);
         }
@@ -402,31 +418,39 @@ private:
     }
 
     template<typename Ite, typename Sen>
-    static bool parse_for(ValueMap& vars, std::string key, std::string& line, unsigned& idx, Ite* begin, Sen* end) {
+    static bool parse_for(
+        ValueMap& vars,
+        std::string key,
+        const std::string*& line,
+        unsigned& idx,
+        Ite* begin,
+        Sen* end
+    ) {
         // Handle string input through the LineHandler
-        LineHandler handle(&line, idx, begin, end);
+        LineHandler handle(line, idx, begin, end);
         Value* val = parse(handle);
         if (val == nullptr)
             return false;
 
         // Now fetch the updates from the handler
         auto [l, i] = handle.update();
-        line = *l;
+        line = l;
         idx = i;
 
-        return !add_to_map(vars, key, val);
+        return add_to_map(vars, key, val);
     }
 
 public:
-    template<std::forward_iterator Ite, std::sentinel_for<Ite> Sen>
+    template<std::input_or_output_iterator Ite, std::sentinel_for<Ite> Sen>
     static bool parse_toml(ValueMap& vars, Ite begin, Sen end) {
         while (begin != end) {
-            const std::string& line = *begin;
+            const std::string* pline = &*begin;
 
             std::string name = "";
             bool equals = false;
-            bool end = false;
-            for (unsigned i = 0; i < line.length(); ++i) {
+            bool val_end = false;
+            for (unsigned i = 0; i < pline->length(); ++i) {
+                const std::string& line = *pline;
                 char c = line[i];
                 if (std::isspace(c))
                     continue;
@@ -439,7 +463,7 @@ public:
                     }
                     equals = true;
                 } else {
-                    if (end) {
+                    if (val_end) {
                         // Found something after value end!
                         std::cerr << "Found character (" << c << ") after value where end expected!" << std::endl;
                         return false;
@@ -463,6 +487,8 @@ public:
                             }
                             after_loop:
                             name = line.substr(start, i - start);
+                            // Re-handle the character which signaled a break
+                            --i;
                         } else {
                             std::cerr << "Character (" << line[i] << ") found where alphanumeric expected!" << std::endl;
                             return false;
@@ -473,13 +499,15 @@ public:
                             return false;
                         }
                         // need value:
-                        if (!parse_for(vars, name, line, i, &begin, &end))
+                        if (!parse_for(vars, name, pline, i, &begin, &end))
                             return false;
 
-                        end = true; // should not see anything else syntactically relevant from here to EOL
+                        val_end = true; // should not see anything else syntactically relevant from here to EOL
                     }
                 }
             }
+
+            ++begin;
         }
         // Empty file (ie no variables defined) is legal
         return true;
@@ -509,8 +537,9 @@ public:
             key = key.substr(begin, (end + 1) - begin);
 
         unsigned i = 0;
-        using SI = std::vector<std::string>::iterator;
-        if (!parse_for(vars, key, val, i, static_cast<SI*>(nullptr), static_cast<SI*>(nullptr)))
+        const std::string* pVal = &val; // need an r-value pointer even though the value cannot change given inputs
+        using Iter = std::vector<std::string>::iterator;
+        if (!parse_for(vars, key, pVal, i, static_cast<Iter*>(nullptr), static_cast<Iter*>(nullptr)))
             return false;
         // verify that we only see whitespace or comments after the value
         for (; i < val.length(); ++i) {
