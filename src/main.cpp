@@ -163,8 +163,8 @@ int main(int argc, char* argv[]) {
 
     // The type of char is implementation defined. Use uint8_t to remove ambiguity
     Utils::May<Spv::Program> program = Spv::Program::parse(std::bit_cast<uint8_t*>(buffer), length);
-    if (!program.is()) {
-        std::cerr << program.str() << std::endl;
+    if (!program) {
+        std::cerr << program.error() << std::endl;
         return ReturnCodes::BAD_PARSE;
     }
     delete[] buffer;

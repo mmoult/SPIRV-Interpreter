@@ -85,7 +85,7 @@ public:
     /// should not have been modified.
     /// @return the info for variables changed during line handling
     std::tuple<const std::string*, unsigned> update() {
-        return std::make_tuple(pLine, idx);
+        return std::tuple(pLine, idx);
     }
 
     void skip(unsigned delta) {
@@ -100,7 +100,7 @@ public:
             if (pLine == nullptr) {
                 // fetch a new line
                 if (begin == nullptr || *begin == *end)
-                    return std::make_tuple(0, false);
+                    return std::tuple(0, false);
                 ++(*begin);
                 pLine = &(**begin);
                 idx = 0; // reset point to front
@@ -114,7 +114,7 @@ public:
                 if (std::isspace(c))
                     continue;
 
-                return std::make_tuple(c, true);
+                return std::tuple(c, true);
             }
 
             pLine = nullptr; // reset to ask for new line

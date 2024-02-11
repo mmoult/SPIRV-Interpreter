@@ -1,15 +1,19 @@
 module;
 #include <bit>
+#include <cassert>
 #include <cstdint>
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <variant>
 #include <vector>
 
 #include "../external/spirv.hpp"
 
+import data;
 import tokens;
 import utils;
+import value;
 export module instructions;
 
 
@@ -59,6 +63,31 @@ export namespace Spv {
             }
         }
 
+        Utils::May<const bool> checkRef(unsigned idx, unsigned len, unsigned& result_at) const {
+            assert(operands[idx].type == Token::Type::REF);
+            result_at = std::get<unsigned>(operands[idx].raw);
+            if (result_at < len) {
+                std::stringstream err;
+                err << "Reference found (" << result_at << ") beyond data bound (" << len << ")!";
+                return Utils::unexpected<const bool>(err.str());
+            }
+            return Utils::expected();
+        }
+
+        Utils::May<const bool> getType(unsigned idx, std::vector<Data>& data, Type*& ty) const {
+            unsigned ty_at;
+            if (auto res = checkRef(idx, data.size(), ty_at); !res)
+                return res;
+            auto [type, valid] = data[ty_at].getType();
+            if (!valid) {
+                std::stringstream err;
+                err << "%" << ty_at << " is not a type!";
+                return Utils::unexpected<const bool>(err.str());
+            }
+            ty = type;
+            return Utils::expected();
+        }
+
     public:
         Instruction(spv::Op opcode, bool has_result, bool has_result_type):
             opcode(opcode),
@@ -71,7 +100,7 @@ export namespace Spv {
             bool has_type;
             spv::Op op = static_cast<spv::Op>(opcode);
             if (!spv::HasResultAndType(static_cast<spv::Op>(opcode), &has_result, &has_type))
-                return Utils::May<Instruction>::none("Cannot parse invalid SPIR-V opcode!");
+                return Utils::unexpected<Instruction>("Cannot parse invalid SPIR-V opcode!");
 
             // Create token operands from the words available and for the given opcode
             std::vector<Token::Type> to_load;
@@ -82,7 +111,7 @@ export namespace Spv {
                 // Unsupported op
                 std::stringstream err;
                 err << "Cannot use unsupported SPIR-V instruction (" << opcode << ")!";
-                return Utils::May<Instruction>::none(err.str());
+                return Utils::unexpected<Instruction>(err.str());
             }
             case spv::OpNop: // 1
             case spv::OpTypeVoid: // 19
@@ -207,7 +236,7 @@ export namespace Spv {
                 if (i >= words.size()) {
                     std::stringstream err;
                     err << "Missing words while parsing result type of instruction " << opcode << "!";
-                    return Utils::May<Instruction>::none(err.str());
+                    return Utils::unexpected<Instruction>(err.str());
                 }
                 inst.operands.emplace_back(Token::Type::REF, words[i++]);
             }
@@ -216,7 +245,7 @@ export namespace Spv {
                 if (i >= words.size()) {
                     std::stringstream err;
                     err << "Missing words while parsing result of instruction " << opcode << "!";
-                    return Utils::May<Instruction>::none(err.str());
+                    return Utils::unexpected<Instruction>(err.str());
                 }
                 inst.operands.emplace_back(Token::Type::REF, words[i++]);
             }
@@ -225,7 +254,7 @@ export namespace Spv {
                 if (i >= words.size()) {
                     std::stringstream err;
                     err << "Missing words while parsing instruction " << opcode << "!";
-                    return Utils::May<Instruction>::none(err.str());
+                    return Utils::unexpected<Instruction>(err.str());
                 }
 
                 handleTypes(type, inst, words, i);
@@ -248,10 +277,81 @@ export namespace Spv {
             if (i < words.size()) {
                 std::stringstream err;
                 err << "Extra words while parsing instruction " << opcode << "!";
-                return Utils::May<Instruction>::none(err.str());
+                return Utils::unexpected<Instruction>(err.str());
             }
 
-            return Utils::May<Instruction>::some(inst);
+            return Utils::expected<Instruction>(inst);
+        }
+
+        Utils::May<const bool> makeResult(std::vector<Data>& data) const {
+            if (!hasResult)
+                return Utils::expected();
+
+            const unsigned len = data.size();
+            unsigned result_at;
+            if (auto res = checkRef(0, len, result_at); !res)
+                return res;
+
+            switch (opcode) {
+            default:
+                break;
+            case spv::OpTypeVoid: // 19
+                return data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
+            case spv::OpTypeFloat: // 22
+                assert(operands[1].type == Token::Type::UINT);
+                return data[result_at].redefine(new Type(Type::primitive(DataType::FLOAT,
+                        std::get<unsigned>(operands[1].raw))));
+            case spv::OpTypeVector: { // 23
+                Type* sub;
+                if (const auto res = getType(1, data, sub); !res)
+                    return res;
+                assert(operands[2].type == Token::Type::UINT);
+                return data[result_at].redefine(new Type(
+                        Type::array(std::get<unsigned>(operands[2].raw), *sub)));
+            }
+            case spv::OpTypePointer: { // 32
+                Type* pt_to;
+                if (const auto res = getType(2, data, pt_to); !res)
+                    return res;
+                assert(operands[1].type == Token::Type::CONST); // storage class we don't need
+                return data[result_at].redefine(new Type(Type::pointer(*pt_to)));
+            }
+            case spv::OpTypeFunction: { // 33
+                // OpTypeFunction %return %params...
+                Type* ret;
+                if (const auto res = getType(1, data, ret); !res)
+                    return res;
+
+                // Now cycle through all parameters
+                std::vector<Type*> params;
+                for (unsigned i = 2; i < operands.size(); ++i) {
+                    Type* param;
+                    if (const auto res = getType(i, data, param); !res)
+                        return res;
+                    params.push_back(param);
+                }
+                return data[result_at].redefine(Data(new Type(Type::function(ret, params))));
+            }
+            }
+
+            return Utils::unexpected<const bool>("Unimplemented function!");
+        }
+
+        bool isDecoration() const {
+            switch (opcode) {
+                default:
+                    return false;
+                case spv::OpName: // 5
+                case spv::OpMemberName: // 6
+                case spv::OpEntryPoint: // 15
+                case spv::OpDecorate: // 71
+                case spv::OpMemberDecorate: // 72
+                    return true;
+            }
+        }
+
+        Utils::May<const bool> applyDecoration(std::vector<Data>& data) const {
+            return Utils::unexpected<const bool>("Unimplemented function!");
         }
 
     };

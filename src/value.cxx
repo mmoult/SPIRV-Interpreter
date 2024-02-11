@@ -8,56 +8,109 @@ module;
 #include <vector>
 export module value;
 
-enum DataType : unsigned {
+export enum DataType : unsigned {
     FLOAT = 0,
     UINT = 1,
     INT = 2,
     BOOL = 3,
     COMPOSITE = 4,
-    UNKNOWN = 5, // for empty arrays
+    ARRAY = 5,
+    ANY = 6, // for empty arrays
+    // Above is usable in TOML, below only internal to SPIR-V
+    VOID = 7,
+    FUNCTION = 8,
+    POINTER = 9,
 };
 
 export class Type {
-    DataType primitive;
+    DataType base;
+    unsigned subSize;
+    const Type* subElement;
     std::map<std::string, Type*> structElements;
-    const Type* arrayElement;
-    unsigned arraySize;
+    std::vector<const Type*> params;
+
+    Type(DataType base, unsigned sub_size, const Type* sub_element):
+        base(base),
+        subSize(sub_size),
+        subElement(sub_element) {}
 
 public:
-    Type(): arrayElement(nullptr), primitive(DataType::COMPOSITE) {}; // for struct
-    Type(DataType primitive): primitive(primitive), arrayElement(nullptr) {};
-    Type(unsigned array_size, const Type* element):
-        primitive(DataType::COMPOSITE),
-        arrayElement(element),
-        arraySize(array_size) {};
+    // Factory methods to create type variants:
+
+    /*** @brief Factory for floats, uints, ints, bools, voids
+     *
+     * May define a custom size (assuming the interpreter supports it), but the default is 32.
+     * @param primitive the primitive type to use. Should not use any but float, uint, int, bool, or void
+     * @param size the size of the type. Not all primitives have a usable size (bool and void don't)
+     */
+    static Type primitive(DataType primitive, unsigned size = 32) {
+        assert(size == 32 || (primitive != DataType::BOOL && primitive != DataType::VOID && primitive != DataType::ANY));
+        assert(primitive != DataType::COMPOSITE && primitive != DataType::FUNCTION &&
+               primitive != DataType::POINTER);
+        return Type(primitive, size, nullptr);
+    }
+
+    static Type array(unsigned array_size, const Type& element) {
+        return Type(DataType::ARRAY, array_size, &element);
+    }
+
+    static Type struct_() {
+        return Type(DataType::COMPOSITE, 0, nullptr);
+    }
+
+    static Type function(const Type* return_, std::vector<Type*>& params) {
+        Type t(DataType::FUNCTION, 0, return_);
+        t.params.reserve(params.size());
+        for (const auto& ty : params)
+            t.params.push_back(ty);
+        return t;
+    }
+
+    static Type pointer(const Type& point_to) {
+        return Type(DataType::POINTER, 0, &point_to);
+    }
+
+    // Other methods:
 
     void addMember(std::string name, Type* type) {
-        assert(primitive == DataType::COMPOSITE);
+        assert(base == DataType::ARRAY);
         structElements[name] = type;
     }
 
     void incrementSize() {
-        assert(arrayElement != nullptr);
-        arraySize++;
+        // Must be an array to increment size
+        assert(base == DataType::ARRAY);
+        subSize++;
     }
     void setElement(Type* e) {
-        assert(arrayElement != nullptr);
+        assert(base == DataType::ARRAY);
         assert(e != nullptr);
-        arrayElement = e;
+        subElement = e;
     }
 
     bool operator==(const Type& rhs) const {
-        if (arrayElement != nullptr) { // array
-            if (rhs.arrayElement == nullptr)
-                return false;
-            if (arraySize != rhs.arraySize)
-                return false;
-            return *arrayElement == *(rhs.arrayElement);
-        }
-        if (primitive != DataType::COMPOSITE) // primitive
-            return primitive == rhs.primitive;
+        if (base != rhs.base)
+            return false;
 
-        return structElements == rhs.structElements; // struct
+        switch (base) {
+        default:
+            assert(false); // unknown type!
+            return false;
+        case DataType::FLOAT:
+        case DataType::UINT:
+        case DataType::INT:
+            return subSize == rhs.subSize;
+        case DataType::BOOL:
+        case DataType::ANY:
+        case DataType::VOID:
+            return true;
+        case DataType::ARRAY:
+            return subSize == rhs.subSize && (*subElement == *(rhs.subElement));
+        case DataType::FUNCTION:
+            return (*subElement == *(rhs.subElement)) && params == rhs.params;
+        case DataType::POINTER:
+            return *subElement == *(rhs.subElement);
+        }
     }
     bool operator!=(const Type& rhs) const { return !(*this == rhs); };
 };
@@ -73,18 +126,18 @@ public:
 
     const Type& getType() {
         if (!cachedType.has_value())
-            cachedType = std::make_optional(describeType());
+            cachedType = std::optional(describeType());
         return cachedType.value();
     }
 };
 
-export using ValueMap = std::map<std::string, const Value*>; 
+export using ValueMap = std::map<std::string, const Value*>;
 
 export class Array : public Value  {
     Type elementType;
     std::vector<const Value*> elements;
 public:
-    Array(): elementType(Type(DataType::UNKNOWN)) {}
+    Array(): elementType(Type::primitive(DataType::ANY)) {}
 
     virtual ~Array() {
         for (const auto& e : elements)
@@ -109,7 +162,7 @@ public:
 
 protected:
     virtual Type describeType() const override {
-        return Type(elements.size(), &elementType);
+        return Type::array(elements.size(), elementType);
     }
 };
 
@@ -117,12 +170,11 @@ export class Struct : public Value  {
 
 protected:
     virtual Type describeType() const override {
-        return Type();
+        return Type::struct_();
     }
 };
 
 export class Primitive : public Value {
-    DataType type;
 
     union {
         float fp32;
@@ -132,21 +184,26 @@ export class Primitive : public Value {
     } data;
 
 public:
-    Primitive(float fp32) : type(DataType::FLOAT) {
+    Primitive(float fp32, unsigned size) {
         data.fp32 = fp32;
+        cachedType = std::optional(Type::primitive(DataType::FLOAT, size));
     }
-    Primitive(uint32_t u32) : type(DataType::UINT) {
+    Primitive(uint32_t u32, unsigned size) {
         data.u32 = u32;
+        cachedType = std::optional(Type::primitive(DataType::UINT, size));
     }
-    Primitive(int32_t i32) : type(DataType::INT) {
+    Primitive(int32_t i32, unsigned size) {
         data.i32 = i32;
+        cachedType = std::optional(Type::primitive(DataType::INT, size));
     }
-    Primitive(bool b32) : type(DataType::BOOL) {
+    Primitive(bool b32) {
         data.b32 = b32;
+        cachedType = std::optional(Type::primitive(DataType::BOOL));
     }
 
 protected:
     virtual Type describeType() const override {
-        return Type(type);
+        assert(false);
+        return Type::primitive(DataType::ANY);
     }
 };

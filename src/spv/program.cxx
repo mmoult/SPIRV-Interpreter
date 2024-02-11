@@ -6,6 +6,7 @@ module;
 
 #include "../external/spirv.hpp"
 
+import data;
 import instructions;
 import utils;
 export module program;
@@ -19,6 +20,10 @@ export namespace Spv {
         int idx;
 
         std::vector<Instruction> insts;
+        std::vector<unsigned> decorations;
+
+        // An list of disparate data entries, where length == bound. Each entry can be:
+        std::vector<Data> data;
 
         Program(): buffer(nullptr), length(0), endian(false), idx(0) {}
 
@@ -85,6 +90,8 @@ export namespace Spv {
 
             uint32_t bound;
             REQUIRE(program->getWord(bound), "Corrupted binary! Missing bound.");
+            std::fill_n(std::back_inserter(program->data), bound, Data());
+
             REQUIRE(program->skip(1), "Corrupted binary! Missing reserved word.");
 
             while (program->idx < length) {
@@ -104,9 +111,31 @@ export namespace Spv {
                     words.push_back(word);
                 }
 
-                Utils::May<Instruction> inst = Instruction::makeOp(program->insts, opcode, words);
-                if (!inst.is()) {
-                    msg = inst.str();
+                Utils::May<Instruction> make_inst = Instruction::makeOp(program->insts, opcode, words);
+                if (!make_inst) {
+                    msg = make_inst.error();
+                    goto check_err;
+                }
+                Instruction& inst = make_inst.value();
+
+                // Process the instruction as necessary
+                // If it is a decoration (ie references a type not yet defined), save it for later
+                if (inst.isDecoration())
+                    program->decorations.push_back(program->insts.size() - 1);
+
+                // If it has a result, let it save itself in the data vector
+                Utils::May<const bool> made_result = inst.makeResult(program->data);
+                if (!made_result) {
+                    msg = made_result.error();
+                    goto check_err;
+                }
+            }
+
+            // Finally, after all necessary data should exist, apply all decoration instructions
+            for (unsigned dec_i : program->decorations) {
+                Utils::May<const bool> apply_dec = program->insts[dec_i].applyDecoration(program->data);
+                if (!apply_dec) {
+                    msg = apply_dec.error();
                     goto check_err;
                 }
             }
@@ -114,11 +143,11 @@ export namespace Spv {
             check_err:
             if (!msg.empty()) {
                 delete program;
-                return Utils::May<Program>::none(msg);
+                return Utils::unexpected<Program>(msg);
             }
 #undef REQUIRE
 
-            return Utils::May<Program>::some(*program);
+            return Utils::expected(*program);
         }
     };
 };

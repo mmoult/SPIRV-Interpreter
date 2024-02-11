@@ -15,6 +15,7 @@ target_sources(build
       toml.cxx
       utils.cxx
       value.cxx
+      spv/data.cxx
       spv/instructions.cxx
       spv/program.cxx
       spv/tokens.cxx
