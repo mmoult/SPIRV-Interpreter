@@ -66,7 +66,7 @@ export namespace Spv {
         Utils::May<const bool> checkRef(unsigned idx, unsigned len, unsigned& result_at) const {
             assert(operands[idx].type == Token::Type::REF);
             result_at = std::get<unsigned>(operands[idx].raw);
-            if (result_at < len) {
+            if (result_at >= len) {
                 std::stringstream err;
                 err << "Reference found (" << result_at << ") beyond data bound (" << len << ")!";
                 return Utils::unexpected<const bool>(err.str());
@@ -283,18 +283,29 @@ export namespace Spv {
             return Utils::expected<Instruction>(inst);
         }
 
-        Utils::May<const bool> makeResult(std::vector<Data>& data) const {
+        bool isEntry() const {
+            return opcode == spv::OpEntryPoint;
+        }
+
+        /**
+         * Create the result in pre-parsing. Note, this is before execution, so instructions
+         * which have runtime returns should do nothing here.
+         * @param data the vector of Data objects used by the program
+         * @param location the index of this instruction in the program
+         */
+        Utils::May<const bool> makeResult(std::vector<Data>& data, unsigned location) const {
             if (!hasResult)
                 return Utils::expected();
 
             const unsigned len = data.size();
             unsigned result_at;
-            if (auto res = checkRef(0, len, result_at); !res)
+            // Result type comes before result, if present
+            if (auto res = checkRef(hasResultType, len, result_at); !res)
                 return res;
 
             switch (opcode) {
             default:
-                break;
+                return Utils::expected();
             case spv::OpTypeVoid: // 19
                 return data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
             case spv::OpTypeFloat: // 22
@@ -332,9 +343,25 @@ export namespace Spv {
                 }
                 return data[result_at].redefine(Data(new Type(Type::function(ret, params))));
             }
+            case spv::OpFunction: { // 54
+                assert(operands[2].type == Token::Type::CONST);
+                Type* fx_type;
+                if (const auto res = getType(3, data, fx_type); !res)
+                    return res;
+                return data[result_at].redefine(Data(new Function(fx_type, location)));
             }
-
-            return Utils::unexpected<const bool>("Unimplemented function!");
+            case spv::OpVariable: { // 59
+                assert(hasResultType);
+                Type* var_type;
+                if (const auto res = getType(0, data, var_type); !res)
+                    return res;
+                assert(operands[2].type == Token::Type::CONST);
+                // TODO default value
+                return data[result_at].redefine(Data(new Variable(var_type)));
+            }
+            case spv::OpLabel: // 248
+                return data[result_at].redefine(Data(new Primitive(location)));
+            }
         }
 
         bool isDecoration() const {
@@ -343,7 +370,6 @@ export namespace Spv {
                     return false;
                 case spv::OpName: // 5
                 case spv::OpMemberName: // 6
-                case spv::OpEntryPoint: // 15
                 case spv::OpDecorate: // 71
                 case spv::OpMemberDecorate: // 72
                     return true;
@@ -351,7 +377,30 @@ export namespace Spv {
         }
 
         Utils::May<const bool> applyDecoration(std::vector<Data>& data) const {
-            return Utils::unexpected<const bool>("Unimplemented function!");
+            switch (opcode) {
+                default:
+                case spv::OpMemberName: // 6
+                case spv::OpMemberDecorate: // 72
+                    return Utils::unexpected<const bool>("Unimplemented function!");
+                case spv::OpName: { // 5
+                    unsigned thing_at;
+                    if (auto res = checkRef(0, data.size(), thing_at); !res)
+                        return res;
+                    assert(operands[1].type == Token::Type::STRING);
+                    std::string name = std::get<std::string>(operands[1].raw);
+                    // We can decorate variables and functions with names
+                    if (auto [var, valid] = data[thing_at].getVariable(); valid) {
+                        var->setName(name);
+                    } else if (auto [fx, valid] = data[thing_at].getFunction(); valid) {
+                        fx->setName(name);
+                    } else
+                        return Utils::unexpected<const bool>("Name decoration only legal for variables and functions!");
+                    break;
+                }
+                case spv::OpDecorate: // 71
+                    break;
+            }
+            return Utils::expected();
         }
 
     };

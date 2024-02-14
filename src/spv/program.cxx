@@ -21,6 +21,7 @@ export namespace Spv {
 
         std::vector<Instruction> insts;
         std::vector<unsigned> decorations;
+        unsigned entry;
 
         // An list of disparate data entries, where length == bound. Each entry can be:
         std::vector<Data> data;
@@ -84,6 +85,7 @@ export namespace Spv {
         msg = e_msg; \
         goto check_err; \
     }
+            bool entry_found = false;
 
             REQUIRE(program->determineEndian(), "Corrupted binary! Magic number missing.");
             REQUIRE(program->skip(2), "Corrupted binary! Version and/or generator missing.");
@@ -117,18 +119,29 @@ export namespace Spv {
                     goto check_err;
                 }
                 Instruction& inst = make_inst.value();
+                unsigned location = program->insts.size() - 1;
+
+                if (inst.isEntry()) {
+                    entry_found = true;
+                    program->entry = location;
+                }
 
                 // Process the instruction as necessary
-                // If it is a decoration (ie references a type not yet defined), save it for later
+                // If it is a decoration (ie modifies a type not yet defined), save it for later
                 if (inst.isDecoration())
-                    program->decorations.push_back(program->insts.size() - 1);
+                    program->decorations.push_back(location);
 
                 // If it has a result, let it save itself in the data vector
-                Utils::May<const bool> made_result = inst.makeResult(program->data);
+                Utils::May<const bool> made_result = inst.makeResult(program->data, location);
                 if (!made_result) {
                     msg = made_result.error();
                     goto check_err;
                 }
+            }
+
+            if (!entry_found) {
+                msg = "Missing entry function in SPIR-V source!";
+                goto check_err;
             }
 
             // Finally, after all necessary data should exist, apply all decoration instructions

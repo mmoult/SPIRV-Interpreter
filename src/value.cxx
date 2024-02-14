@@ -26,8 +26,8 @@ export class Type {
     DataType base;
     unsigned subSize;
     const Type* subElement;
-    std::map<std::string, Type*> structElements;
-    std::vector<const Type*> params;
+    std::vector<const Type*> subList;
+    std::vector<std::string> nameList;
 
     Type(DataType base, unsigned sub_size, const Type* sub_element):
         base(base),
@@ -58,11 +58,11 @@ public:
         return Type(DataType::COMPOSITE, 0, nullptr);
     }
 
-    static Type function(const Type* return_, std::vector<Type*>& params) {
+    static Type function(const Type* return_, std::vector<Type*>& subList) {
         Type t(DataType::FUNCTION, 0, return_);
-        t.params.reserve(params.size());
-        for (const auto& ty : params)
-            t.params.push_back(ty);
+        t.subList.reserve(subList.size());
+        for (const auto& ty : subList)
+            t.subList.push_back(ty);
         return t;
     }
 
@@ -73,8 +73,8 @@ public:
     // Other methods:
 
     void addMember(std::string name, Type* type) {
-        assert(base == DataType::ARRAY);
-        structElements[name] = type;
+        assert(base == DataType::COMPOSITE);
+        // TODO must add through list- spirv is not required to give name for each field in struct
     }
 
     void incrementSize() {
@@ -106,8 +106,9 @@ public:
             return true;
         case DataType::ARRAY:
             return subSize == rhs.subSize && (*subElement == *(rhs.subElement));
+        // TODO struct
         case DataType::FUNCTION:
-            return (*subElement == *(rhs.subElement)) && params == rhs.params;
+            return (*subElement == *(rhs.subElement)) && subList == rhs.subList;
         case DataType::POINTER:
             return *subElement == *(rhs.subElement);
         }
@@ -184,15 +185,15 @@ export class Primitive : public Value {
     } data;
 
 public:
-    Primitive(float fp32, unsigned size) {
+    Primitive(float fp32, unsigned size = 32) {
         data.fp32 = fp32;
         cachedType = std::optional(Type::primitive(DataType::FLOAT, size));
     }
-    Primitive(uint32_t u32, unsigned size) {
+    Primitive(uint32_t u32, unsigned size = 32) {
         data.u32 = u32;
         cachedType = std::optional(Type::primitive(DataType::UINT, size));
     }
-    Primitive(int32_t i32, unsigned size) {
+    Primitive(int32_t i32, unsigned size = 32) {
         data.i32 = i32;
         cachedType = std::optional(Type::primitive(DataType::INT, size));
     }
