@@ -9,51 +9,48 @@ export namespace Utils {
     // Replace with std::expected in C++23
     template<typename S>
     class May {
-        S* val;
+        S val;
         std::string msg;
+        bool has_val;
 
     public:
-        May(S* val, std::string msg): val(val), msg(msg) {}
+        May(S val): val(val), has_val(true) {}
+        May(std::string msg): msg(msg), has_val(false) {}
 
         bool has_value() const {
-            return val != nullptr;
+            return has_val;
         }
         S& value() {
-            assert(val != nullptr);
-            return *val;
+            assert(has_val);
+            return val;
         }
         std::string& error() {
-            assert(val == nullptr);
+            assert(!has_val);
             return msg;
         }
 
         bool operator!() const {
             return !has_value();
         }
-
-        /// @brief Deletes the data stored in the May
-        /// May does *not* own the data, but if you want to delete it, this will and turn itself into unexpected
-        void del() {
-            assert(val != nullptr);
-            delete val;
-            val = nullptr;
-            msg = "deleted";
-        }
     };
 
-    const bool silent = true;
-    // an expected with a silent/none ok result
-    May<const bool> expected() {
-        return May(&silent, "");
+    // an expected with a ok result
+    May<bool> expected() {
+        return May(true);
     }
 
     template<typename S>
     May<S> expected(S& val) {
-        return May(&val, "");
+        return May(val);
     }
     template<typename S>
+    May<S> expected(S val) {
+        return May(val);
+    }
+
+    template<typename S>
     May<S> unexpected(std::string str) {
-        return May<S>(nullptr, str);
+        return May<S>(str);
     }
 
 };

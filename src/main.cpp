@@ -31,7 +31,7 @@ std::istream &operator>>(std::istream &is, Line &l) {
 }
 
 int main(int argc, char* argv[]) {
-    std::string format, in, out;
+    std::string itemplate, in, out;
     bool verbose = false;
     ValueMap inputs;
     std::optional<std::string> spv;
@@ -48,11 +48,11 @@ int main(int argc, char* argv[]) {
         if (!args_only) { // check for flags
             bool found = true;
 
-            if (arg == "-f" || arg == "--format") {
+            if (arg == "-t" || arg == "--template") {
                 if (++i < argc) {
-                    format = std::string(argv[i]);
+                    itemplate = std::string(argv[i]);
                 } else {
-                    std::cerr << "Missing argument for flag format!" << std::endl;
+                    std::cerr << "Missing argument for flag template!" << std::endl;
                     return ReturnCodes::BAD_ARGS;
                 }
             } else if (arg == "-h" || arg == "--help") {
@@ -63,16 +63,16 @@ int main(int argc, char* argv[]) {
                 std::cout << "where 'SPV' is a path to a spv file, which must have an OpEntry instruction." << std::endl;
                 std::cout << std::endl;
                 std::cout << "Options:" << std::endl;
-                std::cout << "  -f / --format TOML  creates a template input file with stubs for all needed" << std::endl;
-                std::cout << "                      inputs." << std::endl;
-                std::cout << "  -h / --help         print this help and exit" << std::endl;
-                std::cout << "  -i / --in TOML      specify a file to fetch input from. Alternatively, input" << std::endl;
-                std::cout << "                      may be specified in key=value pairs with --set." << std::endl;
-                std::cout << "  -o / --out TOML     specify a file to output to. Otherwise defaults to stdout" << std::endl;
-                std::cout << "  -p / -print         enable vebose printing" << std::endl;
-                std::cout << "  --set VAR=VAL       define input in the format of VAR=VAL pairs. May be given" << std::endl;
-                std::cout << "                      more than once." << std::endl;
-                std::cout << "  -v / --version      print version info and exit" << std::endl;
+                std::cout << "  -t / --template TOML  creates a template input file with stubs for all needed" << std::endl;
+                std::cout << "                        inputs." << std::endl;
+                std::cout << "  -h / --help           print this help and exit" << std::endl;
+                std::cout << "  -i / --in TOML        specify a file to fetch input from. Alternatively, input" << std::endl;
+                std::cout << "                        may be specified in key=value pairs with --set." << std::endl;
+                std::cout << "  -o / --out TOML       specify a file to output to. Defaults to stdout" << std::endl;
+                std::cout << "  -p / -print           enable vebose printing" << std::endl;
+                std::cout << "  --set VAR=VAL         define input in the format of VAR=VAL pairs. May be" << std::endl;
+                std::cout << "                        given more than once." << std::endl;
+                std::cout << "  -v / --version        print version info and exit" << std::endl;
                 return ReturnCodes::INFO;
             } else if (arg == "-i" || arg == "--in") {
                 if (++i < argc) {
@@ -162,20 +162,36 @@ int main(int argc, char* argv[]) {
     ifs.close();
 
     // The type of char is implementation defined. Use uint8_t to remove ambiguity
-    Utils::May<Spv::Program> program = Spv::Program::parse(std::bit_cast<uint8_t*>(buffer), length);
-    if (!program) {
-        std::cerr << program.error() << std::endl;
+    Spv::Program program;
+    if (auto parse_res = program.parse(std::bit_cast<uint8_t*>(buffer), length); !parse_res) {
+        std::cerr << parse_res.error() << std::endl;
         return ReturnCodes::BAD_PARSE;
     }
-    delete[] buffer;
+    delete[] buffer; // delete source now that it has been replaced with program
+
+    if (!itemplate.empty()) {
+        // Print out needed variables to file specified
+        // TODO
+        return ReturnCodes::INFO;
+    }
 
     // Verify that the inputs loaded match what the program expects
-    // ...
+    if (auto ok = program.setup(inputs); !ok) {
+        std::cerr << ok.error() << std::endl;
+        return ReturnCodes::BAD_PROG_INPUT;
+    }
 
     // Run the program
-    // ...
+    ValueMap outputs;
+    if (auto ok = program.execute(outputs, verbose); !ok) {
+        std::cerr << ok.error() << std::endl;
+        return ReturnCodes::FAILED_EXE;
+    }
 
-    program.del();
+    // Output the result
+    // TODO
+
+    // Clean up before successful exit
     for (const auto& [_, val] : inputs)
         delete val;
 

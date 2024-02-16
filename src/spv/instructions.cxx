@@ -63,18 +63,18 @@ export namespace Spv {
             }
         }
 
-        Utils::May<const bool> checkRef(unsigned idx, unsigned len, unsigned& result_at) const {
+        Utils::May<bool> checkRef(unsigned idx, unsigned len, unsigned& result_at) const {
             assert(operands[idx].type == Token::Type::REF);
             result_at = std::get<unsigned>(operands[idx].raw);
             if (result_at >= len) {
                 std::stringstream err;
                 err << "Reference found (" << result_at << ") beyond data bound (" << len << ")!";
-                return Utils::unexpected<const bool>(err.str());
+                return Utils::unexpected<bool>(err.str());
             }
             return Utils::expected();
         }
 
-        Utils::May<const bool> getType(unsigned idx, std::vector<Data>& data, Type*& ty) const {
+        Utils::May<bool> getType(unsigned idx, std::vector<Data>& data, Type*& ty) const {
             unsigned ty_at;
             if (auto res = checkRef(idx, data.size(), ty_at); !res)
                 return res;
@@ -82,7 +82,7 @@ export namespace Spv {
             if (!valid) {
                 std::stringstream err;
                 err << "%" << ty_at << " is not a type!";
-                return Utils::unexpected<const bool>(err.str());
+                return Utils::unexpected<bool>(err.str());
             }
             ty = type;
             return Utils::expected();
@@ -94,13 +94,13 @@ export namespace Spv {
             hasResult(has_result),
             hasResultType(has_result_type) {}
 
-        static Utils::May<Instruction> makeOp(std::vector<Instruction>& insts, uint16_t opcode, std::vector<uint32_t>& words) {
+        static Utils::May<Instruction*> makeOp(std::vector<Instruction>& insts, uint16_t opcode, std::vector<uint32_t>& words) {
             // Very first, fetch SPIR-V info for the opcode (and also validate it is real)
             bool has_result;
             bool has_type;
             spv::Op op = static_cast<spv::Op>(opcode);
             if (!spv::HasResultAndType(static_cast<spv::Op>(opcode), &has_result, &has_type))
-                return Utils::unexpected<Instruction>("Cannot parse invalid SPIR-V opcode!");
+                return Utils::unexpected<Instruction*>("Cannot parse invalid SPIR-V opcode!");
 
             // Create token operands from the words available and for the given opcode
             std::vector<Token::Type> to_load;
@@ -111,7 +111,7 @@ export namespace Spv {
                 // Unsupported op
                 std::stringstream err;
                 err << "Cannot use unsupported SPIR-V instruction (" << opcode << ")!";
-                return Utils::unexpected<Instruction>(err.str());
+                return Utils::unexpected<Instruction*>(err.str());
             }
             case spv::OpNop: // 1
             case spv::OpTypeVoid: // 19
@@ -236,7 +236,7 @@ export namespace Spv {
                 if (i >= words.size()) {
                     std::stringstream err;
                     err << "Missing words while parsing result type of instruction " << opcode << "!";
-                    return Utils::unexpected<Instruction>(err.str());
+                    return Utils::unexpected<Instruction*>(err.str());
                 }
                 inst.operands.emplace_back(Token::Type::REF, words[i++]);
             }
@@ -245,7 +245,7 @@ export namespace Spv {
                 if (i >= words.size()) {
                     std::stringstream err;
                     err << "Missing words while parsing result of instruction " << opcode << "!";
-                    return Utils::unexpected<Instruction>(err.str());
+                    return Utils::unexpected<Instruction*>(err.str());
                 }
                 inst.operands.emplace_back(Token::Type::REF, words[i++]);
             }
@@ -254,7 +254,7 @@ export namespace Spv {
                 if (i >= words.size()) {
                     std::stringstream err;
                     err << "Missing words while parsing instruction " << opcode << "!";
-                    return Utils::unexpected<Instruction>(err.str());
+                    return Utils::unexpected<Instruction*>(err.str());
                 }
 
                 handleTypes(type, inst, words, i);
@@ -277,23 +277,61 @@ export namespace Spv {
             if (i < words.size()) {
                 std::stringstream err;
                 err << "Extra words while parsing instruction " << opcode << "!";
-                return Utils::unexpected<Instruction>(err.str());
+                return Utils::unexpected<Instruction*>(err.str());
             }
 
-            return Utils::expected<Instruction>(inst);
+            return Utils::expected<Instruction*>(&inst);
         }
 
         bool isEntry() const {
             return opcode == spv::OpEntryPoint;
         }
 
-        /**
-         * Create the result in pre-parsing. Note, this is before execution, so instructions
-         * which have runtime returns should do nothing here.
-         * @param data the vector of Data objects used by the program
-         * @param location the index of this instruction in the program
-         */
-        Utils::May<const bool> makeResult(std::vector<Data>& data, unsigned location) const {
+        /// @brief Sorts input and output variables given by this OpEntry into the provided vectors
+        /// @param data list of data to access for determining the storage class of each variable
+        /// @param ins a list of ref indices in data pointing to in variables
+        /// @param outs a list of ref indices in data pointing to out variables
+        /// @return result of generation
+        Utils::May<bool> ioGen(std::vector<Data>& data, std::vector<unsigned>& ins, std::vector<unsigned>& outs) {
+            assert(isEntry());
+
+            const unsigned len = data.size();
+            // Operands 3+ are the interface variables
+            for (unsigned i = 3; i < operands.size(); ++i) {
+                unsigned id;
+                if (auto ref = checkRef(i, len, id); !ref)
+                    return Utils::unexpected<bool>(ref.error());
+                auto [var, valid] = data[i].getVariable();
+                if (!valid) { // interface refs must be variables
+                    std::stringstream error;
+                    error << "Found interface reference, %" << id << ", which is not a variable!";
+                    return Utils::unexpected<bool>(error.str());
+                }
+
+                using SC = spv::StorageClass;
+                switch (var->getStorageClass()) {
+                case SC::StorageClassUniformConstant:
+                case SC::StorageClassInput:
+                case SC::StorageClassUniform:
+                    ins.push_back(id);
+                    break;
+                case SC::StorageClassOutput:
+                    outs.push_back(id);
+                    break;
+                default:
+                    // TODO: it is likely there are other valid storage classes I have omitted above
+                    return Utils::unexpected<bool>("Invalid storage class for interface variable!");
+                }
+            }
+            return Utils::expected();
+        }
+
+        /// @brief Create the result in pre-parsing.
+        /// Note, this is before execution, so instructions which have runtime returns should do nothing here.
+        /// @param data the vector of Data objects used by the program
+        /// @param location the index of this instruction in the program
+        /// @return the result
+        Utils::May<bool> makeResult(std::vector<Data>& data, unsigned location) const {
             if (!hasResult)
                 return Utils::expected();
 
@@ -356,8 +394,9 @@ export namespace Spv {
                 if (const auto res = getType(0, data, var_type); !res)
                     return res;
                 assert(operands[2].type == Token::Type::CONST);
+                unsigned storage = std::get<unsigned>(operands[2].raw);
                 // TODO default value
-                return data[result_at].redefine(Data(new Variable(var_type)));
+                return data[result_at].redefine(Data(new Variable(var_type, static_cast<spv::StorageClass>(storage))));
             }
             case spv::OpLabel: // 248
                 return data[result_at].redefine(Data(new Primitive(location)));
@@ -376,25 +415,28 @@ export namespace Spv {
             }
         }
 
-        Utils::May<const bool> applyDecoration(std::vector<Data>& data) const {
+        /// @brief Apply this instruction's decoration to the data
+        /// @param data the data to apply the decoration to
+        /// @return the result
+        Utils::May<bool> applyDecoration(std::vector<Data>& data) const {
             switch (opcode) {
                 default:
                 case spv::OpMemberName: // 6
                 case spv::OpMemberDecorate: // 72
-                    return Utils::unexpected<const bool>("Unimplemented function!");
+                    return Utils::unexpected<bool>("Unimplemented function!");
                 case spv::OpName: { // 5
-                    unsigned thing_at;
-                    if (auto res = checkRef(0, data.size(), thing_at); !res)
+                    unsigned named;
+                    if (auto res = checkRef(0, data.size(), named); !res)
                         return res;
                     assert(operands[1].type == Token::Type::STRING);
                     std::string name = std::get<std::string>(operands[1].raw);
                     // We can decorate variables and functions with names
-                    if (auto [var, valid] = data[thing_at].getVariable(); valid) {
+                    if (auto [var, valid] = data[named].getVariable(); valid) {
                         var->setName(name);
-                    } else if (auto [fx, valid] = data[thing_at].getFunction(); valid) {
+                    } else if (auto [fx, valid] = data[named].getFunction(); valid) {
                         fx->setName(name);
                     } else
-                        return Utils::unexpected<const bool>("Name decoration only legal for variables and functions!");
+                        return Utils::unexpected<bool>("Name decoration only legal for variables and functions!");
                     break;
                 }
                 case spv::OpDecorate: // 71

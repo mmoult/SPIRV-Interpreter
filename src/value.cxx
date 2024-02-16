@@ -175,6 +175,22 @@ protected:
     }
 };
 
+export class Pointer : public Value {
+    /// @brief A list of indices. The first points to an index of Data, any/all others point to indices within previous
+    std::vector<unsigned> to;
+
+protected:
+    virtual Type describeType() const override {
+        assert(false);
+        return cachedType.value();
+    }
+
+public:
+    Pointer(std::vector<unsigned> to, Type t): to(to) {
+        cachedType = std::optional(t);
+    }
+};
+
 export class Primitive : public Value {
 
     union {

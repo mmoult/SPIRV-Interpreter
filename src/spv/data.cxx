@@ -4,6 +4,8 @@ module;
 #include <sstream>
 #include <tuple>
 
+#include "../external/spirv.hpp"
+
 import utils;
 import value;
 export module data;
@@ -11,20 +13,41 @@ export module data;
 export class Variable {
     Type* type;
     Value* val;
-    // We don't need to keep track of storage class
+    spv::StorageClass storage;
     std::string name;
     std::map<uint32_t, uint32_t> decorations;
 
 public:
-    Variable(Type* type, Value* val = nullptr): type(type), val(val) {}
+    Variable(Type* type, spv::StorageClass storage_class): type(type), val(nullptr), storage(storage_class) {}
+    Variable(const Variable&) = delete;
+    Variable& operator= (const Variable&) = delete;
+    ~Variable() {
+        if (val != nullptr)
+            delete val;
+    }
 
     void decorate(uint32_t deco_type, uint32_t deco_value) {
         // TODO: is it legal to have two decorations on the same type?
         decorations[deco_type] = deco_value;
     }
 
+    spv::StorageClass getStorageClass() {
+        return storage;
+    }
+
     void setName(std::string& new_name) {
         name = new_name;
+    }
+    const std::string& getName() const {
+        return name;
+    }
+
+    Utils::May<bool> setVal(const Value* new_val) {
+        if (val != nullptr)
+            delete val;
+        // Cast the new value to the variable's type
+        // TODO
+        return Utils::expected();
     }
 };
 
@@ -82,11 +105,11 @@ public:
 
     // Convenience function to not need to define the Data for each use
     template<typename T>
-    Utils::May<const bool> redefine(T* var) {
+    Utils::May<bool> redefine(T* var) {
         return redefine(Data(var));
     }
 
-    Utils::May<const bool> redefine(const Data& other) {
+    Utils::May<bool> redefine(const Data& other) {
         if (type != DType::UNDEFINED) {
             std::stringstream err;
             err << "Cannot redefine data holding ";
@@ -108,15 +131,15 @@ public:
                 break;
             }
             err << "!";
-            return Utils::unexpected<const bool>(err.str());
+            return Utils::unexpected<bool>(err.str());
         }
         raw = other.raw;
         type = other.type;
         return Utils::expected();
     }
 
-    Utils::May<const bool> clear() {
+    Utils::May<bool> clear() {
         // TODO should be able to clear values for reuse (in loops or second function call, etc)
-        return Utils::unexpected<const bool>("Not implemented!");
+        return Utils::unexpected<bool>("Not implemented!");
     }
 };

@@ -1,4 +1,5 @@
 module;
+#include <cassert>
 #include <cstdint>
 #include <string>
 #include <tuple>
@@ -9,6 +10,7 @@ module;
 import data;
 import instructions;
 import utils;
+import value;
 export module program;
 
 export namespace Spv {
@@ -20,13 +22,13 @@ export namespace Spv {
         int idx;
 
         std::vector<Instruction> insts;
-        std::vector<unsigned> decorations;
         unsigned entry;
 
         // An list of disparate data entries, where length == bound. Each entry can be:
         std::vector<Data> data;
+        std::vector<unsigned> ins;
+        std::vector<unsigned> outs;
 
-        Program(): buffer(nullptr), length(0), endian(false), idx(0) {}
 
         bool determineEndian() {
             // The first four bytes are the SPIR-V magic number
@@ -74,34 +76,33 @@ export namespace Spv {
         }
 
     public:
-        static Utils::May<Program> parse(uint8_t* buffer, int length) {
-            Program* program = new Program();
-            program->buffer = buffer;
-            program->length = length;
+        Program(): buffer(nullptr), length(0), endian(false), idx(0) {}
 
-            std::string msg;
+        Utils::May<bool> parse(uint8_t* buffer, int length) {
+            this->buffer = buffer;
+            this->length = length;
+
 #define REQUIRE(cond, e_msg) \
-    if (!(cond)) { \
-        msg = e_msg; \
-        goto check_err; \
-    }
-            bool entry_found = false;
+    if (!(cond)) \
+        return Utils::unexpected<bool>(e_msg);
 
-            REQUIRE(program->determineEndian(), "Corrupted binary! Magic number missing.");
-            REQUIRE(program->skip(2), "Corrupted binary! Version and/or generator missing.");
+            REQUIRE(determineEndian(), "Corrupted binary! Magic number missing.");
+            REQUIRE(skip(2), "Corrupted binary! Version and/or generator missing.");
 
             uint32_t bound;
-            REQUIRE(program->getWord(bound), "Corrupted binary! Missing bound.");
-            std::fill_n(std::back_inserter(program->data), bound, Data());
+            REQUIRE(getWord(bound), "Corrupted binary! Missing bound.");
+            std::fill_n(std::back_inserter(data), bound, Data());
 
-            REQUIRE(program->skip(1), "Corrupted binary! Missing reserved word.");
+            REQUIRE(skip(1), "Corrupted binary! Missing reserved word.");
 
-            while (program->idx < length) {
+            bool entry_found = false;
+            std::vector<unsigned> decorations;
+            while (idx < length) {
                 // Each instruction is at least 1 word = 32 bits, where:
                 // - high bits = word count
                 // - low bits = opcode
                 uint32_t control;
-                REQUIRE(program->getWord(control), "Corrupted binary! Missing instruction control word.");
+                REQUIRE(getWord(control), "Corrupted binary! Missing instruction control word.");
                 uint16_t word_count = control >> 16;
                 REQUIRE(word_count >= 1, "Corrupted binary! Word count for instruction less than 1.");
                 uint16_t opcode = control & 0xffff;
@@ -109,58 +110,105 @@ export namespace Spv {
                 std::vector<uint32_t> words;
                 for (; word_count > 1; --word_count) { // first word in count is the control (already parsed)
                     uint32_t word;
-                    REQUIRE(program->getWord(word), "Corrupted binary! Missing data in instruction stream!");
+                    REQUIRE(getWord(word), "Corrupted binary! Missing data in instruction stream!");
                     words.push_back(word);
                 }
 
-                Utils::May<Instruction> make_inst = Instruction::makeOp(program->insts, opcode, words);
-                if (!make_inst) {
-                    msg = make_inst.error();
-                    goto check_err;
-                }
-                Instruction& inst = make_inst.value();
-                unsigned location = program->insts.size() - 1;
+                Utils::May<Instruction*> make_inst = Instruction::makeOp(insts, opcode, words);
+                REQUIRE(make_inst, make_inst.error());
+
+                Instruction& inst = *make_inst.value();
+                unsigned location = insts.size() - 1;
 
                 if (inst.isEntry()) {
                     entry_found = true;
-                    program->entry = location;
+                    entry = location;
                 }
 
                 // Process the instruction as necessary
                 // If it is a decoration (ie modifies a type not yet defined), save it for later
                 if (inst.isDecoration())
-                    program->decorations.push_back(location);
+                    decorations.push_back(location);
 
                 // If it has a result, let it save itself in the data vector
-                Utils::May<const bool> made_result = inst.makeResult(program->data, location);
-                if (!made_result) {
-                    msg = made_result.error();
-                    goto check_err;
-                }
+                if (auto made_result = inst.makeResult(data, location); !made_result)
+                    return Utils::unexpected<bool>(made_result.error());
             }
 
-            if (!entry_found) {
-                msg = "Missing entry function in SPIR-V source!";
-                goto check_err;
-            }
+            REQUIRE(entry_found, "Missing entry function in SPIR-V source!");
+            insts[entry].ioGen(data, ins, outs);
 
             // Finally, after all necessary data should exist, apply all decoration instructions
-            for (unsigned dec_i : program->decorations) {
-                Utils::May<const bool> apply_dec = program->insts[dec_i].applyDecoration(program->data);
-                if (!apply_dec) {
-                    msg = apply_dec.error();
-                    goto check_err;
-                }
-            }
-
-            check_err:
-            if (!msg.empty()) {
-                delete program;
-                return Utils::unexpected<Program>(msg);
+            for (unsigned dec_i : decorations) {
+                if (auto apply_dec = insts[dec_i].applyDecoration(data); !apply_dec)
+                    return Utils::unexpected<bool>(apply_dec.error());
             }
 #undef REQUIRE
 
-            return Utils::expected(*program);
+            return Utils::expected();
+        }
+
+        Utils::May<bool> setup(ValueMap& provided) {
+            const unsigned len = data.size();
+            // First, create a list of variables needed as inputs
+            std::vector<Variable*> inputs;
+            for (const auto in : ins) {
+                auto [var, valid] = data[in].getVariable();
+                assert(valid); // already checked in ioGen
+                inputs.push_back(var);
+            }
+
+            // Next go through variables defined and verify they match needed
+            for (const auto& [name, val] : provided) {
+                bool found = false;
+                // first, find the variable which matches the name
+                for (unsigned i = 0; i < inputs.size(); ++i) {
+                    auto var = inputs[i];
+                    if (var->getName() == name) {
+                        found = true;
+                        if (auto copy = var->setVal(val); !copy)
+                            return Utils::unexpected<bool>(copy.error());
+                        // Remove the interface from the check list
+                        inputs.erase(inputs.begin() + i);
+                        --i;
+                        break;
+                    } else
+                        continue; // this isn't a match, try next
+                }
+
+                if (!found) {
+                    std::stringstream err;
+                    err << "Input specifies variable \"" << name << "\" which doesn't exist in the program!";
+                    return Utils::unexpected<bool>(err.str());
+                }
+            }
+
+            // At this point, all in interfaces should be removed. If not, there are more vars needed not provided
+            if (!inputs.empty()) {
+                std::stringstream error;
+                error << "Missing ";
+                const auto missing = inputs.size();
+                error << missing;
+                if (missing == 1)
+                    error << " variable";
+                else
+                    error << " variables";
+                error << " in setup: ";
+                for (unsigned i = 0; i < inputs.size(); ++i) {
+                    if (i > 0)
+                        error << ", ";
+                    error << inputs[i]->getName();
+                }
+                error << "!";
+                return Utils::unexpected<bool>(error.str());
+            }
+
+            return Utils::expected();
+        }
+
+        Utils::May<bool> execute(ValueMap& outputs, bool verbose) {
+
+            return Utils::expected();
         }
     };
 };
