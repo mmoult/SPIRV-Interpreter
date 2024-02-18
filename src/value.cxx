@@ -6,6 +6,8 @@ module;
 #include <optional>
 #include <string>
 #include <vector>
+
+import utils;
 export module value;
 
 export enum DataType : unsigned {
@@ -21,6 +23,9 @@ export enum DataType : unsigned {
     FUNCTION = 8,
     POINTER = 9,
 };
+
+// necessary forward reference
+export class Value;
 
 export class Type {
     DataType base;
@@ -114,9 +119,11 @@ public:
         }
     }
     bool operator!=(const Type& rhs) const { return !(*this == rhs); };
+
+    Utils::May<Value*> construct(std::vector<Value*>* values, bool cast = false) const;
 };
 
-export class Value {
+class Value {
 
 protected:
     virtual Type describeType() const = 0;
@@ -191,7 +198,7 @@ public:
     }
 };
 
-export class Primitive : public Value {
+export struct Primitive : public Value {
 
     union {
         float fp32;
@@ -223,4 +230,55 @@ protected:
         assert(false);
         return Type::primitive(DataType::ANY);
     }
+
+public:
+    // change the type without modifying the underlying value
+    void cast(const Type& to) {
+        cachedType = std::optional(to);
+    }
 };
+
+Utils::May<Value*> Type::construct(std::vector<Value*>* values, bool cast) const {
+    assert(!cast || values != nullptr);
+
+    switch (base) {
+    default:
+        return Utils::unexpected<Value*>("Unsupported type!");
+    case DataType::FLOAT: {
+        if (values == nullptr)
+            return Utils::expected<Value*>(new Primitive(0.0f, subSize));
+        if (values->empty() || values->size() != 1)
+            return Utils::unexpected<Value*>("Cannot construct float from nonzero number of inputs!");
+        Value* val = (*values)[0];
+        const Type& from = val->getType();
+        switch (from.base) {
+        case DataType::FLOAT: {
+            // from float, to float. TODO precision
+            break;
+        }
+        case DataType::UINT: {
+            auto prim = static_cast<Primitive*>(val);
+            if (!cast)
+                prim->data.fp32 = static_cast<float>(prim->data.u32);
+            break;
+        }
+        case DataType::INT: {
+            auto prim = static_cast<Primitive*>(val);
+            if (!cast)
+                prim->data.fp32 = static_cast<float>(prim->data.i32);
+            break;
+        }
+        default:
+            return Utils::unexpected<Value*>("Cannot cast float to specified type!");
+        }
+
+        auto prim = static_cast<Primitive*>(val);
+        prim->cast(*this);
+        return Utils::expected<Value*>(val);
+    }
+    case DataType::ANY:
+        return Utils::unexpected<Value*>("Cannot construct any type!");
+    case DataType::VOID:
+        return Utils::unexpected<Value*>("Cannot construct void type!");
+    }
+}

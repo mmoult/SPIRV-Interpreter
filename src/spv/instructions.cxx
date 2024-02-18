@@ -75,16 +75,30 @@ export namespace Spv {
         }
 
         Utils::May<bool> getType(unsigned idx, std::vector<Data>& data, Type*& ty) const {
-            unsigned ty_at;
-            if (auto res = checkRef(idx, data.size(), ty_at); !res)
+            unsigned at;
+            if (auto res = checkRef(idx, data.size(), at); !res)
                 return res;
-            auto [type, valid] = data[ty_at].getType();
+            auto [type, valid] = data[at].getType();
             if (!valid) {
                 std::stringstream err;
-                err << "%" << ty_at << " is not a type!";
+                err << "%" << at << " is not a type!";
                 return Utils::unexpected<bool>(err.str());
             }
             ty = type;
+            return Utils::expected();
+        }
+
+        Utils::May<bool> getValue(unsigned idx, std::vector<Data>& data, Value*& val) const {
+            unsigned at;
+            if (auto res = checkRef(idx, data.size(), at); !res)
+                return res;
+            auto [value, valid] = data[at].getValue();
+            if (!valid) {
+                std::stringstream err;
+                err << "%" << at << " is not a value!";
+                return Utils::unexpected<bool>(err.str());
+            }
+            val = value;
             return Utils::expected();
         }
 
@@ -161,6 +175,7 @@ export namespace Spv {
                 to_load.push_back(Token::Type::UINT);
                 break;
             case spv::OpTypeFloat: // 22
+            case spv::OpConstant: // 43
                 to_load.push_back(Token::Type::UINT);
                 break;
             case spv::OpTypeVector: // 23
@@ -187,10 +202,6 @@ export namespace Spv {
             case spv::OpFunction: // 54
                 to_load.push_back(Token::Type::CONST);
                 to_load.push_back(Token::Type::REF);
-                break;
-            case spv::OpConstant: // 43
-                optional.push_back(Token::Type::UINT);
-                repeating = true;
                 break;
             case spv::OpVariable: // 59
                 to_load.push_back(Token::Type::CONST);
@@ -380,6 +391,34 @@ export namespace Spv {
                     params.push_back(param);
                 }
                 return data[result_at].redefine(Data(new Type(Type::function(ret, params))));
+            }
+            case spv::OpConstant: { // 43
+                // integer or floating point constant
+                Type* ret;
+                if (const auto res = getType(0, data, ret); !res)
+                    return res;
+                assert(operands[2].type == Token::Type::UINT);
+                Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
+                prim->cast(*ret);
+                return data[result_at].redefine(Data(prim));
+            }
+            case spv::OpConstantComposite: { // 44
+                // Can create struct, array/vector, or matrix
+                Type* ret;
+                if (const auto res = getType(0, data, ret); !res)
+                    return res;
+                std::vector<Value*> values;
+                // operands 2+ are refs to components
+                for (unsigned i = 2; i < operands.size(); ++i) {
+                    Value* val;
+                    if (const auto res = getValue(i, data, val); !res)
+                        return res;
+                    values.push_back(val);
+                }
+                auto res = ret->construct(&values, true);
+                if (!res)
+                    return Utils::unexpected<bool>(res.error());
+                return data[result_at].redefine(Data(res.value()));
             }
             case spv::OpFunction: { // 54
                 assert(operands[2].type == Token::Type::CONST);

@@ -40,10 +40,6 @@ export namespace Utils {
     }
 
     template<typename S>
-    May<S> expected(S& val) {
-        return May(val);
-    }
-    template<typename S>
     May<S> expected(S val) {
         return May(val);
     }

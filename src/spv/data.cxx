@@ -92,6 +92,11 @@ public:
             return std::tuple(nullptr, false);
         return std::tuple(static_cast<Type*>(raw), true);
     }
+    std::tuple<Value*, bool> getValue() {
+        if (type != DType::VALUE)
+            return std::tuple(nullptr, false);
+        return std::tuple(static_cast<Value*>(raw), true);
+    }
     std::tuple<Variable*, bool> getVariable() {
         if (type != DType::VARIABLE)
             return std::tuple(nullptr, false);
