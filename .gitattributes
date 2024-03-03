@@ -3,13 +3,12 @@
 
 # Explicitly declare text files you want to always be normalized and converted
 # to native line endings on checkout.
-*.c text
-*.h text
 *.cpp text
-*.cppm text
+*.cxx text
 *.hpp text
-*.txt text
+*.spv binary
+*.spvasm text
+*.toml text
 
 # Declare files that will always have CRLF line endings on checkout.
 *.sln text eol=crlf
-

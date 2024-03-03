@@ -161,7 +161,7 @@ int main(int argc, char* argv[]) {
     ifs.read(buffer, length);
     ifs.close();
 
-    // The type of char is implementation defined. Use uint8_t to remove ambiguity
+    // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
     Spv::Program program;
     if (auto parse_res = program.parse(std::bit_cast<uint8_t*>(buffer), length); !parse_res) {
         std::cerr << parse_res.error() << std::endl;

@@ -24,7 +24,7 @@ export namespace Utils {
             assert(has_val);
             return val;
         }
-        std::string& error() {
+        const std::string& error() const {
             assert(!has_val);
             return msg;
         }

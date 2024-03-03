@@ -11,6 +11,7 @@ module;
 #include "../external/spirv.hpp"
 
 import data;
+import frame;
 import tokens;
 import utils;
 import value;
@@ -74,33 +75,27 @@ export namespace Spv {
             return Utils::expected();
         }
 
-        Utils::May<bool> getType(unsigned idx, std::vector<Data>& data, Type*& ty) const {
-            unsigned at;
-            if (auto res = checkRef(idx, data.size(), at); !res)
-                return res;
-            auto [type, valid] = data[at].getType();
-            if (!valid) {
-                std::stringstream err;
-                err << "%" << at << " is not a type!";
-                return Utils::unexpected<bool>(err.str());
-            }
-            ty = type;
-            return Utils::expected();
-        }
+#define GET_X(X, X_LOW) \
+    Utils::May<bool> get##X(unsigned idx, std::vector<Data>& data, X*& X_LOW) const { \
+        unsigned at; \
+        if (auto res = checkRef(idx, data.size(), at); !res) \
+            return res; \
+        auto [temp, valid] = data[at].get##X(); \
+        if (!valid) { \
+            std::stringstream err; \
+            err << "%" << at << " is not a " << #X_LOW << "!"; \
+            return Utils::unexpected<bool>(err.str()); \
+        } \
+        X_LOW = temp; \
+        return Utils::expected(); \
+    }
 
-        Utils::May<bool> getValue(unsigned idx, std::vector<Data>& data, Value*& val) const {
-            unsigned at;
-            if (auto res = checkRef(idx, data.size(), at); !res)
-                return res;
-            auto [value, valid] = data[at].getValue();
-            if (!valid) {
-                std::stringstream err;
-                err << "%" << at << " is not a value!";
-                return Utils::unexpected<bool>(err.str());
-            }
-            val = value;
-            return Utils::expected();
-        }
+        GET_X(Type, type)
+        GET_X(Value, value)
+        GET_X(Function, func)
+        GET_X(Variable, variable)
+
+#undef GET_X
 
     public:
         Instruction(spv::Op opcode, bool has_result, bool has_result_type):
@@ -303,7 +298,7 @@ export namespace Spv {
         /// @param ins a list of ref indices in data pointing to in variables
         /// @param outs a list of ref indices in data pointing to out variables
         /// @return result of generation
-        Utils::May<bool> ioGen(std::vector<Data>& data, std::vector<unsigned>& ins, std::vector<unsigned>& outs) {
+        Utils::May<bool> ioGen(std::vector<Data>& data, std::vector<unsigned>& ins, std::vector<unsigned>& outs) const {
             assert(isEntry());
 
             const unsigned len = data.size();
@@ -312,7 +307,7 @@ export namespace Spv {
                 unsigned id;
                 if (auto ref = checkRef(i, len, id); !ref)
                     return Utils::unexpected<bool>(ref.error());
-                auto [var, valid] = data[i].getVariable();
+                auto [var, valid] = data[id].getVariable();
                 if (!valid) { // interface refs must be variables
                     std::stringstream error;
                     error << "Found interface reference, %" << id << ", which is not a variable!";
@@ -335,6 +330,16 @@ export namespace Spv {
                 }
             }
             return Utils::expected();
+        }
+
+        Utils::May<unsigned> getEntryStart(std::vector<Data>& data) const {
+            assert(isEntry());
+
+            // The entry function ref is operand 1
+            Function* fx;
+            if (const auto res = getFunction(1, data, fx); !res)
+                return Utils::unexpected<unsigned>("Missing entry function in entry declaration!");
+            return Utils::expected<unsigned>(fx->getLocation());
         }
 
         /// @brief Create the result in pre-parsing.
@@ -415,7 +420,7 @@ export namespace Spv {
                         return res;
                     values.push_back(val);
                 }
-                auto res = ret->construct(&values, true);
+                auto res = ret->construct(values);
                 if (!res)
                     return Utils::unexpected<bool>(res.error());
                 return data[result_at].redefine(Data(res.value()));
@@ -434,8 +439,18 @@ export namespace Spv {
                     return res;
                 assert(operands[2].type == Token::Type::CONST);
                 unsigned storage = std::get<unsigned>(operands[2].raw);
-                // TODO default value
-                return data[result_at].redefine(Data(new Variable(var_type, static_cast<spv::StorageClass>(storage))));
+                Variable* var = new Variable(static_cast<spv::StorageClass>(storage));
+                if (operands.size() > 3) { // included default value
+                    Value* defaultVal;
+                    if (const auto res = getValue(3, data, defaultVal); !res)
+                        return res;
+                    if (auto res = var->initialize(*var_type, *defaultVal); !res)
+                        return res;
+                } else {
+                    if (auto res = var->initialize(*var_type); !res)
+                        return res;
+                }
+                return data[result_at].redefine(Data(var));
             }
             case spv::OpLabel: // 248
                 return data[result_at].redefine(Data(new Primitive(location)));
@@ -444,13 +459,13 @@ export namespace Spv {
 
         bool isDecoration() const {
             switch (opcode) {
-                default:
-                    return false;
-                case spv::OpName: // 5
-                case spv::OpMemberName: // 6
-                case spv::OpDecorate: // 71
-                case spv::OpMemberDecorate: // 72
-                    return true;
+            default:
+                return false;
+            case spv::OpName: // 5
+            case spv::OpMemberName: // 6
+            case spv::OpDecorate: // 71
+            case spv::OpMemberDecorate: // 72
+                return true;
             }
         }
 
@@ -459,27 +474,74 @@ export namespace Spv {
         /// @return the result
         Utils::May<bool> applyDecoration(std::vector<Data>& data) const {
             switch (opcode) {
-                default:
-                case spv::OpMemberName: // 6
-                case spv::OpMemberDecorate: // 72
-                    return Utils::unexpected<bool>("Unimplemented function!");
-                case spv::OpName: { // 5
-                    unsigned named;
-                    if (auto res = checkRef(0, data.size(), named); !res)
-                        return res;
-                    assert(operands[1].type == Token::Type::STRING);
-                    std::string name = std::get<std::string>(operands[1].raw);
-                    // We can decorate variables and functions with names
-                    if (auto [var, valid] = data[named].getVariable(); valid) {
-                        var->setName(name);
-                    } else if (auto [fx, valid] = data[named].getFunction(); valid) {
-                        fx->setName(name);
-                    } else
-                        return Utils::unexpected<bool>("Name decoration only legal for variables and functions!");
-                    break;
-                }
-                case spv::OpDecorate: // 71
-                    break;
+            default:
+            case spv::OpMemberName: // 6
+            case spv::OpMemberDecorate: // 72
+                return Utils::unexpected<bool>("Unimplemented function!");
+            case spv::OpName: { // 5
+                unsigned named;
+                if (auto res = checkRef(0, data.size(), named); !res)
+                    return res;
+                assert(operands[1].type == Token::Type::STRING);
+                std::string name = std::get<std::string>(operands[1].raw);
+                // We can decorate variables and functions with names
+                if (auto [var, valid] = data[named].getVariable(); valid) {
+                    var->setName(name);
+                } else if (auto [fx, valid] = data[named].getFunction(); valid) {
+                    fx->setName(name);
+                } else
+                    return Utils::unexpected<bool>("Name decoration only legal for variables and functions!");
+                break;
+            }
+            case spv::OpDecorate: // 71
+                break;
+            }
+            return Utils::expected();
+        }
+
+        Utils::May<bool> execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
+            bool inc_pc = true;
+            Frame& frame = frame_stack.back();
+
+            switch (opcode) {
+            default:
+                break;
+            case spv::OpFunctionEnd: // 56
+                return Utils::unexpected<bool>("Missing return before function end!");
+            case spv::OpStore: { // 62
+                Value* val;
+                if (const auto res = getValue(1, data, val); !res)
+                    return res;
+                Variable* dst;
+                if (const auto res = getVariable(0, data, dst); !res)
+                    return res;
+                if (const auto res = dst->setVal(*val); !res)
+                    return res;
+                break;
+            }
+            case spv::OpLabel: // 248
+                break;  // should print for verbose
+            case spv::OpBranch: { // 249
+                Value* dst;
+                if (const auto res = getValue(0, data, dst); !res)
+                    return res;
+                Primitive* dst2 = static_cast<Primitive*>(dst);
+                frame.setPC(dst2->data.u32);
+                inc_pc = false;
+                break;
+            }
+            case spv::OpReturn: // 253
+                // verify that the stack didn't expect a return value
+                if (frame.hasReturn())
+                    return Utils::unexpected<bool>("Missing value for function return!");
+                frame_stack.pop_back();
+                inc_pc = !frame_stack.empty(); // don't increment PC if we are at the end of program
+                break;
+            }
+
+            if (inc_pc) {
+                if (const auto res = frame_stack.back().incPC(); !res)
+                    return res;
             }
             return Utils::expected();
         }

@@ -1,4 +1,5 @@
 module;
+#include <cassert>
 #include <cstdint>
 #include <map>
 #include <sstream>
@@ -11,19 +12,42 @@ import value;
 export module data;
 
 export class Variable {
-    Type* type;
+    // The variable owns this value. When it is set, another value is copied over and decorations (such as
+    // relaxed precision or type conversions) are applied.
     Value* val;
+    // Used to determine whether this variable is in, out, or other
     spv::StorageClass storage;
+    // name of the variable, how this variable can be referenced by in and out toml files
     std::string name;
     std::map<uint32_t, uint32_t> decorations;
 
 public:
-    Variable(Type* type, spv::StorageClass storage_class): type(type), val(nullptr), storage(storage_class) {}
+    // Need to initialize before it is ready for use
+    Variable(spv::StorageClass storage_class): val(nullptr), storage(storage_class) {}
     Variable(const Variable&) = delete;
     Variable& operator= (const Variable&) = delete;
     ~Variable() {
         if (val != nullptr)
             delete val;
+    }
+
+    Utils::May<bool> initialize(const Type& t) {
+        // Construct the value from the given type
+        // For whatever reason, the SPIR-V spec says that the type of each OpVariable must be an OpTypePointer,
+        // although it is actually storing the value.
+        // Therefore, before we construct, we need to dereference the pointer
+        if (t.getBase() != DataType::POINTER)
+            return Utils::unexpected<bool>("Cannot initialize variable with non-pointer type!");
+        auto res = t.getPointedTo().construct();
+        if (!res)
+            return Utils::unexpected<bool>("Cannot construct given type!");
+        val = res.value();
+        return Utils::expected();
+    }
+    Utils::May<bool> initialize(const Type& t, const Value& def) {
+        if (auto res = initialize(t); !res)
+            return Utils::unexpected<bool>(res.error());
+        return setVal(def);
     }
 
     void decorate(uint32_t deco_type, uint32_t deco_value) {
@@ -42,12 +66,9 @@ public:
         return name;
     }
 
-    Utils::May<bool> setVal(const Value* new_val) {
-        if (val != nullptr)
-            delete val;
-        // Cast the new value to the variable's type
-        // TODO
-        return Utils::expected();
+    Utils::May<bool> setVal(const Value& new_val) {
+        assert(val != nullptr); // must be initialized first!
+        return val->copyFrom(new_val);
     }
 };
 
@@ -61,6 +82,10 @@ public:
 
     void setName(std::string& new_name) {
         name = new_name;
+    }
+
+    unsigned getLocation() const {
+        return location;
     }
 };
 

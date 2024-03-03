@@ -16,6 +16,7 @@ target_sources(build
       utils.cxx
       value.cxx
       spv/data.cxx
+      spv/frame.cxx
       spv/instructions.cxx
       spv/program.cxx
       spv/tokens.cxx
