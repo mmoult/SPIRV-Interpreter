@@ -149,6 +149,12 @@ class Value {
 protected:
     Type type;
 
+    void newline(std::stringstream& dst, unsigned indents) const {
+        dst << '\n';
+        for (unsigned i = 0; i < indents; ++i)
+            dst << "  ";
+    }
+
 public:
     Value(Type type): type(type) {}
     virtual ~Value() = default;
@@ -160,12 +166,17 @@ public:
             return Utils::unexpected<bool>("Cannot copy from value of different type!");
         return Utils::expected();
     }
+
+    virtual void print(std::stringstream& dst, unsigned indents = 0) const = 0;
+
+    virtual bool isNested() const = 0;
 };
 
 export using ValueMap = std::map<std::string, const Value*>;
 
 export class Array : public Value  {
     std::vector<Value*> elements;
+
 public:
     Array(): Value(Type::array(0, Type::primitive(DataType::ANY))) {}
 
@@ -207,9 +218,43 @@ public:
 
         return res; // must have been success to get here
     }
+
+    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
+        bool noNested = true;
+        for (const auto& element: elements)
+            noNested &= !element->isNested();
+
+        if (noNested) {
+            dst << "[ ";
+            bool first = true;
+            for (const auto& element: elements) {
+                if (first)
+                    first = false;
+                else
+                    dst << ", ";
+                element->print(dst, indents + 1);
+            }
+            dst << " ]";
+        } else {
+            // If at least one element is nested, put each on its own line
+            dst << '[';
+            for (const auto& element: elements) {
+                newline(dst, indents + 1);
+                element->print(dst, indents + 1);
+                dst << ',';
+            }
+            newline(dst, indents);
+            dst << ']';
+        }
+    }
+
+    bool isNested() const override {
+        return true;
+    }
 };
 
 export class Struct : public Value {
+
 public:
     Struct(): Value(Type::struct_()) {}
 
@@ -221,6 +266,14 @@ public:
         // Do the actual copy now
         const Struct& other = static_cast<const Struct&>(new_val);
         return Utils::unexpected<bool>("Unimplemented function!");
+    }
+
+    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
+        assert(false); // unimplemented!
+    }
+
+    bool isNested() const override {
+        return true;
     }
 };
 
@@ -239,6 +292,23 @@ public:
         // Do the actual copy now
         const Pointer& other = static_cast<const Pointer&>(new_val);
         return Utils::unexpected<bool>("Unimplemented function!");
+    }
+
+    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
+        dst << "[ ";
+        bool first = true;
+        for (unsigned u: to) {
+            if (first)
+                first = false;
+            else
+                dst << ", ";
+            dst << u;
+        }
+        dst << " ]";
+    }
+
+    bool isNested() const override {
+        return true;
     }
 };
 
@@ -269,7 +339,6 @@ public:
         data.u32 = 0;
     }
 
-public:
     Utils::May<bool> copyFrom(const Value& new_val) override {
         auto res = Value::copyFrom(new_val);
         if (!res)
@@ -341,6 +410,32 @@ public:
     /// @brief changes the type of the primitive *without* changing the value
     void cast(Type t) {
         type = t;
+    }
+
+    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
+        switch (type.getBase()) { // copy from
+        case DataType::FLOAT:
+            dst << data.fp32;
+            break;
+        case DataType::UINT:
+            dst << data.u32;
+            break;
+        case DataType::INT:
+            dst << data.i32;
+            break;
+        case DataType::BOOL:
+            if (data.i32)
+                dst << "true";
+            else
+                dst << "false";
+            break;
+        default:
+            assert(false); // should not be possible to have another type!
+        }
+    }
+
+    bool isNested() const override {
+        return false;
     }
 };
 

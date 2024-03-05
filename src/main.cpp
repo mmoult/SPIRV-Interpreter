@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
                     return ReturnCodes::BAD_ARGS;
                 }
             } else if (arg == "-v" || arg == "--version") {
-                std::cout << "SPIRV-Interpreter version 0.0.1" << std::endl;
+                std::cout << "SPIRV-Interpreter version 0.1.0" << std::endl;
                 return ReturnCodes::INFO;
             } else
                 found = false;
@@ -171,7 +171,11 @@ int main(int argc, char* argv[]) {
 
     if (!itemplate.empty()) {
         // Print out needed variables to file specified
-        // TODO
+        std::stringstream ss;
+        program.printInputs(ss);
+        std::ofstream templateFile(itemplate);
+        templateFile << ss.str();
+        templateFile.close();
         return ReturnCodes::INFO;
     }
 
@@ -189,7 +193,9 @@ int main(int argc, char* argv[]) {
     }
 
     // Output the result
-    // TODO
+    std::stringstream ss;
+    program.printOutputs(ss);
+    std::cout << ss.str() << std::flush;
 
     // Clean up before successful exit
     for (const auto& [_, val] : inputs)

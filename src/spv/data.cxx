@@ -70,6 +70,13 @@ public:
         assert(val != nullptr); // must be initialized first!
         return val->copyFrom(new_val);
     }
+
+    void print(std::stringstream& dst) const {
+        assert(val != nullptr);
+        dst << name << " = ";
+        val->print(dst);
+        dst << '\n';
+    }
 };
 
 export class Function {
@@ -112,26 +119,18 @@ public:
     //Data(const Data& other) = delete;
     Data& operator=(const Data& other) = delete;
 
-    std::tuple<Type*, bool> getType() {
-        if (type != DType::TYPE)
-            return std::tuple(nullptr, false);
-        return std::tuple(static_cast<Type*>(raw), true);
+#define GET_X(UPPER, CAPITAL) \
+    std::tuple<CAPITAL*, bool> get##CAPITAL() { \
+        if (type != DType::UPPER) \
+            return std::tuple(nullptr, false); \
+        return std::tuple(static_cast<CAPITAL*>(raw), true); \
     }
-    std::tuple<Value*, bool> getValue() {
-        if (type != DType::VALUE)
-            return std::tuple(nullptr, false);
-        return std::tuple(static_cast<Value*>(raw), true);
-    }
-    std::tuple<Variable*, bool> getVariable() {
-        if (type != DType::VARIABLE)
-            return std::tuple(nullptr, false);
-        return std::tuple(static_cast<Variable*>(raw), true);
-    }
-    std::tuple<Function*, bool> getFunction() {
-        if (type != DType::FUNCTION)
-            return std::tuple(nullptr, false);
-        return std::tuple(static_cast<Function*>(raw), true);
-    }
+
+    GET_X(TYPE, Type)
+    GET_X(VALUE, Value)
+    GET_X(VARIABLE, Variable)
+    GET_X(FUNCTION, Function)
+#undef GET_X
 
     // Convenience function to not need to define the Data for each use
     template<typename T>

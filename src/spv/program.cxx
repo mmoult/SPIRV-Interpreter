@@ -2,6 +2,7 @@ module;
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <sstream>
 #include <tuple>
 #include <vector>
 
@@ -229,6 +230,22 @@ export namespace Spv {
                     return res;
             }
             return Utils::expected();
+        }
+
+        void printInputs(std::stringstream& dst) {
+            for (const auto in : ins) {
+                auto [var, valid] = data[in].getVariable();
+                assert(valid);
+                var->print(dst);
+            }
+        }
+
+        void printOutputs(std::stringstream& dst) {
+            for (const auto out : outs) {
+                auto [var, valid] = data[out].getVariable();
+                assert(valid);
+                var->print(dst);
+            }
         }
     };
 };
