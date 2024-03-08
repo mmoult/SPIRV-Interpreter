@@ -3,15 +3,11 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
-#include <map>
 #include <optional>
 #include <string>
-#include <tuple>
-#include <vector>
 
 import program;
 import toml;
-import utils;
 import value;
 
 enum ReturnCodes : int {
@@ -163,8 +159,10 @@ int main(int argc, char* argv[]) {
 
     // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
     Spv::Program program;
-    if (auto parse_res = program.parse(std::bit_cast<uint8_t*>(buffer), length); !parse_res) {
-        std::cerr << parse_res.error() << std::endl;
+    try {
+        program.parse(std::bit_cast<uint8_t*>(buffer), length);
+    } catch(const std::exception& e) {
+        std::cerr << e.what() << std::endl;
         return ReturnCodes::BAD_PARSE;
     }
     delete[] buffer; // delete source now that it has been replaced with program
@@ -180,15 +178,18 @@ int main(int argc, char* argv[]) {
     }
 
     // Verify that the inputs loaded match what the program expects
-    if (auto ok = program.setup(inputs); !ok) {
-        std::cerr << ok.error() << std::endl;
+    try {
+        program.setup(inputs);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
         return ReturnCodes::BAD_PROG_INPUT;
     }
 
     // Run the program
-    ValueMap outputs;
-    if (auto ok = program.execute(outputs, verbose); !ok) {
-        std::cerr << ok.error() << std::endl;
+    try {
+        program.execute(verbose);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
         return ReturnCodes::FAILED_EXE;
     }
 

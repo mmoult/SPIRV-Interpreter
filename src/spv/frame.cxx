@@ -1,7 +1,7 @@
 module;
+#include <stdexcept>
 #include <vector>
 
-import utils;
 import value;
 export module frame;
 
@@ -19,27 +19,25 @@ public:
         return pc;
     }
 
-    Utils::May<Value*> getArg() {
+    Value* getArg() noexcept(false) {
         if (argCount >= args.size())
-            return Utils::unexpected<Value*>("No more args to use!");
+            throw std::runtime_error("No more args to use!");
         Value* ret = args[argCount];
         ++argCount;
         ++pc;
-        return Utils::expected<Value*>(ret);
+        return ret;
     }
 
-    Utils::May<bool> incPC() {
+    void incPC() noexcept(false) {
         if (argCount < args.size())
-            return Utils::unexpected<bool>("Unused function argument(s)!");
+            throw std::runtime_error("Unused function argument(s)!");
         ++pc;
-        return Utils::expected();
     }
 
-    Utils::May<bool> setPC(unsigned pc) {
+    void setPC(unsigned pc) noexcept(false) {
         if (argCount < args.size())
-            return Utils::unexpected<bool>("Unused function argument(s)!");
+            throw std::runtime_error("Unused function argument(s)!");
         this->pc = pc;
-        return Utils::expected();
     }
 
     unsigned getReturn() {

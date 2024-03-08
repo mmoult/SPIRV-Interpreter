@@ -1,14 +1,13 @@
 module;
 #include <cassert>
 #include <cstdint> // for uint32_t and int32_t
-#include <iterator>
+#include <exception>
 #include <map>
-#include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
-import utils;
 export module value;
 
 export enum DataType : unsigned {
@@ -40,7 +39,7 @@ export class Type {
         subSize(sub_size),
         subElement(sub_element) {}
 
-    Utils::May<Value*> construct(std::vector<Value*>* values) const;
+    Value* construct(std::vector<Value*>* values) const noexcept(false);
 
 public:
     // Factory methods to create type variants:
@@ -81,10 +80,10 @@ public:
     // Other methods:
 
     // Construct a value from the type
-    Utils::May<Value*> construct() const {
+    Value* construct() const {
         return construct(nullptr);
     }
-    Utils::May<Value*> construct(std::vector<Value*>& values) const {
+    Value* construct(std::vector<Value*>& values) const {
         return construct(&values);
     }
 
@@ -161,10 +160,9 @@ public:
 
     const Type& getType() const { return type; }
 
-    virtual Utils::May<bool> copyFrom(const Value& new_val) {
+    virtual void copyFrom(const Value& new_val) {
         if (!new_val.getType().sameBase(getType()))
-            return Utils::unexpected<bool>("Cannot copy from value of different type!");
-        return Utils::expected();
+            throw std::runtime_error("Cannot copy from value of different type!");
     }
 
     virtual void print(std::stringstream& dst, unsigned indents = 0) const = 0;
@@ -199,24 +197,18 @@ public:
 
     unsigned getSize() const { return elements.size(); }
 
-    Utils::May<bool> copyFrom(const Value& new_val) override {
-        auto res = Value::copyFrom(new_val);
-        if (!res)
-            return res;
+    void copyFrom(const Value& new_val) override {
+        Value::copyFrom(new_val);
 
         // Do the actual copy now
         const Array& other = static_cast<const Array&>(new_val);
         if (unsigned osize = other.getSize(); osize != elements.size()) {
             std::stringstream err;
             err << "Cannot copy array of size " << osize << " into array of size " << elements.size() << "!";
-            return Utils::unexpected<bool>(err.str());
+            throw std::runtime_error(err.str());
         }
-        for (unsigned i = 0; i < elements.size(); ++i) {
-            if (auto eres = elements[i]->copyFrom(*other.elements[i]); !eres)
-                return eres;
-        }
-
-        return res; // must have been success to get here
+        for (unsigned i = 0; i < elements.size(); ++i)
+            elements[i]->copyFrom(*other.elements[i]);
     }
 
     virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
@@ -258,14 +250,12 @@ export class Struct : public Value {
 public:
     Struct(): Value(Type::struct_()) {}
 
-    Utils::May<bool> copyFrom(const Value& new_val) override {
-        auto res = Value::copyFrom(new_val);
-        if (!res)
-            return res;
+    void copyFrom(const Value& new_val) override {
+        Value::copyFrom(new_val);
 
         // Do the actual copy now
         const Struct& other = static_cast<const Struct&>(new_val);
-        return Utils::unexpected<bool>("Unimplemented function!");
+        throw std::runtime_error("Unimplemented function!");
     }
 
     virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
@@ -284,14 +274,12 @@ export class Pointer : public Value {
 public:
     Pointer(std::vector<unsigned> to, Type t): Value(t), to(to) {}
 
-    Utils::May<bool> copyFrom(const Value& new_val) override {
-        auto res = Value::copyFrom(new_val);
-        if (!res)
-            return res;
+    void copyFrom(const Value& new_val) override {
+        Value::copyFrom(new_val);
 
         // Do the actual copy now
         const Pointer& other = static_cast<const Pointer&>(new_val);
-        return Utils::unexpected<bool>("Unimplemented function!");
+        throw std::runtime_error("Unimplemented function!");
     }
 
     virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
@@ -339,10 +327,8 @@ public:
         data.u32 = 0;
     }
 
-    Utils::May<bool> copyFrom(const Value& new_val) override {
-        auto res = Value::copyFrom(new_val);
-        if (!res)
-            return res;
+    void copyFrom(const Value& new_val) override {
+        Value::copyFrom(new_val);
 
         // Do the actual copy now
         const Primitive& other = static_cast<const Primitive&>(new_val);
@@ -362,7 +348,7 @@ public:
                 data.fp32 = static_cast<float>(other.data.i32);
                 break;
             default:
-                return Utils::unexpected<bool>("Cannot cast to float!");
+                throw std::runtime_error("Cannot convert to float!");
             }
             break;
         case DataType::UINT:
@@ -373,7 +359,7 @@ public:
             default:
                 // No int -> uint since if it was int, it is probably negative
                 // No float -> uint since if it was float, probably had decimal component
-                return Utils::unexpected<bool>("Cannot cast to uint!");
+                throw std::runtime_error("Cannot convert to uint!");
             }
             break;
         case DataType::INT:
@@ -386,7 +372,7 @@ public:
                 data.i32 = other.data.i32;
                 break;
             default:
-                return Utils::unexpected<bool>("Cannot cast to int!");
+                throw std::runtime_error("Cannot convert to int!");
             }
             break;
         case DataType::BOOL:
@@ -397,14 +383,12 @@ public:
                 data.b32 = other.data.u32 != 0;
                 break;
             default:
-                return Utils::unexpected<bool>("Cannot cast to bool!");
+                throw std::runtime_error("Cannot convert to bool!");
             }
             break;
         default:
             assert(false);
         }
-
-        return res; // must have been success to get here
     }
 
     /// @brief changes the type of the primitive *without* changing the value
@@ -439,14 +423,14 @@ public:
     }
 };
 
-Utils::May<Value*> Type::construct(std::vector<Value*>* values) const {
+Value* Type::construct(std::vector<Value*>* values) const {
     switch (base) {
     default:
-        return Utils::unexpected<Value*>("Unsupported type!");
+        throw std::runtime_error("Unsupported type!");
     case DataType::ANY:
-        return Utils::unexpected<Value*>("Cannot construct any type!");
+        throw std::runtime_error("Cannot construct any type!");
     case DataType::VOID:
-        return Utils::unexpected<Value*>("Cannot construct void type!");
+        throw std::runtime_error("Cannot construct void type!");
     // Primitive types
     case DataType::FLOAT:
     case DataType::UINT:
@@ -454,18 +438,20 @@ Utils::May<Value*> Type::construct(std::vector<Value*>* values) const {
     case DataType::BOOL: {
         Primitive* prim = new Primitive(*this);
         if (values == nullptr)
-            return Utils::expected<Value*>(prim);
+            return prim;
         if (values->empty() || values->size() != 1) {
             delete prim;
-            return Utils::unexpected<Value*>("Cannot construct primitive from nonzero number of inputs!");
+            throw std::runtime_error("Cannot construct primitive from nonzero number of inputs!");
         }
 
         Value* val = (*values)[0];
-        if (auto res = prim->copyFrom(*val); !res) {
+        try {
+            prim->copyFrom(*val);
+        } catch (std::exception& e) {
             delete prim;
-            return Utils::unexpected<Value*>(res.error());
+            throw e;
         }
-        return Utils::expected<Value*>(prim);
+        return prim;
     }
     case DataType::ARRAY: {
         Array* arr = new Array();
@@ -475,26 +461,24 @@ Utils::May<Value*> Type::construct(std::vector<Value*>* values) const {
                 delete arr;
                 std::stringstream err;
                 err << "Could not construct array of size " << subSize << " from " << values->size() << " elements!";
-                return Utils::unexpected<Value*>(err.str());
+                throw std::runtime_error(err.str());
             }
             for (unsigned i = 0; i < values->size(); ++i) {
                 if (!arr->addElement((*values)[i])) {
                     delete arr;
                     std::stringstream err;
                     err << "Could not add array element " << i << "!";
-                    return Utils::unexpected<Value*>(err.str());
+                    throw std::runtime_error(err.str());
                 }
             }
         } else {
             // create a dummy for each necessary entry
             while (arr->getSize() < subSize) {
-                auto res = subElement->construct();
-                if (!res)
-                    return Utils::unexpected<Value*>(res.error());
-                arr->addElement(res.value());
+                auto val = subElement->construct();
+                arr->addElement(val);
             }
         }
-        return Utils::expected<Value*>(arr);
+        return arr;
     }
     // TODO support other types
     }

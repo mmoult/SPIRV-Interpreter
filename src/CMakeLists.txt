@@ -13,7 +13,6 @@ target_sources(build
   PUBLIC
     FILE_SET CXX_MODULES FILES
       toml.cxx
-      utils.cxx
       value.cxx
       spv/data.cxx
       spv/frame.cxx

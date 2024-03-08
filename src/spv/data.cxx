@@ -3,11 +3,11 @@ module;
 #include <cstdint>
 #include <map>
 #include <sstream>
+#include <stdexcept>
 #include <tuple>
 
 #include "../external/spirv.hpp"
 
-import utils;
 import value;
 export module data;
 
@@ -21,9 +21,9 @@ export class Variable {
     std::string name;
     std::map<uint32_t, uint32_t> decorations;
 
+    Variable(Value* value, spv::StorageClass storage_class): val(value), storage(storage_class) {}
+
 public:
-    // Need to initialize before it is ready for use
-    Variable(spv::StorageClass storage_class): val(nullptr), storage(storage_class) {}
     Variable(const Variable&) = delete;
     Variable& operator= (const Variable&) = delete;
     ~Variable() {
@@ -31,23 +31,15 @@ public:
             delete val;
     }
 
-    Utils::May<bool> initialize(const Type& t) {
+    [[nodiscard]] static Variable* makeVariable(spv::StorageClass storage, const Type& t) noexcept(false) {
         // Construct the value from the given type
         // For whatever reason, the SPIR-V spec says that the type of each OpVariable must be an OpTypePointer,
         // although it is actually storing the value.
         // Therefore, before we construct, we need to dereference the pointer
         if (t.getBase() != DataType::POINTER)
-            return Utils::unexpected<bool>("Cannot initialize variable with non-pointer type!");
-        auto res = t.getPointedTo().construct();
-        if (!res)
-            return Utils::unexpected<bool>("Cannot construct given type!");
-        val = res.value();
-        return Utils::expected();
-    }
-    Utils::May<bool> initialize(const Type& t, const Value& def) {
-        if (auto res = initialize(t); !res)
-            return Utils::unexpected<bool>(res.error());
-        return setVal(def);
+            throw std::invalid_argument("Cannot initialize variable with non-pointer type!");
+        auto* val = t.getPointedTo().construct();
+        return new Variable(val, storage);
     }
 
     void decorate(uint32_t deco_type, uint32_t deco_value) {
@@ -66,13 +58,11 @@ public:
         return name;
     }
 
-    Utils::May<bool> setVal(const Value& new_val) {
-        assert(val != nullptr); // must be initialized first!
-        return val->copyFrom(new_val);
+    void setVal(const Value& new_val) {
+        val->copyFrom(new_val);
     }
 
     void print(std::stringstream& dst) const {
-        assert(val != nullptr);
         dst << name << " = ";
         val->print(dst);
         dst << '\n';
@@ -115,16 +105,44 @@ public:
     Data(Value* val): raw(val), type(DType::VALUE) {};
     Data(Type* type): raw(type), type(DType::TYPE) {};
 
-    ~Data() = default;
-    //Data(const Data& other) = delete;
-    Data& operator=(const Data& other) = delete;
-
-#define GET_X(UPPER, CAPITAL) \
-    std::tuple<CAPITAL*, bool> get##CAPITAL() { \
-        if (type != DType::UPPER) \
-            return std::tuple(nullptr, false); \
-        return std::tuple(static_cast<CAPITAL*>(raw), true); \
+    /*
+    ~Data() {
+        if (raw != nullptr) {
+            switch (type) {
+            case DType::VARIABLE:
+                delete static_cast<Variable*>(raw);
+                break;
+            case DType::FUNCTION:
+                delete static_cast<Function*>(raw);
+                break;
+            case DType::VALUE:
+                delete static_cast<Value*>(raw);
+                break;
+            case DType::TYPE:
+                delete static_cast<Type*>(raw);
+                break;
+            default:
+                assert(false);
+            }
+        }
     }
+    Data(Data& other) {
+        ...
+    }*/
+    Data& operator=(Data& other) = delete;
+
+    // Return nullptr if not a valid cast- assume the caller has more info for a better error
+#define GET_X(UPPER, CAPITAL) \
+    CAPITAL* get##CAPITAL() { \
+        if (type != DType::UPPER) \
+            return nullptr; \
+        return static_cast<CAPITAL*>(raw); \
+    }; \
+    const CAPITAL* get##CAPITAL() const { \
+        if (type != DType::UPPER) \
+            return nullptr; \
+        return static_cast<const CAPITAL*>(raw); \
+    };
 
     GET_X(TYPE, Type)
     GET_X(VALUE, Value)
@@ -134,11 +152,11 @@ public:
 
     // Convenience function to not need to define the Data for each use
     template<typename T>
-    Utils::May<bool> redefine(T* var) {
-        return redefine(Data(var));
+    void redefine(T* var) {
+        redefine(Data(var));
     }
 
-    Utils::May<bool> redefine(const Data& other) {
+    void redefine(const Data& other) noexcept(false) {
         if (type != DType::UNDEFINED) {
             std::stringstream err;
             err << "Cannot redefine data holding ";
@@ -160,15 +178,9 @@ public:
                 break;
             }
             err << "!";
-            return Utils::unexpected<bool>(err.str());
+            throw std::runtime_error(err.str());
         }
         raw = other.raw;
         type = other.type;
-        return Utils::expected();
-    }
-
-    Utils::May<bool> clear() {
-        // TODO should be able to clear values for reuse (in loops or second function call, etc)
-        return Utils::unexpected<bool>("Not implemented!");
     }
 };

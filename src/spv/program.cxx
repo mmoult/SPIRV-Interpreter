@@ -1,8 +1,9 @@
 module;
 #include <cassert>
 #include <cstdint>
-#include <string>
 #include <sstream>
+#include <stdexcept>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -11,7 +12,6 @@ module;
 import data;
 import frame;
 import instructions;
-import utils;
 import value;
 export module program;
 
@@ -77,22 +77,35 @@ export namespace Spv {
             return true;
         }
 
+        void printVariables(std::stringstream& dst, const std::vector<unsigned>& vars) const {
+            bool first = true;
+            for (const auto v : vars) {
+                if (first)
+                    first = false;
+                else
+                    dst << '\n';
+                auto var = data[v].getVariable();
+                var->print(dst);
+            }
+        }
+
     public:
         Program(): buffer(nullptr), length(0), endian(false), idx(0) {}
 
-        Utils::May<bool> parse(uint8_t* buffer, int length) {
+        void parse(uint8_t* buffer, int length) noexcept(false) {
             this->buffer = buffer;
             this->length = length;
 
-#define REQUIRE(cond, e_msg) \
-    if (!(cond)) \
-        return Utils::unexpected<bool>(e_msg);
+#define REQUIRE(COND, MSG) \
+    if (!(COND)) \
+        throw std::runtime_error(MSG);
 
             REQUIRE(determineEndian(), "Corrupted binary! Magic number missing.");
             REQUIRE(skip(2), "Corrupted binary! Version and/or generator missing.");
 
             uint32_t bound;
-            REQUIRE(getWord(bound), "Corrupted binary! Missing bound.");
+            if (!getWord(bound))
+                throw std::runtime_error("Corrupted binary! Missing bound.");
             std::fill_n(std::back_inserter(data), bound, Data());
 
             REQUIRE(skip(1), "Corrupted binary! Missing reserved word.");
@@ -116,10 +129,7 @@ export namespace Spv {
                     words.push_back(word);
                 }
 
-                Utils::May<Instruction*> make_inst = Instruction::makeOp(insts, opcode, words);
-                REQUIRE(make_inst, make_inst.error());
-
-                Instruction& inst = *make_inst.value();
+                Instruction& inst = *(Instruction::makeOp(insts, opcode, words));
                 unsigned location = insts.size() - 1;
 
                 // silently ignore all but the first entry found
@@ -132,33 +142,26 @@ export namespace Spv {
                 // If it is a decoration (ie modifies a type not yet defined), save it for later
                 if (inst.isDecoration())
                     decorations.push_back(location);
-
-                // If it has a result, let it save itself in the data vector
-                else if (auto made_result = inst.makeResult(data, location); !made_result)
-                    return Utils::unexpected<bool>(made_result.error());
+                else // If it has a result, let it save itself in the data vector
+                    inst.makeResult(data, location);
             }
 
             REQUIRE(entry_found, "Missing entry function in SPIR-V source!");
-            if (auto res = insts[entry].ioGen(data, ins, outs); !res)
-                return Utils::unexpected<bool>(res.error());
+            insts[entry].ioGen(data, ins, outs);
 
             // Finally, after all necessary data should exist, apply all decoration instructions
-            for (unsigned dec_i : decorations) {
-                if (auto apply_dec = insts[dec_i].applyDecoration(data); !apply_dec)
-                    return Utils::unexpected<bool>(apply_dec.error());
-            }
+            for (unsigned dec_i : decorations)
+                insts[dec_i].applyDecoration(data);
 #undef REQUIRE
-
-            return Utils::expected();
         }
 
-        Utils::May<bool> setup(ValueMap& provided) {
+        void setup(ValueMap& provided) noexcept(false) {
             const unsigned len = data.size();
             // First, create a list of variables needed as inputs
             std::vector<Variable*> inputs;
             for (const auto in : ins) {
-                auto [var, valid] = data[in].getVariable();
-                assert(valid); // already checked in ioGen
+                auto var = data[in].getVariable();
+                // var already checked not null in ioGen
                 inputs.push_back(var);
             }
 
@@ -170,8 +173,7 @@ export namespace Spv {
                     auto var = inputs[i];
                     if (var->getName() == name) {
                         found = true;
-                        if (auto copy = var->setVal(*val); !copy)
-                            return Utils::unexpected<bool>(copy.error());
+                        var->setVal(*val);
                         // Remove the interface from the check list
                         inputs.erase(inputs.begin() + i);
                         --i;
@@ -183,7 +185,7 @@ export namespace Spv {
                 if (!found) {
                     std::stringstream err;
                     err << "Input specifies variable \"" << name << "\" which doesn't exist in the program!";
-                    return Utils::unexpected<bool>(err.str());
+                    throw std::runtime_error(err.str());
                 }
             }
 
@@ -204,18 +206,13 @@ export namespace Spv {
                     error << inputs[i]->getName();
                 }
                 error << "!";
-                return Utils::unexpected<bool>(error.str());
+                throw std::runtime_error(error.str());
             }
-
-            return Utils::expected();
         }
 
-        Utils::May<bool> execute(ValueMap& outputs, bool verbose) {
+        void execute(bool verbose) noexcept(false) {
             Instruction& entry_inst = insts[entry];
-            auto es = entry_inst.getEntryStart(data);
-            if (!es)
-                return Utils::unexpected<bool>(es.error());
-            unsigned start = es.value();
+            unsigned start = entry_inst.getEntryStart(data);
 
             // SPIR-V forbids recursion (either direct or indirect), so we don't have to keep a stack frame for locals
             // However, we will simulate a stack frame for holding temporaries (args and returns) and pc
@@ -225,27 +222,16 @@ export namespace Spv {
             while (!frame_stack.empty()) {
                 unsigned i_at = frame_stack.back().getPC();
                 if (i_at >= insts.size())
-                    return Utils::unexpected<bool>("Program execution left program's boundaries!");
-                if (const auto res = insts[i_at].execute(data, frame_stack, verbose); !res)
-                    return res;
-            }
-            return Utils::expected();
-        }
-
-        void printInputs(std::stringstream& dst) {
-            for (const auto in : ins) {
-                auto [var, valid] = data[in].getVariable();
-                assert(valid);
-                var->print(dst);
+                    throw std::runtime_error("Program execution left program's boundaries!");
+                insts[i_at].execute(data, frame_stack, verbose);
             }
         }
 
-        void printOutputs(std::stringstream& dst) {
-            for (const auto out : outs) {
-                auto [var, valid] = data[out].getVariable();
-                assert(valid);
-                var->print(dst);
-            }
+        void printInputs(std::stringstream& dst) const {
+            printVariables(dst, ins);
+        }
+        void printOutputs(std::stringstream& dst) const {
+            printVariables(dst, outs);
         }
     };
 };
