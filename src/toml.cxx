@@ -4,7 +4,6 @@ module;
 #include <concepts> // for std::integral
 #include <cstdint> // for uint32_t and int32_t
 #include <limits> // for inf and nan
-#include <map>
 #include <iostream>
 #include <iterator>
 #include <string>
@@ -330,13 +329,14 @@ private:
 
     template<typename Ite, typename Sen>
     static Value* parse_array(LineHandler<Ite, Sen>& handler) {
-        Array* arr = new Array();
         // skip over the [, which should have been seen already
         handler.next();
+        // A list of elements to add. Unlike SPIR-V, which will tell us the type ahead of time, we
+        // parse all elements then decide the type from what we see.
+        std::vector<const Value*> elements;
         while (true) {
             auto [c, valid] = handler.peek();
             if (!valid) {
-                delete arr;
                 std::cerr << "End found while parsing array!" << std::endl;
                 return nullptr;
             }
@@ -348,19 +348,13 @@ private:
             }
 
             // Parse out an element
-            Value* element = parse(handler);
+            const Value* element = parse(handler);
             if (element == nullptr) {
                 // Assume that the element already printed its error
                 std::cerr << "Could not parse element in array!" << std::endl;
-                delete arr;
                 return nullptr;
             }
-            if (!arr->addElement(element)) {
-                std::cerr << "Element parsed of incompatible type with other array elements!" << std::endl;
-                delete element;
-                delete arr;
-                return nullptr;
-            }
+            elements.push_back(element);
 
             // Allow comma after each element (even after final element)
             auto [c2, valid2] = handler.peek();
@@ -369,12 +363,22 @@ private:
                     handler.skip(1);
                 else if (c2 != ']') {
                     std::cerr << "Missing comma between elements in array" << std::endl;
-                    delete arr;
                     return nullptr;
                 }
             }
         }
-        return arr;
+        // Now that we are done parsing, add elements and form the type:
+        try {
+            Type union_type = Type::unionOf(elements);
+            Array* arr = new Array(union_type, elements.size());
+            arr->addElements(elements);
+            return arr;
+        } catch(const std::exception& e) {
+            std::cerr << "Element parsed of incompatible type with other array elements!" << std::endl;
+            for (auto* element: elements)
+                delete element;
+            return nullptr;
+        }
     }
 
     template<typename Ite, typename Sen>
@@ -555,4 +559,3 @@ public:
         return true;
     }
 };
-

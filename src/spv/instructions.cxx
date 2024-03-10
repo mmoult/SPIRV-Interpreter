@@ -5,7 +5,6 @@ module;
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -391,13 +390,13 @@ export namespace Spv {
             case spv::OpConstantComposite: { // 44
                 // Can create struct, array/vector, or matrix
                 Type* ret = getType(0, data);
-                std::vector<Value*> values;
+                std::vector<const Value*> values;
                 // operands 2+ are refs to components
                 for (unsigned i = 2; i < operands.size(); ++i) {
                     Value* val = getValue(i, data);
                     values.push_back(val);
                 }
-                auto val = ret->construct(values);
+                auto* val = ret->construct(values);
                 return data[result_at].redefine(Data(val));
             }
             case spv::OpFunction: { // 54

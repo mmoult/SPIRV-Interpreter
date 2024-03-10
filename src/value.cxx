@@ -1,4 +1,5 @@
 module;
+#include <algorithm> // for min
 #include <cassert>
 #include <cstdint> // for uint32_t and int32_t
 #include <exception>
@@ -17,11 +18,10 @@ export enum DataType : unsigned {
     BOOL = 3,
     COMPOSITE = 4,
     ARRAY = 5,
-    ANY = 6, // for empty arrays
     // Above is usable in TOML, below only internal to SPIR-V
-    VOID = 7,
-    FUNCTION = 8,
-    POINTER = 9,
+    VOID = 6,
+    FUNCTION = 7,
+    POINTER = 8,
 };
 
 // necessary forward reference
@@ -39,21 +39,24 @@ export class Type {
         subSize(sub_size),
         subElement(sub_element) {}
 
-    Value* construct(std::vector<Value*>* values) const noexcept(false);
+    /// @brief Creates a value corresponding to this type, with optional inputs
+    /// @param values an optional vector of values to use
+    /// @return a new value whose ownership belongs to the caller
+    /// @throws if the type cannot be constructed
+    [[nodiscard]] Value* construct(std::vector<const Value*>* values) const noexcept(false);
 
 public:
     // Factory methods to create type variants:
 
-    /*** @brief Factory for floats, uints, ints, bools, voids
-     *
-     * May define a custom size (assuming the interpreter supports it), but the default is 32.
-     * @param primitive the primitive type to use. Should not use any but float, uint, int, bool, or void
-     * @param size the size of the type. Not all primitives have a usable size (bool and void don't)
-     */
+    /// @brief Factory for floats, uints, ints, bools, voids
+    /// May define a custom size (assuming the interpreter supports it), but the default is 32.
+    /// @param primitive the primitive type to use (should not use composite, function, or pointer)
+    /// @param size the size of the type. Not all primitives have a usable size (bool and void don't)
+    /// @return the created type
     static Type primitive(DataType primitive, unsigned size = 32) {
-        assert(size == 32 || (primitive != DataType::BOOL && primitive != DataType::VOID && primitive != DataType::ANY));
         assert(primitive != DataType::COMPOSITE && primitive != DataType::FUNCTION &&
                primitive != DataType::POINTER);
+        assert(size == 32 || (primitive != DataType::BOOL && primitive != DataType::VOID));
         return Type(primitive, size, nullptr);
     }
 
@@ -79,11 +82,17 @@ public:
 
     // Other methods:
 
-    // Construct a value from the type
-    Value* construct() const {
+    /// @brief Creates a value corresponding to this type, filling in values with dummies as necessary
+    /// @return a new value whose ownership belongs to the caller
+    /// @throws if the type cannot be constructed
+    [[nodiscard]] Value* construct() const noexcept(false) {
         return construct(nullptr);
     }
-    Value* construct(std::vector<Value*>& values) const {
+    /// @brief Creates a value corresponding to this type with given inputs (used for fields, elements, etc)
+    /// @param values a vector of values to use
+    /// @return a new value whose ownership belongs to the caller
+    /// @throws if the type cannot be constructed
+    [[nodiscard]] Value* construct(std::vector<const Value*>& values) const noexcept(false) {
         return construct(&values);
     }
 
@@ -92,15 +101,17 @@ public:
         // TODO must add through list- spirv is not required to give name for each field in struct
     }
 
-    void incrementSize() {
-        // Must be an array to increment size
+    void setElement(const Type& e) {
         assert(base == DataType::ARRAY);
-        subSize++;
+        subElement = &e;
     }
-    void setElement(Type* e) {
+    const Type& getElement() const {
         assert(base == DataType::ARRAY);
-        assert(e != nullptr);
-        subElement = e;
+        return *subElement;
+    }
+    unsigned getSize() const {
+        assert(base == DataType::ARRAY);
+        return subSize;
     }
 
     const Type& getPointedTo() const {
@@ -125,7 +136,6 @@ public:
         case DataType::INT:
             return subSize == rhs.subSize;
         case DataType::BOOL:
-        case DataType::ANY:
         case DataType::VOID:
             return true;
         case DataType::ARRAY:
@@ -138,6 +148,84 @@ public:
         }
     }
     bool operator!=(const Type& rhs) const { return !(*this == rhs); };
+
+    /// @brief Returns the type which is general to all elements
+    /// Must follow the same conversion rules as void Value::copyFrom(const Value& new_val)
+    /// @param elements the elements to find the most general type for
+    /// @return the general type common to all elements
+    /// @throws if no such union type can be found
+    static Type unionOf(std::vector<const Value*> elements) noexcept(false);
+
+    Type unionOf(const Type& other) const noexcept(false) {
+        Type t = *this;
+        std::string base_str;
+        switch (base) {
+        default:
+            throw std::invalid_argument("Unsupported type!");
+        case DataType::VOID:
+            if (other.base == base)
+                break;
+            throw std::invalid_argument("Cannot find union of void and non-void types!");
+        // Primitive types
+        case DataType::UINT:
+            // UINT can convert to any of the other primitives
+            switch (other.base) {
+            case DataType::UINT:
+            case DataType::BOOL:
+            case DataType::FLOAT:
+            case DataType::INT:
+                t.base = other.base;
+                t.subSize = std::min(subSize, other.subSize);
+                break;
+            default:
+                throw std::invalid_argument("Cannot find union between UINT and non-primitive type!");
+            }
+            break;
+        case DataType::BOOL:
+            if (base_str.empty())
+                base_str = "Bool";
+            [[fallthrough]];
+        case DataType::FLOAT:
+            if (base_str.empty())
+                base_str = "Float";
+            [[fallthrough]];
+        case DataType::INT: {
+            if (base_str.empty())
+                base_str = "Int";
+            
+            // Shared logic for other primitives
+            if (other.base == base ||
+                other.base == DataType::UINT) { // UINT -> X
+                // Select the more specific of precisions
+                t.subSize = std::min(subSize, other.subSize);
+                break;
+            }
+            std::stringstream error;
+            error << "Cannot find union between " << base_str << " and type which is neither that nor UINT!";
+            throw std::invalid_argument(error.str());
+        }
+        case DataType::ARRAY: {
+            if (other.base != base)
+                throw std::invalid_argument("Cannot find union of array and non-array types!");
+            if (other.subSize != subSize) {
+                std::stringstream error;
+                error << "Cannot find union between arrays of different sizes (" << subSize << " and ";
+                error << other.subSize << ")!";
+                throw std::invalid_argument(error.str());
+            }
+            // Find the union of their subElements
+            Type sub = subElement->unionOf(*other.subElement);
+            // Because the subElement is a const pointer, we need for the sub to be equal to one or the other so we can
+            // borrow it as the subElement for the new unioned type
+            if (sub == *subElement)
+                return *this;
+            else if (sub == *other.subElement)
+                return *other.subElement;
+            throw std::runtime_error("Cannot currently take union of arrays with different unioned subelements!");
+        }
+        // TODO support other types
+        }
+    }
 
     DataType getBase() const {
         return base;
@@ -173,10 +261,11 @@ public:
 export using ValueMap = std::map<std::string, const Value*>;
 
 export class Array : public Value  {
+    // Array owns and manages the memory of all elements.
     std::vector<Value*> elements;
 
 public:
-    Array(): Value(Type::array(0, Type::primitive(DataType::ANY))) {}
+    Array(const Type& sub_element, unsigned size): Value(Type::array(size, sub_element)) {}
 
     virtual ~Array() {
         for (const auto& e : elements)
@@ -185,14 +274,37 @@ public:
     Array(const Array& other) = delete;
     Array& operator=(const Array& other) = delete;
 
-    bool addElement(Value* e) {
-        // Set the element type to the intersection of all
-        // If cannot cast any elements to some intersection type, we have a problem
-        // TODO casting of elements and what not
+    void setType(Type& element_type, unsigned size) {
+        type = Type::array(size, element_type);
+    }
 
-        elements.push_back(e);
-        type.incrementSize();
-        return true;
+    void addElements(std::vector<const Value*>& es) noexcept(false) {
+        // Test that the size matches the current type's:
+        if (unsigned tsize = type.getSize(); es.size() != tsize) {
+            std::stringstream err;
+            err << "Could not add " << es.size() << " elements to array of size " << tsize << "!";
+            throw std::runtime_error(err.str());
+        }
+        for (const Value* e: es) {
+            // Construct an element from the element type, then copy data from e to it.
+            Value* val = type.getElement().construct();
+            try {
+                val->copyFrom(*e);
+            } catch (std::exception& e) {
+                delete &val;
+                std::stringstream err;
+                err << "Could not add array element because: " << e.what() <<  "!";
+                throw std::runtime_error(err.str());
+            }
+            elements.push_back(val);
+        }
+    }
+    void dummyFill() noexcept(false) {
+        unsigned tsize = type.getSize();
+        for (unsigned i = 0; i < tsize; ++i) {
+            Value* val = type.getElement().construct();
+            elements.push_back(val);
+        }
     }
 
     unsigned getSize() const { return elements.size(); }
@@ -423,12 +535,10 @@ public:
     }
 };
 
-Value* Type::construct(std::vector<Value*>* values) const {
+Value* Type::construct(std::vector<const Value*>* values) const {
     switch (base) {
     default:
         throw std::runtime_error("Unsupported type!");
-    case DataType::ANY:
-        throw std::runtime_error("Cannot construct any type!");
     case DataType::VOID:
         throw std::runtime_error("Cannot construct void type!");
     // Primitive types
@@ -444,7 +554,7 @@ Value* Type::construct(std::vector<Value*>* values) const {
             throw std::runtime_error("Cannot construct primitive from nonzero number of inputs!");
         }
 
-        Value* val = (*values)[0];
+        const Value* val = (*values)[0];
         try {
             prim->copyFrom(*val);
         } catch (std::exception& e) {
@@ -454,32 +564,23 @@ Value* Type::construct(std::vector<Value*>* values) const {
         return prim;
     }
     case DataType::ARRAY: {
-        Array* arr = new Array();
+        Array* arr = new Array(*subElement, subSize);
         // try to populate the array with each of the entries
-        if (values != nullptr) {
-            if (subSize != values->size()) {
-                delete arr;
-                std::stringstream err;
-                err << "Could not construct array of size " << subSize << " from " << values->size() << " elements!";
-                throw std::runtime_error(err.str());
-            }
-            for (unsigned i = 0; i < values->size(); ++i) {
-                if (!arr->addElement((*values)[i])) {
-                    delete arr;
-                    std::stringstream err;
-                    err << "Could not add array element " << i << "!";
-                    throw std::runtime_error(err.str());
-                }
-            }
-        } else {
-            // create a dummy for each necessary entry
-            while (arr->getSize() < subSize) {
-                auto val = subElement->construct();
-                arr->addElement(val);
-            }
-        }
+        if (values != nullptr)
+            arr->addElements(*values);
+        else
+            arr->dummyFill();
         return arr;
     }
     // TODO support other types
     }
+}
+
+Type Type::unionOf(std::vector<const Value*> elements) {
+    if (elements.empty())
+        throw std::invalid_argument("Cannot find union of types in empty vector!");
+    Type t = elements[0]->getType();
+    for (unsigned i = 1; i < elements.size(); ++i)
+        t = t.unionOf(elements[i]->getType());
+    return t;
 }

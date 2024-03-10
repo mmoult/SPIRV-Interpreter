@@ -4,7 +4,6 @@ module;
 #include <map>
 #include <sstream>
 #include <stdexcept>
-#include <tuple>
 
 #include "../external/spirv.hpp"
 
@@ -87,6 +86,7 @@ public:
 };
 
 export class Data {
+    // The Data owns but does not manage the raw.
     void* raw;
 
     enum class DType {
@@ -105,30 +105,6 @@ public:
     Data(Value* val): raw(val), type(DType::VALUE) {};
     Data(Type* type): raw(type), type(DType::TYPE) {};
 
-    /*
-    ~Data() {
-        if (raw != nullptr) {
-            switch (type) {
-            case DType::VARIABLE:
-                delete static_cast<Variable*>(raw);
-                break;
-            case DType::FUNCTION:
-                delete static_cast<Function*>(raw);
-                break;
-            case DType::VALUE:
-                delete static_cast<Value*>(raw);
-                break;
-            case DType::TYPE:
-                delete static_cast<Type*>(raw);
-                break;
-            default:
-                assert(false);
-            }
-        }
-    }
-    Data(Data& other) {
-        ...
-    }*/
     Data& operator=(Data& other) = delete;
 
     // Return nullptr if not a valid cast- assume the caller has more info for a better error
@@ -157,30 +133,32 @@ public:
     }
 
     void redefine(const Data& other) noexcept(false) {
-        if (type != DType::UNDEFINED) {
-            std::stringstream err;
-            err << "Cannot redefine data holding ";
-            switch (type) {
-            default:
-                err << "unknown";
-                break;
-            case DType::VARIABLE:
-                err << "variable";
-                break;
-            case DType::FUNCTION:
-                err << "function";
-                break;
-            case DType::VALUE:
-                err << "value";
-                break;
-            case DType::TYPE:
-                err << "type";
-                break;
-            }
-            err << "!";
-            throw std::runtime_error(err.str());
-        }
+        clear();
         raw = other.raw;
         type = other.type;
+    }
+
+    void clear() {
+        switch (type) {
+        default:
+            assert(false);
+            break;
+        case DType::UNDEFINED:
+            // do nothing since there is no data to delete
+            break;
+        case DType::VARIABLE:
+            delete static_cast<Variable*>(raw);
+            break;
+        case DType::FUNCTION:
+            delete static_cast<Function*>(raw);
+            break;
+        case DType::VALUE:
+            delete static_cast<Value*>(raw);
+            break;
+        case DType::TYPE:
+            delete static_cast<Type*>(raw);
+            break;
+        }
+        type = DType::UNDEFINED;
     }
 };

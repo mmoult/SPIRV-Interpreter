@@ -3,8 +3,6 @@ module;
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
-#include <string>
-#include <tuple>
 #include <vector>
 
 #include "../external/spirv.hpp"
@@ -91,6 +89,14 @@ export namespace Spv {
 
     public:
         Program(): buffer(nullptr), length(0), endian(false), idx(0) {}
+
+        ~Program() {
+            // The program manages the data, so it must clear on destruction
+            for (Data& dat : data)
+                dat.clear();
+        } 
+        Program(const Program& other) = delete;
+        Program& operator=(const Program& other) = delete;
 
         void parse(uint8_t* buffer, int length) noexcept(false) {
             this->buffer = buffer;
