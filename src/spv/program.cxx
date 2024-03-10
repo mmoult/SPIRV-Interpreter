@@ -162,7 +162,6 @@ export namespace Spv {
         }
 
         void setup(ValueMap& provided) noexcept(false) {
-            const unsigned len = data.size();
             // First, create a list of variables needed as inputs
             std::vector<Variable*> inputs;
             for (const auto in : ins) {
@@ -214,6 +213,60 @@ export namespace Spv {
                 error << "!";
                 throw std::runtime_error(error.str());
             }
+        }
+
+        bool checkOutputs(ValueMap& checks) const noexcept(true) {
+            // First, create a list of variables from outputs
+            std::vector<const Variable*> outputs;
+            for (const auto out : outs) {
+                auto var = data[out].getVariable();
+                // var already checked not null in ioGen
+                outputs.push_back(var);
+            }
+
+            // Next go through checks and find the corresponding in outputs
+            for (const auto& [name, val] : checks) {
+                bool found = false;
+                // first, find the variable which matches the name
+                for (unsigned i = 0; i < outputs.size(); ++i) {
+                    auto var = outputs[i];
+                    if (var->getName() == name) {
+                        found = true;
+                        // Now is the hard part- we need to compare whether this output matches the check file.
+                        // The check file lost some type precision (ie 0.0 -> 0), so we assume outputs are the
+                        // standard of type truth, although by definition the check values must be correct.
+                        // Therefore, we construct a dummy with the output's type and copy values from the check
+                        // into it, then compare for equality.
+                        const Value* var_val = var->getVal();
+                        const auto& v_type = var_val->getType();
+                        Value* dummy;
+                        try {
+                            dummy = v_type.construct();
+                            dummy->copyFrom(*val);
+                            if (!dummy->equals(*var_val)) {
+                                delete dummy;
+                                return false;
+                            }
+                        } catch(const std::exception& e) {
+                            if (dummy != nullptr)
+                                delete dummy;
+                            return false;
+                        }
+                        // Remove the interface from the compare list
+                        outputs.erase(outputs.begin() + i);
+                        --i;
+                        break;
+                    } else
+                        continue; // this isn't a match, try next
+                }
+
+                if (!found)
+                    return false;
+            }
+
+            // At this point, all outputs should be removed. If not, there are more outputs than in the check file
+            // (which means the output is not equal to the check)
+            return outputs.empty();
         }
 
         void execute(bool verbose) noexcept(false) {

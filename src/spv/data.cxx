@@ -60,6 +60,9 @@ public:
     void setVal(const Value& new_val) {
         val->copyFrom(new_val);
     }
+    const Value* getVal() const {
+        return val;
+    }
 
     void print(std::stringstream& dst) const {
         dst << name << " = ";

@@ -225,6 +225,7 @@ public:
         }
         // TODO support other types
         }
+        return t;
     }
 
     DataType getBase() const {
@@ -248,7 +249,13 @@ public:
 
     const Type& getType() const { return type; }
 
-    virtual void copyFrom(const Value& new_val) {
+    /// @brief Copy the value into this
+    /// The Value implementation of this method does NOT perform the copy, it just throws
+    /// a failure if the copy cannot be done.
+    /// The subclass is responsible for defining an implementation which will handle the copy
+    /// logic
+    /// @param new_val the value to copy from
+    virtual void copyFrom(const Value& new_val) noexcept(false) {
         if (!new_val.getType().sameBase(getType()))
             throw std::runtime_error("Cannot copy from value of different type!");
     }
@@ -256,6 +263,10 @@ public:
     virtual void print(std::stringstream& dst, unsigned indents = 0) const = 0;
 
     virtual bool isNested() const = 0;
+
+    virtual bool equals(const Value& val) const {
+        return type == val.type;
+    }
 };
 
 export using ValueMap = std::map<std::string, const Value*>;
@@ -309,7 +320,7 @@ public:
 
     unsigned getSize() const { return elements.size(); }
 
-    void copyFrom(const Value& new_val) override {
+    void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
 
         // Do the actual copy now
@@ -355,6 +366,18 @@ public:
     bool isNested() const override {
         return true;
     }
+
+    bool equals(const Value& val) const override {
+        if (!Value::equals(val)) // guarantees matching types
+            return false;
+        const auto& other = static_cast<const Array&>(val);
+        // Shouldn't have to test lengths since that is encoded in the type
+        for (unsigned i = 0; i < elements.size(); ++i) {
+            if (!elements[i]->equals(*other.elements[i]))
+                return false;
+        }
+        return true;
+    }
 };
 
 export class Struct : public Value {
@@ -362,7 +385,7 @@ export class Struct : public Value {
 public:
     Struct(): Value(Type::struct_()) {}
 
-    void copyFrom(const Value& new_val) override {
+    void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
 
         // Do the actual copy now
@@ -370,12 +393,20 @@ public:
         throw std::runtime_error("Unimplemented function!");
     }
 
-    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
+    void print(std::stringstream& dst, unsigned indents = 0) const override {
         assert(false); // unimplemented!
     }
 
     bool isNested() const override {
         return true;
+    }
+
+    bool equals(const Value& val) const override {
+        if (!Value::equals(val)) // guarantees matching types
+            return false;
+        
+        assert(false); // unimplemented!
+        return false;
     }
 };
 
@@ -386,7 +417,7 @@ export class Pointer : public Value {
 public:
     Pointer(std::vector<unsigned> to, Type t): Value(t), to(to) {}
 
-    void copyFrom(const Value& new_val) override {
+    void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
 
         // Do the actual copy now
@@ -408,6 +439,20 @@ public:
     }
 
     bool isNested() const override {
+        return true;
+    }
+
+    bool equals(const Value& val) const override {
+        if (!Value::equals(val)) // guarantees matching types
+            return false;
+        const auto& other = static_cast<const Pointer&>(val);
+        // I cannot think of why this would be used, but implement it in case...
+        if (to.size() != other.to.size())
+            return false;
+        for (unsigned i = 0; i < to.size(); ++i) {
+            if (to[i] != other.to[i])
+                return false;
+        }
         return true;
     }
 };
@@ -439,7 +484,7 @@ public:
         data.u32 = 0;
     }
 
-    void copyFrom(const Value& new_val) override {
+    void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
 
         // Do the actual copy now
@@ -532,6 +577,28 @@ public:
 
     bool isNested() const override {
         return false;
+    }
+
+    bool equals(const Value& val) const override {
+        if (!Value::equals(val)) // guarantees matching types
+            return false;
+        const auto& other = static_cast<const Primitive&>(val);
+        switch (type.getBase()) {
+        case FLOAT:
+            // Naive float comparison for the time being
+            return data.fp32 == other.data.fp32;
+        case UINT:
+            return data.u32 == other.data.u32;
+        case INT:
+            return data.i32 == other.data.i32;
+        case BOOL:
+            return data.b32 == other.data.b32;
+        case VOID:
+            return true; // I don't know why this would happen, but just in case...
+        default:
+            assert(false);
+            return false;
+        }
     }
 };
 
