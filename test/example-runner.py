@@ -9,25 +9,38 @@ if not os.path.isfile(interp_path):
     print("Looking at:", interp_path)
     exit(1)
 
+# Recursively search through the examples directory
+# Or if a cmd line arg was provided, try that directory
+import sys
+if len(sys.argv) > 1:
+    launch_dir = os.path.join(os.getcwd(), sys.argv[1])
+else:
+    launch_dir = os.path.join(test_path, "..", "examples")
+
 # Read through passlist.txt:
 # Each line is the path of a test to run
 fails = 0
 total = 0
 import subprocess
-with open(os.path.join(test_path, "passlist.txt")) as fp:
-    for line in fp:
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
-        test = os.path.normpath(line)
-        dir = os.path.dirname(test)
-        tname = os.path.basename(test)
+for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True): 
+    input = None
+    output = None
+    program = None
+    for file in files:
+        if file == "in.toml":
+            input = file
+        elif file == "out.toml":
+            output = file
+        elif file.endswith(".spv"):
+            program = file
+    if input is not None and output is not None and program is not None:
         total += 1
-        res = subprocess.run([interp_path, "-i", "in.toml", "-c", "out.toml", tname],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=dir)
+        res = subprocess.run([interp_path, "-i", input, "-c", output, program],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
         if res.returncode != 0:
             fails += 1
-            print("X", test)
+            print("X", os.path.relpath(os.path.join(root, program), launch_dir))
+        continue
 
 # Print results
 if total == 0:

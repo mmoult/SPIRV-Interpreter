@@ -218,8 +218,11 @@ int main(int argc, char* argv[]) {
     if (!check.empty()) {
         ValueMap check_map;
         load_file(check_map, check);
-        if (!program.checkOutputs(check_map))
+        if (!program.checkOutputs(check_map)) {
+            std::cerr << "Output did NOT match!" << std::endl;
             return ReturnCode::BAD_COMPARE;
+        } else
+            std::cout << "Outputs match!" << std::endl;
 
         for (const auto& [_, val] : check_map)
             delete val;

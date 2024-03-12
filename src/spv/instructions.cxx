@@ -349,7 +349,7 @@ export namespace Spv {
 
             switch (opcode) {
             default:
-                return; // instruction has no necessary result to construct
+                return; // instruction has no necessary&static result to construct
             case spv::OpTypeVoid: // 19
                 return data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
             case spv::OpTypeFloat: // 22
@@ -465,15 +465,64 @@ export namespace Spv {
             bool inc_pc = true;
             Frame& frame = frame_stack.back();
 
+            Value* dst_val = nullptr;
             switch (opcode) {
             default:
+                throw std::runtime_error("Unsupported instruction execution!");
                 break;
             case spv::OpFunctionEnd: // 56
                 throw std::runtime_error("Missing return before function end!");
+            case spv::OpLoad: { // 61
+                Type* ret_type = getType(0, data);
+                dst_val = ret_type->construct();
+                // Load from a pointer, which may be a variable
+                const Value* from_val;
+                if (Variable* from = getVariable(2, data); from != nullptr) {
+                    from_val = from->getVal();
+                } else {
+                    Value* from_v = getValue(2, data);
+                    from_val = from_v;
+                }
+                dst_val->copyFrom(*from_val);
+                break;
+            }
             case spv::OpStore: { // 62
                 Value* val = getValue(1, data);
                 Variable* dst = getVariable(0, data);
                 dst->setVal(*val);
+                break;
+            }
+            case spv::OpVectorShuffle: { // 79
+                Value* first = getValue(2, data);
+                Value* second = getValue(3, data);
+                // both first and second must be arrays
+                if (const Type& ft = first->getType();
+                    !first->getType().sameBase(second->getType()) ||
+                    ft.getBase() != DataType::ARRAY)
+                    throw std::runtime_error("First two src operands to VectorShuffle must be arrays!");
+                Array& fa = *static_cast<Array*>(first);
+                Array& sa = *static_cast<Array*>(second);
+                unsigned fsize = fa.getSize();
+                unsigned ssize = sa.getSize();
+                std::vector<const Value*> vals;
+                for (unsigned i = 4; i < operands.size(); ++i) {
+                    assert(operands[i].type == Token::Type::UINT);
+                    auto idx = std::get<unsigned>(operands[i].raw);
+                    if (idx < fsize) {
+                        vals.push_back(fa[idx]);
+                        continue;
+                    }
+                    idx -= fsize;
+                    if (idx < ssize) {
+                        vals.push_back(sa[idx]);
+                        continue;
+                    }
+                    std::stringstream error;
+                    error << "VectorShuffle index " << (i - 4) << " is beyond the bounds of source arrays!"; 
+                    throw std::runtime_error(error.str());
+                }
+                Type* retType = getType(0, data);
+                dst_val = retType->construct(vals);
                 break;
             }
             case spv::OpLabel: // 248
@@ -492,6 +541,12 @@ export namespace Spv {
                 frame_stack.pop_back();
                 inc_pc = !frame_stack.empty(); // don't increment PC if we are at the end of program
                 break;
+            }
+
+            if (dst_val != nullptr) {
+                assert(operands[1].type == Token::Type::REF);
+                auto result_at = std::get<unsigned>(operands[1].raw);
+                data[result_at].redefine(dst_val);
             }
 
             if (inc_pc)

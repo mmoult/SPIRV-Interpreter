@@ -1,6 +1,7 @@
 module;
 #include <algorithm> // for min
 #include <cassert>
+#include <cmath> // for isnan
 #include <cstdint> // for uint32_t and int32_t
 #include <exception>
 #include <map>
@@ -320,6 +321,10 @@ public:
 
     unsigned getSize() const { return elements.size(); }
 
+    const Value* operator[](unsigned i) const {
+        return elements[i];
+    }
+
     void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
 
@@ -586,6 +591,8 @@ public:
         switch (type.getBase()) {
         case FLOAT:
             // Naive float comparison for the time being
+            if (std::isnan(data.fp32) && std::isnan(other.data.fp32))
+                return true; // We allow for nan to match nan in result comparison
             return data.fp32 == other.data.fp32;
         case UINT:
             return data.u32 == other.data.u32;
