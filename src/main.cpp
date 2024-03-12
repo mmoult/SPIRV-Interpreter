@@ -1,3 +1,8 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 #include <bit>
 #include <cstdint>
 #include <fstream>
@@ -9,6 +14,8 @@
 import program;
 import toml;
 import value;
+
+constexpr auto VERSION = "0.1.1";
 
 enum ReturnCode : int {
     OK = 0,
@@ -119,7 +126,7 @@ int main(int argc, char* argv[]) {
             } else if (arg == "-t" || arg == "--template") {
                 NEXT(itemplate);
             } else if (arg == "-v" || arg == "--version") {
-                std::cout << "SPIRV-Interpreter version 0.1.0" << std::endl;
+                std::cout << "SPIRV-Interpreter version " << VERSION << std::endl;
                 return ReturnCode::INFO;
             }
 #undef NEXT
