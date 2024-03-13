@@ -147,8 +147,22 @@ export namespace Spv {
                 to_load.push_back(Token::Type::REF);
                 to_load.push_back(Token::Type::STRING);
                 break;
+            case spv::OpMemberName: // 6
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::UINT);
+                to_load.push_back(Token::Type::STRING);
+                break;
             case spv::OpExtInstImport: // 11
                 to_load.push_back(Token::Type::STRING);
+                break;
+            case spv::OpExtInst: // 12
+            case spv::OpCompositeExtract: // 81
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::UINT);
+                optional.push_back(Token::Type::UINT);
+                repeating = true;
                 break;
             case spv::OpMemoryModel: // 14
                 to_load.push_back(Token::Type::CONST);
@@ -225,6 +239,13 @@ export namespace Spv {
             case spv::OpDecorate: // 71
                 to_load.push_back(Token::Type::REF);
                 to_load.push_back(Token::Type::CONST);
+                optional.push_back(Token::Type::UINT);
+                repeating = true;
+                break;
+            case spv::OpMemberDecorate: // 72
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::UINT);
+                to_load.push_back(Token::Type::CONST);
                 to_load.push_back(Token::Type::UINT);
                 optional.push_back(Token::Type::UINT);
                 repeating = true;
@@ -235,6 +256,18 @@ export namespace Spv {
                 to_load.push_back(Token::Type::UINT);
                 optional.push_back(Token::Type::UINT);
                 repeating = true;
+                break;
+            case spv::OpFAdd: // 129
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                break;
+            case spv::OpVectorTimesScalar: // 142
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::REF);
+                to_load.push_back(Token::Type::UINT);
                 break;
             }
 
@@ -354,9 +387,20 @@ export namespace Spv {
 
             switch (opcode) {
             default:
+                throw std::runtime_error("Unsupported instruction cannot make result!");
+            case spv::OpExtInstImport: // 11
+            case spv::OpLoad: // 61
+            case spv::OpVectorShuffle: // 79
                 return; // instruction has no necessary&static result to construct
             case spv::OpTypeVoid: // 19
                 return data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
+            case spv::OpTypeInt: // 21
+                assert(operands[1].type == Token::Type::UINT);
+                assert(operands[2].type == Token::Type::UINT);
+                return data[result_at].redefine(new Type(Type::primitive(
+                    std::get<unsigned>(operands[2].raw) == 0 ? DataType::UINT : DataType::INT,
+                    std::get<unsigned>(operands[1].raw)
+                )));
             case spv::OpTypeFloat: // 22
                 assert(operands[1].type == Token::Type::UINT);
                 return data[result_at].redefine(new Type(Type::primitive(DataType::FLOAT,
@@ -366,6 +410,14 @@ export namespace Spv {
                 assert(operands[2].type == Token::Type::UINT);
                 return data[result_at].redefine(new Type(
                         Type::array(std::get<unsigned>(operands[2].raw), *sub)));
+            }
+            case spv::OpTypeArray: { // 28
+                Type* sub = getType(1, data);
+                // Unlike OpTypeVector, the length is stored in an OpConstant
+                Primitive& len_val = *static_cast<Primitive*>(getValue(2, data));
+                return data[result_at].redefine(new Type(
+                        // The size must be a positive integer, so we can safely pull from u32
+                        Type::array(len_val.data.u32, *sub)));
             }
             case spv::OpTypePointer: { // 32
                 Type* pt_to = getType(2, data);
