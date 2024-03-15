@@ -22,7 +22,7 @@ export enum DataType : unsigned {
     UINT = 1,
     INT = 2,
     BOOL = 3,
-    COMPOSITE = 4,
+    STRUCT = 4,
     ARRAY = 5,
     // Above is usable in TOML, below only internal to SPIR-V
     VOID = 6,
@@ -36,6 +36,8 @@ export class Value;
 export class Type {
     DataType base;
     unsigned subSize;
+    // memory for subElement and subList elements is NOT managed by the Type
+    // In other words, the original allocator is expected to deallocate or transfer ownership
     const Type* subElement;
     std::vector<const Type*> subList;
     std::vector<std::string> nameList;
@@ -44,6 +46,13 @@ export class Type {
         base(base),
         subSize(sub_size),
         subElement(sub_element) {}
+    
+    Type(std::vector<const Type*> sub_list, std::vector<std::string> name_list):
+        base(DataType::STRUCT),
+        subSize(0),
+        subElement(nullptr),
+        subList(sub_list.begin(), sub_list.end()),
+        nameList(name_list.begin(), name_list.end()) {}
 
     /// @brief Creates a value corresponding to this type, with optional inputs
     /// @param values an optional vector of values to use
@@ -56,22 +65,43 @@ public:
 
     /// @brief Factory for floats, uints, ints, bools, voids
     /// May define a custom size (assuming the interpreter supports it), but the default is 32.
-    /// @param primitive the primitive type to use (should not use composite, function, or pointer)
+    /// @param primitive the primitive type to use (should not use STRUCT, function, or pointer)
     /// @param size the size of the type. Not all primitives have a usable size (bool and void don't)
     /// @return the created type
     static Type primitive(DataType primitive, unsigned size = 32) {
-        assert(primitive != DataType::COMPOSITE && primitive != DataType::FUNCTION &&
+        assert(primitive != DataType::STRUCT && primitive != DataType::FUNCTION &&
                primitive != DataType::POINTER);
         assert(size == 32 || (primitive != DataType::BOOL && primitive != DataType::VOID));
         return Type(primitive, size, nullptr);
     }
 
+    /// @brief Construct an array type
+    /// @param array_size the size of the array. The number of elements
+    /// @param element a Type which will outlive this Type. Must not be null. Ownership is not transferred
+    ///                to the constructed array- in other words, the allocator is expected to deallocate element
+    ///                some time after the deallocation of this array
     static Type array(unsigned array_size, const Type& element) {
         return Type(DataType::ARRAY, array_size, &element);
     }
 
-    static Type struct_() {
-        return Type(DataType::COMPOSITE, 0, nullptr);
+    /// @brief Construct a structure type
+    /// @param sub_list a list of non-null types. Each Type must outlive the struct created here. Ownership is not
+    ///                 transferred- meaning that the original allocator is expected to deallocate some time after
+    ///                 the deallocation of this struct
+    static Type structure(std::vector<const Type*> sub_list) {
+        std::vector<std::string> names(sub_list.size());
+        std::fill(names.begin(), names.end(), "");
+        return Type(sub_list, names);
+    }
+    /// @brief Construct a structure type
+    /// @param sub_list a list of non-null types. Each Type must outlive the struct created here. Ownership is not
+    ///                 transferred- meaning that the original allocator is expected to deallocate some time after
+    ///                 the deallocation of this struct
+    /// @param name_list a list of string names, corresponding to the Types at the same indices. Must have the same
+    ///                  length as sub_list
+    static Type structure(std::vector<const Type*> sub_list, std::vector<std::string> name_list) {
+        assert(sub_list.size() == name_list.size());
+        return Type(sub_list, name_list);
     }
 
     static Type function(const Type* return_, std::vector<Type*>& subList) {
@@ -102,15 +132,6 @@ public:
         return construct(&values);
     }
 
-    void addMember(std::string name, Type* type) {
-        assert(base == DataType::COMPOSITE);
-        // TODO must add through list- spirv is not required to give name for each field in struct
-    }
-
-    void setElement(const Type& e) {
-        assert(base == DataType::ARRAY);
-        subElement = &e;
-    }
     const Type& getElement() const {
         assert(base == DataType::ARRAY);
         return *subElement;
@@ -118,6 +139,15 @@ public:
     unsigned getSize() const {
         assert(base == DataType::ARRAY);
         return subSize;
+    }
+
+    const std::vector<const Type*>& getFields() const {
+        assert(base == DataType::STRUCT);
+        return subList;
+    }
+    const std::vector<std::string>& getNames() const {
+        assert(base == DataType::STRUCT);
+        return nameList;
     }
 
     const Type& getPointedTo() const {
@@ -277,54 +307,57 @@ public:
 
 export using ValueMap = std::map<std::string, const Value*>;
 
-export class Array : public Value  {
-    // Array owns and manages the memory of all elements.
+/// Array or Struct
+class Aggregate : public Value {
+protected:
+    // Aggregate owns and manages the memory of all elements
+    // However, we put elements in protected for easy access by subclasses
     std::vector<Value*> elements;
 
-public:
-    Array(const Type& sub_element, unsigned size): Value(Type::array(size, sub_element)) {}
+    virtual std::string getTypeName() const = 0;
+    virtual const Type& getTypeAt(unsigned idx) const = 0;
 
-    virtual ~Array() {
+public:
+    Aggregate(Type t): Value(t) {}
+    virtual ~Aggregate() {
         for (const auto& e : elements)
             delete e;
     }
-    Array(const Array& other) = delete;
-    Array& operator=(const Array& other) = delete;
+    Aggregate(const Aggregate& other) = delete;
+    Aggregate& operator=(const Aggregate& other) = delete;
 
-    void setType(Type& element_type, unsigned size) {
-        type = Type::array(size, element_type);
-    }
+    virtual unsigned getSize() const = 0;
 
     void addElements(std::vector<const Value*>& es) noexcept(false) {
         // Test that the size matches the current type's:
-        if (unsigned tsize = type.getSize(); es.size() != tsize) {
+        unsigned tsize = getSize();
+        if (unsigned vecsize = es.size(); vecsize != tsize) {
             std::stringstream err;
-            err << "Could not add " << es.size() << " elements to array of size " << tsize << "!";
+            err << "Could not add " << vecsize << " values to " << getTypeName() << " of size " << tsize << "!";
             throw std::runtime_error(err.str());
         }
-        for (const Value* e: es) {
+        for (unsigned i = 0; i < tsize; ++i) {
             // Construct an element from the element type, then copy data from e to it.
-            Value* val = type.getElement().construct();
+            const Type& typeAt = getTypeAt(i);
+            Value* val = typeAt.construct();
             try {
-                val->copyFrom(*e);
-            } catch (std::exception& e) {
-                delete &val;
+                val->copyFrom(*es[i]);
+            } catch(const std::exception& e) {
+                delete val;
                 std::stringstream err;
-                err << "Could not add array element because: " << e.what() <<  "!";
+                err << "Could not add " << getTypeName() << " value #" << i << " because: " << e.what() << "!";
                 throw std::runtime_error(err.str());
             }
             elements.push_back(val);
         }
     }
+
     void dummyFill() noexcept(false) {
-        unsigned tsize = type.getSize();
-        for (unsigned i = 0; i < tsize; ++i) {
-            Value* val = type.getElement().construct();
+        for (unsigned i = 0; i < getSize(); ++i) {
+            Value* val = getTypeAt(i).construct();
             elements.push_back(val);
         }
     }
-
-    unsigned getSize() const { return elements.size(); }
 
     const Value* operator[](unsigned i) const {
         return elements[i];
@@ -334,14 +367,48 @@ public:
         Value::copyFrom(new_val);
 
         // Do the actual copy now
-        const Array& other = static_cast<const Array&>(new_val);
-        if (unsigned osize = other.getSize(); osize != elements.size()) {
+        const Aggregate& other = static_cast<const Aggregate&>(new_val);
+        unsigned size = elements.size();
+        if (unsigned osize = other.elements.size(); osize != size) {
             std::stringstream err;
-            err << "Cannot copy array of size " << osize << " into array of size " << elements.size() << "!";
+            err << "Cannot copy from " << getTypeName() << " of a different size (" << osize << " -> " << size << ")!";
             throw std::runtime_error(err.str());
         }
-        for (unsigned i = 0; i < elements.size(); ++i)
+        for (unsigned i = 0; i < size; ++i)
             elements[i]->copyFrom(*other.elements[i]);
+    }
+
+    bool isNested() const override {
+        return true;
+    }
+
+    bool equals(const Value& val) const override {
+        if (!Value::equals(val)) // guarantees matching types
+            return false;
+        const auto& other = static_cast<const Aggregate&>(val);
+        // Shouldn't have to test lengths since that is encoded in the type
+        for (unsigned i = 0; i < elements.size(); ++i) {
+            if (!elements[i]->equals(*other.elements[i]))
+                return false;
+        }
+        return true;
+    }
+};
+
+export class Array : public Aggregate  {
+protected:
+    std::string getTypeName() const override {
+        return "array";
+    }
+    const Type& getTypeAt(unsigned idx) const override {
+        return type.getElement();
+    }
+
+public:
+    Array(const Type& sub_element, unsigned size): Aggregate(Type::array(size, sub_element)) {}
+
+    unsigned getSize() const override {
+        return type.getSize();
     }
 
     virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
@@ -372,51 +439,26 @@ public:
             dst << ']';
         }
     }
-
-    bool isNested() const override {
-        return true;
-    }
-
-    bool equals(const Value& val) const override {
-        if (!Value::equals(val)) // guarantees matching types
-            return false;
-        const auto& other = static_cast<const Array&>(val);
-        // Shouldn't have to test lengths since that is encoded in the type
-        for (unsigned i = 0; i < elements.size(); ++i) {
-            if (!elements[i]->equals(*other.elements[i]))
-                return false;
-        }
-        return true;
-    }
 };
 
-export class Struct : public Value {
+export class Struct : public Aggregate {
+protected:
+    std::string getTypeName() const override {
+        return "struct";
+    }
+    const Type& getTypeAt(unsigned idx) const override {
+        return *type.getFields()[idx];
+    }
 
 public:
-    Struct(): Value(Type::struct_()) {}
+    Struct(Type t): Aggregate(t) {}
 
-    void copyFrom(const Value& new_val) noexcept(false) override {
-        Value::copyFrom(new_val);
-
-        // Do the actual copy now
-        const Struct& other = static_cast<const Struct&>(new_val);
-        throw std::runtime_error("Unimplemented function!");
+    unsigned getSize() const override {
+        return type.getFields().size();
     }
 
     void print(std::stringstream& dst, unsigned indents = 0) const override {
         assert(false); // unimplemented!
-    }
-
-    bool isNested() const override {
-        return true;
-    }
-
-    bool equals(const Value& val) const override {
-        if (!Value::equals(val)) // guarantees matching types
-            return false;
-        
-        assert(false); // unimplemented!
-        return false;
     }
 };
 
@@ -642,14 +684,17 @@ Value* Type::construct(std::vector<const Value*>* values) const {
         }
         return prim;
     }
-    case DataType::ARRAY: {
-        Array* arr = new Array(*subElement, subSize);
-        // try to populate the array with each of the entries
+    case DataType::ARRAY:
+    case DataType::STRUCT: {
+        Aggregate* agg = (base == DataType::ARRAY)
+                            ? static_cast<Aggregate*>(new Array(*subElement, subSize))
+                            : static_cast<Aggregate*>(new Struct(*this));
+        // try to populate with each of the entries
         if (values != nullptr)
-            arr->addElements(*values);
+            agg->addElements(*values);
         else
-            arr->dummyFill();
-        return arr;
+            agg->dummyFill();
+        return agg;
     }
     // TODO support other types
     }

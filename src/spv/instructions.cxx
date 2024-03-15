@@ -419,6 +419,14 @@ export namespace Spv {
                         // The size must be a positive integer, so we can safely pull from u32
                         Type::array(len_val.data.u32, *sub)));
             }
+            case spv::OpTypeStruct: { // 30
+                std::vector<const Type*> fields;
+                for (unsigned i = 1; i < operands.size(); ++i) {
+                    const Type* sub = getType(i, data);
+                    fields.push_back(sub);
+                }
+                return data[result_at].redefine(new Type(Type::structure(fields)));
+            }
             case spv::OpTypePointer: { // 32
                 Type* pt_to = getType(2, data);
                 assert(operands[1].type == Token::Type::CONST); // storage class we don't need

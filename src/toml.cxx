@@ -327,9 +327,9 @@ private:
 
     template<typename Ite, typename Sen>
     static Value* parse_struct(LineHandler<Ite, Sen>& handler) {
-        Struct* strct = new Struct();
+        //Struct* strct = new Struct();
         // TODO parsing of struct
-        return strct;
+        return nullptr; //strct;
     }
 
     template<typename Ite, typename Sen>
