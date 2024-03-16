@@ -121,7 +121,8 @@ export namespace Spv {
 
             REQUIRE(skip(1), "Corrupted binary! Missing reserved word.");
 
-            bool entry_found = false;
+            bool entry_found = false; // whether the entry instruction has been found
+            bool static_ctn = true; // whether we can construct results statically (until first OpFunction)
             std::vector<unsigned> decorations;
             while (idx < length) {
                 // Each instruction is at least 1 word = 32 bits, where:
@@ -143,18 +144,27 @@ export namespace Spv {
                 Instruction& inst = *(Instruction::makeOp(insts, opcode, words));
                 unsigned location = insts.size() - 1;
 
-                // silently ignore all but the first entry found
-                if (inst.isEntry() && !entry_found) {
-                    entry_found = true;
-                    entry = location;
-                }
+                if (static_ctn || inst.isStaticDependent()) {
+                    if (opcode == spv::OpFunction) {
+                        static_ctn = false;
+                        // Static construction is no longer legal at the first non-static
+                        // OpFunction is static dependent, so intended fallthrough
+                    }
 
-                // Process the instruction as necessary
-                // If it is a decoration (ie modifies a type not yet defined), save it for later
-                if (inst.isDecoration())
-                    decorations.push_back(location);
-                else // If it has a result, let it save itself in the data vector
-                    inst.makeResult(data, location);
+                    // silently ignore all but the first entry found
+                    // (I think it is legal to have multiple- maybe add a way to distinguish desired?)
+                    if (opcode == spv::OpEntryPoint && !entry_found) {
+                        entry_found = true;
+                        entry = location;
+                    }
+
+                    // Process the instruction as necessary
+                    // If it is a decoration (ie modifies a type not yet defined), save it for later
+                    if (inst.isDecoration())
+                        decorations.push_back(location);
+                    else // If it has a static result, let it execute now on the data vector
+                        inst.makeResult(data, location);
+                }
             }
 
             REQUIRE(entry_found, "Missing entry function in SPIR-V source!");
@@ -282,7 +292,7 @@ export namespace Spv {
             // However, we will simulate a stack frame for holding temporaries (args and returns) and pc
             std::vector<Frame> frame_stack;
             std::vector<Value*> entry_args;
-            frame_stack.emplace_back(start + 1, entry_args, 0);
+            frame_stack.emplace_back(start, entry_args, 0);
             while (!frame_stack.empty()) {
                 unsigned i_at = frame_stack.back().getPC();
                 if (i_at >= insts.size())

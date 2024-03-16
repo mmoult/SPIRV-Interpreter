@@ -119,6 +119,9 @@ export namespace Spv {
             // Create token operands from the words available and for the given opcode
             std::vector<Token::Type> to_load;
             std::vector<Token::Type> optional;
+
+            // The result and result type will be handled by default (as needed), so do NOT include
+            // them in to_load!
             bool repeating = false; // whether the last optional type may be repeated
             switch (op) {
             default: {
@@ -156,11 +159,7 @@ export namespace Spv {
                 to_load.push_back(Token::Type::STRING);
                 break;
             case spv::OpExtInst: // 12
-            case spv::OpCompositeExtract: // 81
                 to_load.push_back(Token::Type::REF);
-                to_load.push_back(Token::Type::REF);
-                to_load.push_back(Token::Type::REF);
-                to_load.push_back(Token::Type::UINT);
                 optional.push_back(Token::Type::UINT);
                 repeating = true;
                 break;
@@ -208,6 +207,9 @@ export namespace Spv {
             case spv::OpTypeStruct: // 30
             case spv::OpTypeFunction: // 33
             case spv::OpConstantComposite: // 44
+            case spv::OpCompositeConstruct: // 80
+            case spv::OpFAdd: // 129
+            case spv::OpVectorTimesScalar: // 142
                 to_load.push_back(Token::Type::REF);
                 optional.push_back(Token::Type::REF);
                 repeating = true;
@@ -257,17 +259,11 @@ export namespace Spv {
                 optional.push_back(Token::Type::UINT);
                 repeating = true;
                 break;
-            case spv::OpFAdd: // 129
-                to_load.push_back(Token::Type::REF);
-                to_load.push_back(Token::Type::REF);
-                to_load.push_back(Token::Type::REF);
-                to_load.push_back(Token::Type::REF);
-                break;
-            case spv::OpVectorTimesScalar: // 142
-                to_load.push_back(Token::Type::REF);
-                to_load.push_back(Token::Type::REF);
+            case spv::OpCompositeExtract: // 81
                 to_load.push_back(Token::Type::REF);
                 to_load.push_back(Token::Type::UINT);
+                optional.push_back(Token::Type::UINT);
+                repeating = true;
                 break;
             }
 
@@ -322,17 +318,13 @@ export namespace Spv {
             return &inst;
         }
 
-        bool isEntry() const {
-            return opcode == spv::OpEntryPoint;
-        }
-
         /// @brief Sorts input and output variables given by this OpEntry into the provided vectors
         /// @param data list of data to access for determining the storage class of each variable
         /// @param ins a list of ref indices in data pointing to in variables
         /// @param outs a list of ref indices in data pointing to out variables
         /// @return result of generation
         void ioGen(std::vector<Data>& data, std::vector<unsigned>& ins, std::vector<unsigned>& outs) const noexcept(false) {
-            assert(isEntry());
+            assert(opcode == spv::OpEntryPoint);
 
             const unsigned len = data.size();
             // Operands 3+ are the interface variables
@@ -363,7 +355,7 @@ export namespace Spv {
         }
 
         unsigned getEntryStart(std::vector<Data>& data) const noexcept(false) {
-            assert(isEntry());
+            assert(opcode == spv::OpEntryPoint);
 
             // The entry function ref is operand 1
             Function* fx = getFunction(1, data);
@@ -372,52 +364,57 @@ export namespace Spv {
             return fx->getLocation();
         }
 
-        /// @brief Create the result in pre-parsing.
-        /// Note, this is before execution, so instructions which have runtime returns should do nothing here.
+        /// @brief Create the instruction result from the operands.
+        /// This is first called before execution (for static instructions) but is also a fallback during
+        /// execution for instructions which have shared behavior / don't distinguish between the two.
         /// @param data the vector of Data objects used by the program
         /// @param location the index of this instruction in the program
-        /// @return the result
-        void makeResult(std::vector<Data>& data, unsigned location) const noexcept(false) {
+        /// @return whether some result was made. If used as a fallback, this should be true!
+        bool makeResult(std::vector<Data>& data, unsigned location) const noexcept(false) {
             if (!hasResult)
-                return;
+                return false;
 
             const unsigned len = data.size();
             // Result type comes before result, if present
             unsigned result_at = checkRef(hasResultType, len);
+            Data dst_dat;
 
             switch (opcode) {
             default:
                 throw std::runtime_error("Unsupported instruction cannot make result!");
             case spv::OpExtInstImport: // 11
-            case spv::OpLoad: // 61
-            case spv::OpVectorShuffle: // 79
-                return; // instruction has no necessary&static result to construct
+                break; // instruction has no necessary result to construct
             case spv::OpTypeVoid: // 19
-                return data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
+                data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
+                break;
             case spv::OpTypeInt: // 21
                 assert(operands[1].type == Token::Type::UINT);
                 assert(operands[2].type == Token::Type::UINT);
-                return data[result_at].redefine(new Type(Type::primitive(
+                data[result_at].redefine(new Type(Type::primitive(
                     std::get<unsigned>(operands[2].raw) == 0 ? DataType::UINT : DataType::INT,
                     std::get<unsigned>(operands[1].raw)
                 )));
+                break;
             case spv::OpTypeFloat: // 22
                 assert(operands[1].type == Token::Type::UINT);
-                return data[result_at].redefine(new Type(Type::primitive(DataType::FLOAT,
+                data[result_at].redefine(new Type(Type::primitive(DataType::FLOAT,
                         std::get<unsigned>(operands[1].raw))));
+                break;
             case spv::OpTypeVector: { // 23
                 Type* sub = getType(1, data);
                 assert(operands[2].type == Token::Type::UINT);
-                return data[result_at].redefine(new Type(
+                data[result_at].redefine(new Type(
                         Type::array(std::get<unsigned>(operands[2].raw), *sub)));
+                break;
             }
             case spv::OpTypeArray: { // 28
                 Type* sub = getType(1, data);
                 // Unlike OpTypeVector, the length is stored in an OpConstant
                 Primitive& len_val = *static_cast<Primitive*>(getValue(2, data));
-                return data[result_at].redefine(new Type(
+                data[result_at].redefine(new Type(
                         // The size must be a positive integer, so we can safely pull from u32
                         Type::array(len_val.data.u32, *sub)));
+                break;
             }
             case spv::OpTypeStruct: { // 30
                 std::vector<const Type*> fields;
@@ -425,12 +422,14 @@ export namespace Spv {
                     const Type* sub = getType(i, data);
                     fields.push_back(sub);
                 }
-                return data[result_at].redefine(new Type(Type::structure(fields)));
+                data[result_at].redefine(new Type(Type::structure(fields)));
+                break;
             }
             case spv::OpTypePointer: { // 32
                 Type* pt_to = getType(2, data);
                 assert(operands[1].type == Token::Type::CONST); // storage class we don't need
-                return data[result_at].redefine(new Type(Type::pointer(*pt_to)));
+                data[result_at].redefine(new Type(Type::pointer(*pt_to)));
+                break;
             }
             case spv::OpTypeFunction: { // 33
                 // OpTypeFunction %return %params...
@@ -442,7 +441,8 @@ export namespace Spv {
                     Type* param = getType(i, data);
                     params.push_back(param);
                 }
-                return data[result_at].redefine(Data(new Type(Type::function(ret, params))));
+                data[result_at].redefine(new Type(Type::function(ret, params)));
+                break;
             }
             case spv::OpConstant: { // 43
                 // integer or floating point constant
@@ -450,9 +450,11 @@ export namespace Spv {
                 assert(operands[2].type == Token::Type::UINT);
                 Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
                 prim->cast(*ret);
-                return data[result_at].redefine(Data(prim));
+                data[result_at].redefine(prim);
+                break;
             }
-            case spv::OpConstantComposite: { // 44
+            case spv::OpConstantComposite: // 44
+            case spv::OpCompositeConstruct: { // 80
                 // Can create struct, array/vector, or matrix
                 Type* ret = getType(0, data);
                 std::vector<const Value*> values;
@@ -462,12 +464,14 @@ export namespace Spv {
                     values.push_back(val);
                 }
                 auto* val = ret->construct(values);
-                return data[result_at].redefine(Data(val));
+                data[result_at].redefine(val);
+                break;
             }
             case spv::OpFunction: { // 54
                 assert(operands[2].type == Token::Type::CONST);
                 Type* fx_type = getType(3, data);
-                return data[result_at].redefine(Data(new Function(fx_type, location)));
+                data[result_at].redefine(new Function(fx_type, location));
+                break;
             }
             case spv::OpVariable: { // 59
                 assert(hasResultType);
@@ -478,83 +482,12 @@ export namespace Spv {
                 Variable* var = Variable::makeVariable(static_cast<spv::StorageClass>(storage), *var_type);
                 if (operands.size() > 3) { // included default value
                     Value* defaultVal = getValue(3, data);
-                    var->setVal(*defaultVal);
+                    // defaultVal may be nullptr in a valid shader if it is dynamically generated
+                    // In that case, wait until execution to set default value
+                    if (defaultVal != nullptr)
+                        var->setVal(*defaultVal);
                 }
-                return data[result_at].redefine(Data(var));
-            }
-            case spv::OpLabel: // 248
-                return data[result_at].redefine(Data(new Primitive(location)));
-            }
-        }
-
-        bool isDecoration() const {
-            switch (opcode) {
-            default:
-                return false;
-            case spv::OpName: // 5
-            case spv::OpMemberName: // 6
-            case spv::OpDecorate: // 71
-            case spv::OpMemberDecorate: // 72
-                return true;
-            }
-        }
-
-        /// @brief Apply this instruction's decoration to the data
-        /// @param data the data to apply the decoration to
-        /// @return the result
-        void applyDecoration(std::vector<Data>& data) const noexcept(false) {
-            switch (opcode) {
-            default:
-            case spv::OpMemberName: // 6
-            case spv::OpMemberDecorate: // 72
-                throw std::runtime_error("Unimplemented function!");
-            case spv::OpName: { // 5
-                unsigned named = checkRef(0, data.size());
-                assert(operands[1].type == Token::Type::STRING);
-                std::string name = std::get<std::string>(operands[1].raw);
-                // We can decorate variables and functions with names
-                if (auto var = data[named].getVariable(); var != nullptr) {
-                    var->setName(name);
-                } else if (auto fx = data[named].getFunction(); fx != nullptr) {
-                    fx->setName(name);
-                } else
-                    throw std::runtime_error("Name decoration only legal for variables and functions!");
-                break;
-            }
-            case spv::OpDecorate: // 71
-                break;
-            }
-        }
-
-        void execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
-            bool inc_pc = true;
-            Frame& frame = frame_stack.back();
-
-            Value* dst_val = nullptr;
-            switch (opcode) {
-            default:
-                throw std::runtime_error("Unsupported instruction execution!");
-                break;
-            case spv::OpFunctionEnd: // 56
-                throw std::runtime_error("Missing return before function end!");
-            case spv::OpLoad: { // 61
-                Type* ret_type = getType(0, data);
-                dst_val = ret_type->construct();
-                // Load from a pointer, which may be a variable
-                const Value* from_val;
-                if (Variable* from = getVariable(2, data); from != nullptr) {
-                    from_val = from->getVal();
-                } else {
-                    Value* from_v = getValue(2, data);
-                    from_val = from_v;
-                }
-                dst_val->copyFrom(*from_val);
-                break;
-            }
-            case spv::OpStore: { // 62
-                Value* val = getValue(1, data);
-                Variable* dst = getVariable(0, data);
-                dst->setVal(*val);
+                data[result_at].redefine(var);
                 break;
             }
             case spv::OpVectorShuffle: { // 79
@@ -587,11 +520,120 @@ export namespace Spv {
                     throw std::runtime_error(error.str());
                 }
                 Type* retType = getType(0, data);
-                dst_val = retType->construct(vals);
+                data[result_at].redefine(retType->construct(vals));
                 break;
             }
             case spv::OpLabel: // 248
+                data[result_at].redefine(new Primitive(location));
+                break;
+            }
+
+            return true;
+        }
+
+        bool isDecoration() const {
+            switch (opcode) {
+            default:
+                return false;
+            case spv::OpName: // 5
+            case spv::OpMemberName: // 6
+            case spv::OpDecorate: // 71
+            case spv::OpMemberDecorate: // 72
+                return true;
+            }
+        }
+
+        /// @brief whether instruction in non-static sections should make its result statically
+        /// Some instructions, such as OpFunction and OpLabel, appear in non-static code sections, but need to
+        /// make their results before execution because they depend on location info. Others, such as OpVariable,
+        /// must be processed statically so decorations can be applied to them.
+        bool isStaticDependent() const {
+            return opcode == spv::OpFunction || opcode == spv::OpLabel || opcode == spv::OpVariable;
+        }
+
+        /// @brief Apply this instruction's decoration to the data
+        /// @param data the data to apply the decoration to
+        /// @return the result
+        void applyDecoration(std::vector<Data>& data) const noexcept(false) {
+            switch (opcode) {
+            default:
+            case spv::OpMemberName: { // 6
+                Type* strct = getType(0, data);
+                assert(strct->getBase() == DataType::STRUCT);
+                assert(operands[1].type == Token::Type::UINT);
+                unsigned idx = std::get<unsigned>(operands[1].raw);
+                assert(operands[2].type == Token::Type::STRING);
+                std::string name = std::get<std::string>(operands[2].raw);
+                strct->nameMember(idx, name);
+                break;
+            }
+            case spv::OpName: { // 5
+                unsigned named = checkRef(0, data.size());
+                assert(operands[1].type == Token::Type::STRING);
+                std::string name = std::get<std::string>(operands[1].raw);
+                // We can decorate variables and functions with names
+                if (auto var = data[named].getVariable(); var != nullptr) {
+                    var->setName(name);
+                } else if (auto fx = data[named].getFunction(); fx != nullptr) {
+                    fx->setName(name);
+                }
+                // The shader can name decorate other things (ex: %gl_PerVertex = OpTypeStruct),
+                // but we don't care to handle these cases
+                break;
+            }
+            case spv::OpDecorate: // 71
+            case spv::OpMemberDecorate: // 72
+                break; // TODO there are some decorations we care about
+            }
+        }
+
+        void execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
+            bool inc_pc = true;
+            Frame& frame = frame_stack.back();
+
+            Value* dst_val = nullptr;
+            switch (opcode) {
+            default:
+                // fall back on the makeResult function (no fallback should use location!)
+                if (!makeResult(data, 0))
+                    throw std::runtime_error("Unsupported instruction execution!");
+                // If the instruction did make a result, success! These instructions cannot modify control flow,
+                // so assume inc_pc = true
+                break;
+            case spv::OpFunction: // 54
+            case spv::OpLabel: // 248
                 break;  // should print for verbose
+            case spv::OpFunctionEnd: // 56
+                throw std::runtime_error("Missing return before function end!");
+            case spv::OpVariable: // 59
+                // Since this instruction should be run statically, we can assume the variable already exists
+                // All we need to do here is set the default value (in case not set before)
+                if (operands.size() > 3) { // included default value
+                    Variable* var = getVariable(1, data);
+                    Value* defaultVal = getValue(3, data);
+                    var->setVal(*defaultVal);
+                }
+                break;
+            case spv::OpLoad: { // 61
+                Type* ret_type = getType(0, data);
+                dst_val = ret_type->construct();
+                // Load from a pointer, which may be a variable
+                const Value* from_val;
+                if (Variable* from = getVariable(2, data); from != nullptr) {
+                    from_val = from->getVal();
+                } else {
+                    Value* from_v = getValue(2, data);
+                    from_val = from_v;
+                }
+                dst_val->copyFrom(*from_val);
+                break;
+            }
+            case spv::OpStore: { // 62
+                Value* val = getValue(1, data);
+                Variable* dst = getVariable(0, data);
+                dst->setVal(*val);
+                break;
+            }
             case spv::OpBranch: { // 249
                 Value* dst = getValue(0, data);
                 Primitive* dst2 = static_cast<Primitive*>(dst);

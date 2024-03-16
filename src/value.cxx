@@ -159,6 +159,13 @@ public:
         return base == rhs.base;
     }
 
+    void nameMember(unsigned i, std::string& name) noexcept(false) {
+        assert(base == DataType::STRUCT);
+        if (i >= nameList.size())
+            throw std::invalid_argument("Cannot name member at index beyond existing!");
+        nameList[i] = name;
+    }
+
     bool operator==(const Type& rhs) const {
         if (!sameBase(rhs))
             return false;
