@@ -15,8 +15,11 @@ module;
 #include <tuple>
 #include <vector>
 
-import value;
 export module toml;
+import type;
+import value;
+import value.aggregate;
+import value.primitive;
 
 
 enum class IdValidity {

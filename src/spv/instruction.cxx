@@ -15,11 +15,15 @@ module;
 
 #include "../external/spirv.hpp"
 
+export module instruction;
 import data;
 import frame;
-import tokens;
+import token;
+import type;
 import value;
-export module instructions;
+import value.aggregate;
+import value.pointer;
+import value.primitive;
 
 
 export namespace Spv {
@@ -490,6 +494,20 @@ export namespace Spv {
                 data[result_at].redefine(var);
                 break;
             }
+            case spv::OpAccessChain: { // 65
+                std::vector<unsigned> indices;
+                assert(operands[2].type == Token::Type::REF);
+                unsigned head = std::get<unsigned>(operands[2].raw);
+                for (unsigned i = 3; i < operands.size(); ++i) {
+                    assert(operands[i].type == Token::Type::UINT);
+                    unsigned at = std::get<unsigned>(operands[i].raw);
+                    indices.push_back(at);
+                }
+                Type* point_to = getType(0, data);
+                assert(point_to != nullptr);
+                data[result_at].redefine(new Pointer(head, indices, *point_to));
+                break;
+            }
             case spv::OpVectorShuffle: { // 79
                 Value* first = getValue(2, data);
                 Value* second = getValue(3, data);
@@ -521,6 +539,31 @@ export namespace Spv {
                 }
                 Type* retType = getType(0, data);
                 data[result_at].redefine(retType->construct(vals));
+                break;
+            }
+            case spv::OpCompositeExtract: { // 81
+                Type* res_type = getType(0, data);
+                Value* to_ret = res_type->construct();
+                const Value* composite = getValue(2, data);
+                for (unsigned i = 3; i < operands.size(); ++i) {
+                    if (DataType dt = composite->getType().getBase(); dt != DataType::ARRAY && dt != DataType::STRUCT) {
+                        std::stringstream error;
+                        error << "Cannot extract from non-composite type!";
+                        throw std::runtime_error(error.str());
+                    }
+                    const Aggregate& agg = *static_cast<const Aggregate*>(composite);
+                    assert(operands[i].type == Token::Type::UINT);
+                    auto idx = std::get<unsigned>(operands[i].raw);
+                    if (idx >= agg.getSize()) {
+                        std::stringstream error;
+                        error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
+                        throw std::runtime_error(error.str());
+                    }
+                    composite = agg[i];
+                    // Repeat the process for all indices
+                }
+                to_ret->copyFrom(*composite);
+                data[result_at].redefine(to_ret);
                 break;
             }
             case spv::OpLabel: // 248
@@ -622,16 +665,38 @@ export namespace Spv {
                 if (Variable* from = getVariable(2, data); from != nullptr) {
                     from_val = from->getVal();
                 } else {
-                    Value* from_v = getValue(2, data);
-                    from_val = from_v;
+                    Value* dst_ptr = getValue(2, data);
+                    if (dst_ptr == nullptr || dst_ptr->getType().getBase() != DataType::POINTER) {
+                        std::stringstream error;
+                        error << "Load must read from either a variable or pointer!";
+                        throw std::runtime_error(error.str());
+                    }
+                    Pointer& pointer = *static_cast<Pointer*>(dst_ptr);
+                    unsigned start = pointer.getHead();
+                    Value* head = data[start].getValue();
+                    from_val = pointer.dereference(*head);
                 }
                 dst_val->copyFrom(*from_val);
                 break;
             }
             case spv::OpStore: { // 62
                 Value* val = getValue(1, data);
-                Variable* dst = getVariable(0, data);
-                dst->setVal(*val);
+                if (Variable* dst = getVariable(0, data); dst != nullptr)
+                    dst->setVal(*val);
+                else {
+                    // Then the dst should be a pointer
+                    Value* dst_ptr = getValue(2, data);
+                    if (dst_ptr == nullptr || dst_ptr->getType().getBase() != DataType::POINTER) {
+                        std::stringstream error;
+                        error << "Store must write to either a variable or pointer!";
+                        throw std::runtime_error(error.str());
+                    }
+                    Pointer& pointer = *static_cast<Pointer*>(dst_ptr);
+                    unsigned start = pointer.getHead();
+                    Value* head = data[start].getValue();
+                    Value* extracted = pointer.dereference(*head);
+                    extracted->copyFrom(*val);
+                }
                 break;
             }
             case spv::OpBranch: { // 249

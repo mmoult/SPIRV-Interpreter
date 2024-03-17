@@ -7,7 +7,7 @@ module;
 #include <cassert>
 #include <string>
 #include <variant>
-export module tokens;
+export module token;
 
 export namespace Spv {
     struct Token {

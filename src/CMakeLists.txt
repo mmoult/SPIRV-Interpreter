@@ -12,20 +12,25 @@ set(CMAKE_CXX_STANDARD 20)
 add_executable(build)
 set_target_properties(build PROPERTIES OUTPUT_NAME "spirv-run")
 
-# Add module files
+# Add module interface files
 target_sources(build
   PUBLIC
     FILE_SET CXX_MODULES FILES
-      toml.cxx
-      value.cxx
+      format/toml.cxx
       spv/data.cxx
       spv/frame.cxx
-      spv/instructions.cxx
+      spv/instruction.cxx
       spv/program.cxx
-      spv/tokens.cxx
+      spv/token.cxx
+      values/aggregate.cxx
+      values/pointer.cxx
+      values/primitive.cxx
+      values/type.cxx
+      values/value.cxx
 )
-# Add regular files (if any)
+# Add other source files
 target_sources(build
   PUBLIC
     main.cpp
+    values/type.cpp
 )
