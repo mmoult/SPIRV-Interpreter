@@ -7,8 +7,8 @@ module;
 #include <stdexcept>
 #include <vector>
 
+#include "../values/value.hpp"
 export module frame;
-import value;
 
 export class Frame {
     unsigned pc;

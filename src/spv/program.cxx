@@ -11,12 +11,11 @@ module;
 #include <vector>
 
 #include "../external/spirv.hpp"
-
+#include "../values/value.hpp"
 export module program;
 import data;
 import frame;
 import instruction;
-import value;
 
 export namespace Spv {
     class Program {

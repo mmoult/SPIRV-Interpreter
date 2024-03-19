@@ -3,16 +3,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-module;
+#ifndef VALUES_VALUE_HPP
+#define VALUES_VALUE_HPP
+
 #include <cassert>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 
-export module value;
-import type;
+#include "type.hpp"
 
-export class Value {
+class Value {
 protected:
     Type type;
 
@@ -48,4 +49,5 @@ public:
     }
 };
 
-export using ValueMap = std::map<std::string, const Value*>;
+using ValueMap = std::map<std::string, const Value*>;
+#endif

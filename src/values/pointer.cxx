@@ -8,9 +8,9 @@ module;
 #include <stdexcept>
 #include <vector>
 
+#include "type.hpp"
+#include "value.hpp"
 export module value.pointer;
-import type;
-import value;
 import value.aggregate;
 
 export class Pointer : public Value {

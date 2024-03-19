@@ -11,10 +11,9 @@ module;
 #include <stdexcept>
 
 #include "../external/spirv.hpp"
-
+#include "../values/type.hpp"
+#include "../values/value.hpp"
 export module data;
-import type;
-import value;
 
 export class Variable {
     // The variable owns this value. When it is set, another value is copied over and decorations (such as

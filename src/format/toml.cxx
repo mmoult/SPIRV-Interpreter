@@ -15,9 +15,9 @@ module;
 #include <tuple>
 #include <vector>
 
+#include "../values/type.hpp"
+#include "../values/value.hpp"
 export module toml;
-import type;
-import value;
 import value.aggregate;
 import value.primitive;
 

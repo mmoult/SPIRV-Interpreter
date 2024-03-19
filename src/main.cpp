@@ -11,9 +11,10 @@
 #include <optional>
 #include <string>
 
+#include "values/value.hpp"
+
 import program;
 import toml;
-import value;
 
 constexpr auto VERSION = "0.1.1";
 

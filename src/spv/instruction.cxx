@@ -14,13 +14,12 @@ module;
 #include <vector>
 
 #include "../external/spirv.hpp"
-
+#include "../values/type.hpp"
+#include "../values/value.hpp"
 export module instruction;
 import data;
 import frame;
 import token;
-import type;
-import value;
 import value.aggregate;
 import value.pointer;
 import value.primitive;

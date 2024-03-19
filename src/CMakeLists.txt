@@ -25,8 +25,6 @@ target_sources(build
       values/aggregate.cxx
       values/pointer.cxx
       values/primitive.cxx
-      values/type.cxx
-      values/value.cxx
 )
 # Add other source files
 target_sources(build

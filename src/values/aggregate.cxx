@@ -9,9 +9,9 @@ module;
 #include <stdexcept>
 #include <vector>
 
+#include "type.hpp"
+#include "value.hpp"
 export module value.aggregate;
-import type;
-import value;
 
 /// Array or Struct
 export class Aggregate : public Value {

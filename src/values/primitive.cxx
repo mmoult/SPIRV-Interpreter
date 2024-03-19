@@ -10,9 +10,9 @@ module;
 #include <sstream>
 #include <stdexcept>
 
+#include "type.hpp"
+#include "value.hpp"
 export module value.primitive;
-import type;
-import value;
 
 export struct Primitive : public Value {
 
