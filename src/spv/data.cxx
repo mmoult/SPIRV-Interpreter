@@ -68,6 +68,9 @@ public:
     const Value* getVal() const {
         return val;
     }
+    Value* getVal() {
+        return val;
+    }
 
     void print(std::stringstream& dst) const {
         dst << name << " = ";

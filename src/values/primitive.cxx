@@ -42,7 +42,18 @@ public:
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
-        Value::copyFrom(new_val);
+        // Verify that the other is a primitive type
+        // (Don't use the super check since we don't require the same base)
+        const auto from_base = new_val.getType().getBase();
+        switch (from_base) {
+        case DataType::FLOAT:
+        case DataType::UINT:
+        case DataType::INT:
+        case DataType::BOOL:
+            break;
+        default:
+            throw std::runtime_error("Cannot copy from non-primitive to a primitive type!");
+        }
 
         // Do the actual copy now
         const Primitive& other = static_cast<const Primitive&>(new_val);
@@ -51,7 +62,7 @@ public:
         // TODO precision handling
         switch (type.getBase()) { // cast to
         case DataType::FLOAT:
-            switch (from.getBase()) { // copy from
+            switch (from_base) { // copy from
             case DataType::FLOAT:
                 data.fp32 = other.data.fp32;
                 break;
@@ -66,7 +77,7 @@ public:
             }
             break;
         case DataType::UINT:
-            switch (from.getBase()) {
+            switch (from_base) {
             case DataType::UINT:
                 data.u32 = other.data.u32;
                 break;
@@ -77,7 +88,7 @@ public:
             }
             break;
         case DataType::INT:
-            switch (from.getBase()) {
+            switch (from_base) {
             case DataType::UINT:
                 // TODO verify that it is not too large
                 data.i32 = static_cast<int32_t>(other.data.u32);
@@ -90,7 +101,7 @@ public:
             }
             break;
         case DataType::BOOL:
-            switch (from.getBase()) {
+            switch (from_base) {
             case DataType::BOOL:
                 data.b32 = other.data.b32;
             case DataType::UINT:

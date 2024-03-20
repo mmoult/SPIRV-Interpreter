@@ -95,6 +95,32 @@ export namespace Spv {
             return data[checkRef(idx, data.size())].getVariable();
         }
 
+        Value* getHeadValue(const Pointer& pointer, std::vector<Data>& data) const noexcept(false) {
+            unsigned start = pointer.getHead();
+            // Head can be either a variable or a value
+            Value* head = data[start].getValue();
+            if (head == nullptr) {
+                Variable* head_var = data[start].getVariable();
+                if (head_var == nullptr)
+                    throw std::runtime_error("Pointer head is neither a variable or a value!");
+                head = head_var->getVal();
+            }
+            return head;
+        }
+
+        Value* getFromPointer(unsigned index, std::vector<Data>& data) const noexcept(false) {
+            if (Variable* from = getVariable(index, data); from != nullptr)
+                return from->getVal();
+            
+            Value* dst_ptr = getValue(index, data);
+            if (dst_ptr == nullptr || dst_ptr->getType().getBase() != DataType::POINTER)
+                throw std::runtime_error("Need either a variable or pointer!");
+
+            Pointer& pointer = *static_cast<Pointer*>(dst_ptr);
+            Value* head = getHeadValue(pointer, data);
+            return pointer.dereference(*head);
+        }
+
     public:
         Instruction(spv::Op opcode, bool has_result, bool has_result_type):
             opcode(opcode),
@@ -383,8 +409,11 @@ export namespace Spv {
             Data dst_dat;
 
             switch (opcode) {
-            default:
-                throw std::runtime_error("Unsupported instruction cannot make result!");
+            default: {
+                std::stringstream err;
+                err << "Unsupported instruction: " << opcode << "! Cannot make result.";
+                throw std::runtime_error(err.str());
+            }
             case spv::OpExtInstImport: // 11
                 break; // instruction has no necessary result to construct
             case spv::OpTypeVoid: // 19
@@ -498,9 +527,12 @@ export namespace Spv {
                 assert(operands[2].type == Token::Type::REF);
                 unsigned head = std::get<unsigned>(operands[2].raw);
                 for (unsigned i = 3; i < operands.size(); ++i) {
-                    assert(operands[i].type == Token::Type::UINT);
-                    unsigned at = std::get<unsigned>(operands[i].raw);
-                    indices.push_back(at);
+                    const Value* at = getValue(i, data);
+                    if (const auto at_base = at->getType().getBase(); at_base != DataType::UINT
+                                                                    && at_base != DataType::INT)
+                        throw std::runtime_error("AccessChain index is not an integer!");
+                    const Primitive& pat = *static_cast<const Primitive*>(at);
+                    indices.push_back(pat.data.u32);
                 }
                 Type* point_to = getType(0, data);
                 assert(point_to != nullptr);
@@ -558,7 +590,7 @@ export namespace Spv {
                         error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
                         throw std::runtime_error(error.str());
                     }
-                    composite = agg[i];
+                    composite = agg[idx];
                     // Repeat the process for all indices
                 }
                 to_ret->copyFrom(*composite);
@@ -658,44 +690,17 @@ export namespace Spv {
                 break;
             case spv::OpLoad: { // 61
                 Type* ret_type = getType(0, data);
+                // Construct a new value to serve as result, then copy the resultval to it
                 dst_val = ret_type->construct();
                 // Load from a pointer, which may be a variable
-                const Value* from_val;
-                if (Variable* from = getVariable(2, data); from != nullptr) {
-                    from_val = from->getVal();
-                } else {
-                    Value* dst_ptr = getValue(2, data);
-                    if (dst_ptr == nullptr || dst_ptr->getType().getBase() != DataType::POINTER) {
-                        std::stringstream error;
-                        error << "Load must read from either a variable or pointer!";
-                        throw std::runtime_error(error.str());
-                    }
-                    Pointer& pointer = *static_cast<Pointer*>(dst_ptr);
-                    unsigned start = pointer.getHead();
-                    Value* head = data[start].getValue();
-                    from_val = pointer.dereference(*head);
-                }
+                const Value* from_val = getFromPointer(2, data);
                 dst_val->copyFrom(*from_val);
                 break;
             }
             case spv::OpStore: { // 62
                 Value* val = getValue(1, data);
-                if (Variable* dst = getVariable(0, data); dst != nullptr)
-                    dst->setVal(*val);
-                else {
-                    // Then the dst should be a pointer
-                    Value* dst_ptr = getValue(2, data);
-                    if (dst_ptr == nullptr || dst_ptr->getType().getBase() != DataType::POINTER) {
-                        std::stringstream error;
-                        error << "Store must write to either a variable or pointer!";
-                        throw std::runtime_error(error.str());
-                    }
-                    Pointer& pointer = *static_cast<Pointer*>(dst_ptr);
-                    unsigned start = pointer.getHead();
-                    Value* head = data[start].getValue();
-                    Value* extracted = pointer.dereference(*head);
-                    extracted->copyFrom(*val);
-                }
+                Value* store_to = getFromPointer(0, data);
+                store_to->copyFrom(*val);
                 break;
             }
             case spv::OpBranch: { // 249
