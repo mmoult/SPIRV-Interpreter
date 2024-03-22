@@ -73,7 +73,11 @@ public:
     }
 
     void print(std::stringstream& dst) const {
-        dst << name << " = ";
+        if (name.empty())
+            dst << "\"\"";
+        else
+            dst << name;
+        dst << " = ";
         val->print(dst);
         dst << '\n';
     }

@@ -677,6 +677,47 @@ export namespace Spv {
                 data[result_at].redefine(to_ret);
                 break;
             }
+            case spv::OpFAdd: { // 129
+                // Adds two float arrays or two floats
+                Value* val1 = getValue(2, data);
+                Value* val2 = getValue(3, data);
+                const Type& type1 = val1->getType();
+                const Type& type2 = val2->getType();
+                if (!type1.sameBase(type2))
+                    throw std::runtime_error("Cannot add float operands of different bases!");
+                std::vector<Primitive> floats;
+                std::vector<const Value*> pfloats;
+
+                if (type1.getBase() == DataType::ARRAY) {
+                    if (type1.getElement().getBase() != DataType::FLOAT)
+                        throw std::runtime_error("Cannot use FAdd to add non-float arrays!");
+                    const Array& op1 = *static_cast<const Array*>(val1);
+                    const Array& op2 = *static_cast<const Array*>(val2);
+                    if (op1.getSize() != op2.getSize())
+                        throw std::runtime_error("Cannot FAdd arrays of different size!");
+                    unsigned asize = op1.getSize();
+                    floats.reserve(asize);
+                    pfloats.reserve(asize);
+                    for (unsigned i = 0; i < asize; ++i) {
+                        floats.emplace_back(static_cast<const Primitive*>(op1[i])->data.fp32 + 
+                                            static_cast<const Primitive*>(op2[i])->data.fp32);
+                        pfloats.push_back(&floats[i]);
+                    }
+                } else {
+                    // Must be a float
+                    if (type1.getBase() != DataType::FLOAT)
+                        throw std::runtime_error("Cannot use FAdd to add non-floats!");
+                    const Primitive& op1 = *static_cast<const Primitive*>(val1);
+                    const Primitive& op2 = *static_cast<const Primitive*>(val2);
+                    floats.emplace_back(op1.data.fp32 + op2.data.fp32);
+                    pfloats.push_back(&floats[0]);
+                }
+
+                Type* res_type = getType(0, data);
+                Value* res = res_type->construct(pfloats);
+                data[result_at].redefine(res);
+                break;
+            }
             case spv::OpVectorTimesScalar: { // 142
                 Value* vec_val = getValue(2, data);
                 const Type& vec_type = vec_val->getType();
