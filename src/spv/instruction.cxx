@@ -6,6 +6,7 @@
 module;
 #include <bit>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
@@ -24,14 +25,16 @@ import value.aggregate;
 import value.pointer;
 import value.primitive;
 
-
 export namespace Spv {
-
     class Instruction {
         spv::Op opcode;
         std::vector<Token> operands;
         bool hasResult;
         bool hasResultType;
+
+        enum class Extension {
+            GLSL_STD,
+        };
 
         static bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {
             // UTF-8 encoding with four codepoints per word, 0 terminated
@@ -71,8 +74,8 @@ export namespace Spv {
             }
         }
 
-        unsigned checkRef(unsigned idx, unsigned len) const noexcept(false) {
-            assert(operands[idx].type == Token::Type::REF);
+        unsigned checkRef(unsigned idx, unsigned len, bool assert_ref = true) const noexcept(false) {
+            assert(!assert_ref || operands[idx].type == Token::Type::REF);
             auto result_at = std::get<unsigned>(operands[idx].raw);
             if (result_at >= len) {
                 std::stringstream err;
@@ -82,17 +85,17 @@ export namespace Spv {
             return result_at;
         }
 
-        Type* getType(unsigned idx, std::vector<Data>& data) const {
-            return data[checkRef(idx, data.size())].getType();
+        Type* getType(unsigned idx, std::vector<Data>& data, bool assert_ref = true) const {
+            return data[checkRef(idx, data.size(), assert_ref)].getType();
         }
-        Value* getValue(unsigned idx, std::vector<Data>& data) const {
-            return data[checkRef(idx, data.size())].getValue();
+        Value* getValue(unsigned idx, std::vector<Data>& data, bool assert_ref = true) const {
+            return data[checkRef(idx, data.size(), assert_ref)].getValue();
         }
-        Function* getFunction(unsigned idx, std::vector<Data>& data) const {
-            return data[checkRef(idx, data.size())].getFunction();
+        Function* getFunction(unsigned idx, std::vector<Data>& data, bool assert_ref = true) const {
+            return data[checkRef(idx, data.size(), assert_ref)].getFunction();
         }
-        Variable* getVariable(unsigned idx, std::vector<Data>& data) const {
-            return data[checkRef(idx, data.size())].getVariable();
+        Variable* getVariable(unsigned idx, std::vector<Data>& data, bool assert_ref = true) const {
+            return data[checkRef(idx, data.size(), assert_ref)].getVariable();
         }
 
         Value* getHeadValue(const Pointer& pointer, std::vector<Data>& data) const noexcept(false) {
@@ -119,6 +122,54 @@ export namespace Spv {
             Pointer& pointer = *static_cast<Pointer*>(dst_ptr);
             Value* head = getHeadValue(pointer, data);
             return pointer.dereference(*head);
+        }
+
+        bool makeResultGlsl(std::vector<Data>& data, unsigned location, unsigned result_at) const noexcept(false) {
+            // https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.pdf
+            // extension opcode at operand[3]
+            unsigned ext_opcode = std::get<unsigned>(operands[3].raw);
+            bool made = true;
+
+            switch (ext_opcode) {
+            default: {
+                std::stringstream err;
+                err << "Unknown GLSL opcode: " << ext_opcode;
+                throw std::runtime_error(err.str());
+            }
+            case 69: { // Normalize
+                Value* vec_val = getValue(4, data, false);
+                const Type& vec_type = vec_val->getType();
+                if (vec_type.getBase() != DataType::ARRAY)
+                    throw std::runtime_error("Could not load vector in Normalize!");
+                const Array& vec = *static_cast<Array*>(vec_val);
+                if (vec_type.getElement().getBase() != DataType::FLOAT)
+                    throw std::runtime_error("Normalize vector element must have float type!");
+
+                unsigned size = vec.getSize();
+                double vsize = 0;
+                for (unsigned i = 0; i < size; ++i) {
+                    const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
+                    vsize += vec_e.data.fp32 * vec_e.data.fp32;
+                }
+                vsize = std::sqrt(vsize);
+
+                std::vector<Primitive> floats;
+                std::vector<const Value*> pfloats;
+                floats.reserve(size);
+                pfloats.reserve(size);
+                for (unsigned i = 0; i < size; ++i) {
+                    const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
+                    Primitive& created = floats.emplace_back(static_cast<float>(vec_e.data.fp32 / vsize));
+                    pfloats.push_back(&floats[i]);
+                }
+
+                Type* res_type = getType(0, data);
+                Value* res = res_type->construct(pfloats);
+                data[result_at].redefine(res);
+                break;
+            }
+            }
+            return made;
         }
 
     public:
@@ -406,7 +457,6 @@ export namespace Spv {
             const unsigned len = data.size();
             // Result type comes before result, if present
             unsigned result_at = checkRef(hasResultType, len);
-            Data dst_dat;
 
             switch (opcode) {
             default: {
@@ -414,8 +464,38 @@ export namespace Spv {
                 err << "Unsupported instruction: " << opcode << "! Cannot make result.";
                 throw std::runtime_error(err.str());
             }
-            case spv::OpExtInstImport: // 11
-                break; // instruction has no necessary result to construct
+            case spv::OpExtInstImport: { // 11
+                // Determine which extension the string represents
+                assert(operands[1].type == Token::Type::STRING);
+                std::string ext_name = std::get<std::string>(operands[1].raw);
+                Extension ext;
+                if (ext_name.find("GLSL.std.") == 0)
+                    ext = Extension::GLSL_STD;
+                else {
+                    std::stringstream err;
+                    err << "Unsupported extension: " << ext_name;
+                    throw std::runtime_error(err.str());
+                }
+                data[result_at].redefine(new Primitive(unsigned(ext)));
+                break;
+            }
+            case spv::OpExtInst: { // 12
+                // This is a tricky one because the semantics rely entirely on the extension used
+                // First, pull the extension to find where to go next
+                Value* val = getValue(2, data);
+                if (val->getType().getBase() != DataType::UINT)
+                    throw std::runtime_error("Corrupted extension information!");
+                const Primitive& prim = *static_cast<Primitive*>(val);
+                Extension ext = static_cast<Extension>(prim.data.u32);
+                switch (ext) {
+                case Extension::GLSL_STD:
+                    makeResultGlsl(data, location, result_at);
+                    break;
+                default:
+                    assert(false);
+                }
+                break;
+            }
             case spv::OpTypeVoid: // 19
                 data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
                 break;
@@ -595,6 +675,37 @@ export namespace Spv {
                 }
                 to_ret->copyFrom(*composite);
                 data[result_at].redefine(to_ret);
+                break;
+            }
+            case spv::OpVectorTimesScalar: { // 142
+                Value* vec_val = getValue(2, data);
+                const Type& vec_type = vec_val->getType();
+                if (vec_type.getBase() != DataType::ARRAY)
+                    throw std::runtime_error("Could not load vector in VectorTimesScalar!");
+                const Array& vec = *static_cast<Array*>(vec_val);
+                if (vec_type.getElement().getBase() != DataType::FLOAT)
+                    throw std::runtime_error("Cannot mutliply vector with non-float element type!");
+
+                Value* scal_val = getValue(3, data);
+                if (scal_val == nullptr || scal_val->getType().getBase() != DataType::FLOAT)
+                    throw std::runtime_error("Could not load scalar in VectorTimesScalar!");
+                const Primitive& scal = *static_cast<Primitive*>(scal_val);
+
+                unsigned size = vec.getSize();
+                std::vector<Primitive> floats;
+                std::vector<const Value*> pfloats;
+                floats.reserve(size);
+                pfloats.reserve(size);
+                for (unsigned i = 0; i < size; ++i) {
+                    const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
+                    Primitive& created = floats.emplace_back(0.f);
+                    created.data.fp32 = vec_e.data.fp32 * scal.data.fp32;
+                    pfloats.push_back(&floats[i]);
+                }
+
+                Type* res_type = getType(0, data);
+                Value* res = res_type->construct(pfloats);
+                data[result_at].redefine(res);
                 break;
             }
             case spv::OpLabel: // 248

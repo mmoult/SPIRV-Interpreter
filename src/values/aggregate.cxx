@@ -34,6 +34,19 @@ public:
 
     virtual unsigned getSize() const = 0;
 
+    auto begin() {
+        return elements.begin();
+    }
+    auto end() {
+        return elements.end();
+    }
+    auto begin() const {
+        return elements.begin();
+    }
+    auto end() const {
+        return elements.end();
+    }
+
     void addElements(std::vector<const Value*>& es) noexcept(false) {
         // Test that the size matches the current type's:
         unsigned tsize = getSize();
@@ -166,7 +179,39 @@ public:
         return type.getFields().size();
     }
 
-    void print(std::stringstream& dst, unsigned indents = 0) const override {
-        assert(false); // unimplemented!
+    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
+        bool noNested = true;
+        for (const auto& element: elements)
+            noNested &= !element->isNested();
+        const std::vector<std::string>& names = type.getNames();
+
+        if (noNested) {
+            dst << "{ ";
+            bool first = true;
+            for (unsigned i = 0; i < elements.size(); ++i) {
+                const auto& element = elements[i];
+                if (first)
+                    first = false;
+                else
+                    dst << ", ";
+                if (!names[i].empty())
+                    dst << names[i] << " = ";
+                element->print(dst, indents + 1);
+            }
+            dst << " }";
+        } else {
+            // If at least one element is nested, put each on its own line
+            dst << '{';
+            for (unsigned i = 0; i < elements.size(); ++i) {
+                const auto& element = elements[i];
+                newline(dst, indents + 1);
+                if (!names[i].empty())
+                    dst << names[i] << " = ";
+                element->print(dst, indents + 1);
+                dst << ',';
+            }
+            newline(dst, indents);
+            dst << '}';
+        }
     }
 };
