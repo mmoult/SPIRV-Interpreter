@@ -30,7 +30,7 @@ enum class IdValidity {
 IdValidity is_ident(char c, bool first) {
     if ((c >= 'A' && c <= 'Z') || c == '_' || (c >= 'a' && c <= 'z'))
         return IdValidity::VALID;
-    if (!first && (c >= '0' && c <= '9'))
+    if (!first && ((c >= '0' && c <= '9') || c == '.'))
         return IdValidity::VALID;
     if (std::isspace(c))
         return IdValidity::BREAK;
@@ -459,6 +459,7 @@ public:
             const std::string* pline = &*begin;
 
             std::string name = "";
+            bool seen_name = false;
             bool equals = false;
             bool val_end = false;
             for (unsigned i = 0; i < pline->length(); ++i) {
@@ -468,7 +469,7 @@ public:
                     continue;
                 else if (c == '#')
                     break; // begin of line comment, skip rest of line
-                else if (c == '=' && !name.empty()) {
+                else if (c == '=' && seen_name) {
                     if (equals) {
                         std::cerr << "Found another = when TOML value expected instead!" << std::endl;
                         return false;
@@ -481,7 +482,7 @@ public:
                         return false;
                     }
                     // The character is not a separator, so it must be a name or a value
-                    else if (name.empty()) { // need name
+                    else if (!seen_name) { // need name
                         if (is_ident(c, true) == IdValidity::VALID) {
                             unsigned start = i++;
                             for (; i < line.length(); i++) {
@@ -499,6 +500,7 @@ public:
                             }
                             after_loop:
                             name = line.substr(start, i - start);
+                            seen_name = true;
                             // Re-handle the character which signaled a break
                             --i;
                         } else {

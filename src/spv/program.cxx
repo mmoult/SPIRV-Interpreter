@@ -120,9 +120,9 @@ export namespace Spv {
 
             REQUIRE(skip(1), "Corrupted binary! Missing reserved word.");
 
+            Instruction::DecoQueue decorations(insts);
             bool entry_found = false; // whether the entry instruction has been found
             bool static_ctn = true; // whether we can construct results statically (until first OpFunction)
-            std::vector<unsigned> decorations;
             while (idx < length) {
                 // Each instruction is at least 1 word = 32 bits, where:
                 // - high bits = word count
@@ -158,20 +158,14 @@ export namespace Spv {
                     }
 
                     // Process the instruction as necessary
-                    // If it is a decoration (ie modifies a type not yet defined), save it for later
-                    if (inst.isDecoration())
-                        decorations.push_back(location);
-                    else // If it has a static result, let it execute now on the data vector
-                        inst.makeResult(data, location);
+                    // If it has a static result, let it execute now on the data vector
+                    if (!inst.queueDecoration(data, location, decorations))
+                        inst.makeResult(data, location, &decorations);
                 }
             }
 
             REQUIRE(entry_found, "Missing entry function in SPIR-V source!");
             insts[entry].ioGen(data, ins, outs);
-
-            // Finally, after all necessary data should exist, apply all decoration instructions
-            for (unsigned dec_i : decorations)
-                insts[dec_i].applyDecoration(data);
 #undef REQUIRE
         }
 
