@@ -30,6 +30,8 @@ target_sources(build
 target_sources(build
   PUBLIC
     main.cpp
-    spv/inst-result.cpp
+    spv/inst-exec.cpp
+    spv/inst-make.cpp
+    spv/inst-read.cpp
     values/type.cpp
 )

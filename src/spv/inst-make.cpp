@@ -4,7 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <bit>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
