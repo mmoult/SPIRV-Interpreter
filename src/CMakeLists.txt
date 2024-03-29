@@ -16,6 +16,8 @@ set_target_properties(build PROPERTIES OUTPUT_NAME "spirv-run")
 target_sources(build
   PUBLIC
     FILE_SET CXX_MODULES FILES
+      format/json.cxx
+      format/parse.cxx
       format/toml.cxx
       spv/data.cxx
       spv/frame.cxx

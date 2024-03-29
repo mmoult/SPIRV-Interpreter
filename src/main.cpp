@@ -7,16 +7,17 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <optional>
 #include <string>
 
 #include "values/value.hpp"
 
+import format.json;
+import format.parse;
+import format.toml;
 import program;
-import toml;
 
-constexpr auto VERSION = "0.1.1";
+constexpr auto VERSION = "0.1.2";
 
 enum ReturnCode : int {
     OK = 0,
@@ -29,21 +30,32 @@ enum ReturnCode : int {
     BAD_COMPARE = 7,
 };
 
-class Line : public std::string {};
-std::istream &operator>>(std::istream &is, Line &l) {
-    std::getline(is, l);
-    return is;
+Toml toml;
+Json json;
+ValueFormat* determineFormat(const std::string& preference, const std::string& file_name) {
+    if (file_name.ends_with(".toml"))
+        return &toml;
+    if (file_name.ends_with(".json"))
+        return &json;
+    if (preference == "toml")
+        return &toml;
+    if (preference == "json")
+        return &json;
+    assert(false);
 }
 
-ReturnCode load_file(ValueMap& values, std::string& file_name) {
+ReturnCode load_file(ValueMap& values, std::string& file_name, const std::string& preference) {
     // Parse the variables in file
     std::ifstream ifs(file_name);
     if (!ifs.is_open()) {
         std::cerr << "Could not open file \"" << file_name << "\"!" << std::endl;
         return ReturnCode::BAD_FILE;
     }
-    if (!Toml::parse_toml(values, std::istream_iterator<Line>(ifs), std::istream_iterator<Line>())) {
-        // Expect toml parser to give us an error message.
+    ValueFormat* format = determineFormat(preference, file_name);
+    try {
+        format->parseFile(values, ifs);
+    } catch(const std::exception& e) {
+        std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }
     return ReturnCode::OK;
@@ -51,6 +63,7 @@ ReturnCode load_file(ValueMap& values, std::string& file_name) {
 
 int main(int argc, char* argv[]) {
     std::string itemplate, in, out, check;
+    std::string format = "toml";
     bool verbose = false;
     ValueMap inputs;
     std::optional<std::string> spv;
@@ -76,16 +89,20 @@ int main(int argc, char* argv[]) {
                 std::cout << "where 'SPV' is a path to a spv file, which must have an OpEntry instruction." << std::endl;
                 std::cout << std::endl;
                 std::cout << "Options:" << std::endl;
-                std::cout << "  -c / --check TOML     checks the output against the specified file, returning" << std::endl;
+                std::cout << "  -c / --check FILE     checks the output against the specified file, returning" << std::endl;
                 std::cout << "                        0 if equal." << std::endl;
+                std::cout << "  -f / --format         specify a default value format {\"toml\", \"json\"}. One" << std::endl;
+                std::cout << "                        available formats will be selected from the extension," << std::endl;
+                std::cout << "                        but the format is used for --set pairs or if the extension" << std::endl;
+                std::cout << "                        is not recognized. Defaults to \"toml\"." << std::endl;
                 std::cout << "  -h / --help           print this help and exit" << std::endl;
-                std::cout << "  -i / --in TOML        specify a file to fetch input from. Alternatively, input" << std::endl;
+                std::cout << "  -i / --in FILE        specify a file to fetch input from. Alternatively, input" << std::endl;
                 std::cout << "                        may be specified in key=value pairs with --set." << std::endl;
-                std::cout << "  -o / --out TOML       specify a file to output to. Defaults to stdout" << std::endl;
+                std::cout << "  -o / --out FILE       specify a file to output to. Defaults to stdout" << std::endl;
                 //std::cout << "  -p / -print           enable vebose printing" << std::endl;
                 std::cout << "  --set VAR=VAL         define input in the format of VAR=VAL pairs. May be" << std::endl;
                 std::cout << "                        given more than once." << std::endl;
-                std::cout << "  -t / --template TOML  creates a template input file with stubs for all needed" << std::endl;
+                std::cout << "  -t / --template FiLE  creates a template input file with stubs for all needed" << std::endl;
                 std::cout << "                        inputs." << std::endl;
                 std::cout << "  -v / --version        print version info and exit" << std::endl;
                 return ReturnCode::INFO;
@@ -101,6 +118,12 @@ int main(int argc, char* argv[]) {
             
             else if (arg == "-c" || arg == "--check") {
                 NEXT(check);
+            } else if (arg == "-f" || arg == "--format") {
+                NEXT(format);
+                if (format != "json" && format != "toml") {
+                    std::cerr << "Unrecognized file format: " << format << std::endl;
+                    return ReturnCode::BAD_ARGS;
+                }
             } else if (arg == "-i" || arg == "--in") {
                 NEXT(in);
             } else if (arg == "-o" || arg == "--out") {
@@ -120,9 +143,11 @@ int main(int argc, char* argv[]) {
                     return ReturnCode::BAD_ARGS;
                 }
                 // Parse the value and save in the key
-                if (!Toml::parse_toml_value(inputs, set.substr(0, split), set.substr(split))) {
-                    // Expect toml parser to give us an error message.
-                    return ReturnCode::BAD_ARGS;
+                try {
+                    determineFormat(format, "")->parseValue(inputs, set.substr(0, split), set.substr(split));
+                } catch(const std::exception& e) {
+                    std::cerr << e.what() << std::endl;
+                    return ReturnCode::BAD_PARSE;
                 }
             } else if (arg == "-t" || arg == "--template") {
                 NEXT(itemplate);
@@ -154,7 +179,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!in.empty()) {
-        auto res = load_file(inputs, in);
+        auto res = load_file(inputs, in, format);
         if (res != ReturnCode::OK)
             return res;
     }
@@ -225,7 +250,7 @@ int main(int argc, char* argv[]) {
 
     if (!check.empty()) {
         ValueMap check_map;
-        load_file(check_map, check);
+        load_file(check_map, check, format);
         if (!program.checkOutputs(check_map)) {
             std::cerr << "Output did NOT match!" << std::endl;
             return ReturnCode::BAD_COMPARE;
