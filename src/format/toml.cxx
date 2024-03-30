@@ -40,7 +40,7 @@ private:
 
     Value* parseStruct(LineHandler& handler) {
         // skip over the {, which should have been seen already
-        handler.next();
+        handler.skip(1);
         // A list of key-val pairs
         std::vector<const Value*> elements;
         std::vector<std::string> names;
@@ -64,6 +64,7 @@ private:
                     err << "Missing definition for struct memeber \"" << name << "\"!";
                     throw std::runtime_error(err.str());
                 }
+                handler.skip(1);
                 auto [_, valid2] = skipWhitespace(handler);
                 if (!valid2) {
                     std::stringstream err;
@@ -103,7 +104,7 @@ private:
 
     Value* parseArray(LineHandler& handler) {
         // skip over the [, which should have been seen already
-        handler.next();
+        handler.skip(1);
         // A list of elements to add. Unlike SPIR-V, which will tell us the type ahead of time, we
         // parse all elements then decide the type from what we see.
         std::vector<const Value*> elements;
@@ -134,7 +135,8 @@ private:
         // Now that we are done parsing, add elements and form the type:
         try {
             Type union_type = Type::unionOf(elements);
-            Array* arr = new Array(union_type, elements.size());
+            Type* ut = new Type(union_type);
+            Array* arr = new Array(*ut, elements.size());
             arr->addElements(elements);
             return arr;
         } catch(const std::exception& e) {

@@ -5,7 +5,6 @@
  */
 module;
 #include <cassert>
-#include <cmath> // for isnan
 #include <cstdint> // for uint32_t and int32_t
 #include <sstream>
 #include <stdexcept>
@@ -13,6 +12,7 @@ module;
 #include "type.hpp"
 #include "value.hpp"
 export module value.primitive;
+import util;
 
 export struct Primitive : public Value {
 
@@ -153,10 +153,7 @@ public:
         const auto& other = static_cast<const Primitive&>(val);
         switch (type.getBase()) {
         case FLOAT:
-            // Naive float comparison for the time being
-            if (std::isnan(data.fp32) && std::isnan(other.data.fp32))
-                return true; // We allow for nan to match nan in result comparison
-            return data.fp32 == other.data.fp32;
+            return Util::eq_float(data.fp32, other.data.fp32, 6);
         case UINT:
             return data.u32 == other.data.u32;
         case INT:

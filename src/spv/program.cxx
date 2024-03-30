@@ -251,10 +251,10 @@ export namespace Spv {
                         try {
                             dummy = v_type.construct();
                             dummy->copyFrom(*val);
-                            if (!dummy->equals(*var_val)) {
-                                delete dummy;
-                                return false;
-                            }
+                            bool compare = dummy->equals(*var_val);
+                            delete dummy;
+                            if (!compare)
+                                return compare;
                         } catch(const std::exception& e) {
                             if (dummy != nullptr)
                                 delete dummy;

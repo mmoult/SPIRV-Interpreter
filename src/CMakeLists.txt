@@ -24,6 +24,7 @@ target_sources(build
       spv/instruction.cxx
       spv/program.cxx
       spv/token.cxx
+      util.cxx
       values/aggregate.cxx
       values/pointer.cxx
       values/primitive.cxx

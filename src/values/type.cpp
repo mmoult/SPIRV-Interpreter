@@ -84,7 +84,22 @@ bool Type::operator==(const Type& rhs) const {
         return true;
     case DataType::ARRAY:
         return subSize == rhs.subSize && (*subElement == *(rhs.subElement));
-    // TODO struct
+    case DataType::STRUCT: {
+        // try to match all fields
+        // For each field, if a name is provided for both, it must match
+        unsigned len = subList.size();
+        if (len != rhs.subList.size())
+            return false;
+        for (unsigned i = 0; i < subList.size(); ++i) {
+            if (*subList[i] != *rhs.subList[i])
+                return false;
+            if (!(nameList[i].empty() || rhs.nameList[i].empty())) {
+                if (nameList[i] != rhs.nameList[i])
+                    return false;
+            }
+        }
+        return true;
+    }
     case DataType::FUNCTION:
         return (*subElement == *(rhs.subElement)) && subList == rhs.subList;
     case DataType::POINTER:
