@@ -54,7 +54,7 @@ ReturnCode load_file(ValueMap& values, std::string& file_name, const std::string
     ValueFormat* format = determineFormat(preference, file_name);
     try {
         format->parseFile(values, ifs);
-    } catch(const std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }
@@ -82,29 +82,31 @@ int main(int argc, char* argv[]) {
 
             // Help first, then alphabetic
             if (arg == "-h" || arg == "--help") {
-                std::cout << "spirv-run - Interpret SPIR-V shaders" << std::endl;
-                std::cout << std::endl;
-                std::cout << "Usage: spirv-run [options] SPV" << std::endl;
-                std::cout << std::endl;
-                std::cout << "where 'SPV' is a path to a spv file, which must have an OpEntry instruction." << std::endl;
-                std::cout << std::endl;
-                std::cout << "Options:" << std::endl;
-                std::cout << "  -c / --check FILE     checks the output against the specified file, returning" << std::endl;
-                std::cout << "                        0 if equal." << std::endl;
-                std::cout << "  -f / --format         specify a default value format {\"toml\", \"json\"}. One" << std::endl;
-                std::cout << "                        available formats will be selected from the extension," << std::endl;
-                std::cout << "                        but the format is used for --set pairs or if the extension" << std::endl;
-                std::cout << "                        is not recognized. Defaults to \"toml\"." << std::endl;
-                std::cout << "  -h / --help           print this help and exit" << std::endl;
-                std::cout << "  -i / --in FILE        specify a file to fetch input from. Alternatively, input" << std::endl;
-                std::cout << "                        may be specified in key=value pairs with --set." << std::endl;
-                std::cout << "  -o / --out FILE       specify a file to output to. Defaults to stdout" << std::endl;
-                //std::cout << "  -p / -print           enable vebose printing" << std::endl;
-                std::cout << "  --set VAR=VAL         define input in the format of VAR=VAL pairs. May be" << std::endl;
-                std::cout << "                        given more than once." << std::endl;
-                std::cout << "  -t / --template FiLE  creates a template input file with stubs for all needed" << std::endl;
-                std::cout << "                        inputs." << std::endl;
-                std::cout << "  -v / --version        print version info and exit" << std::endl;
+#define COUT(X) std::cout << X << std::endl;
+                COUT("spirv-run - Interpret SPIR-V shaders")
+                COUT("")
+                COUT("Usage: spirv-run [options] SPV")
+                COUT("")
+                COUT("where 'SPV' is a path to a spv file, which must have an OpEntry instruction.")
+                COUT("")
+                COUT("Options:")
+                COUT("  -c / --check FILE     checks the output against the specified file, returning")
+                COUT("                        0 if equal.")
+                COUT("  -f / --format         specify a default value format {\"toml\", \"json\"}. One")
+                COUT("                        available formats will be selected from the extension,")
+                COUT("                        but the format is used for --set pairs or if the extension")
+                COUT("                        is not recognized. Defaults to \"toml\".")
+                COUT("  -h / --help           print this help and exit")
+                COUT("  -i / --in FILE        specify a file to fetch input from. Alternatively, input")
+                COUT("                        may be specified in key=value pairs with --set.")
+                COUT("  -o / --out FILE       specify a file to output to. Defaults to stdout")
+                // COUT("  -p / -print           enable vebose printing")
+                COUT("  --set VAR=VAL         define input in the format of VAR=VAL pairs. May be")
+                COUT("                        given more than once.")
+                COUT("  -t / --template FiLE  creates a template input file with stubs for all needed")
+                COUT("                        inputs.")
+                COUT("  -v / --version        print version info and exit")
+#undef COUT
                 return ReturnCode::INFO;
             }
 
@@ -114,8 +116,8 @@ int main(int argc, char* argv[]) {
     else { \
         std::cerr << "Missing argument for flag " << arg << "!" << std::endl; \
         return ReturnCode::BAD_ARGS; \
-    } \
-            
+    }
+
             else if (arg == "-c" || arg == "--check") {
                 NEXT(check);
             } else if (arg == "-f" || arg == "--format") {
@@ -145,7 +147,7 @@ int main(int argc, char* argv[]) {
                 // Parse the value and save in the key
                 try {
                     determineFormat(format, "")->parseValue(inputs, set.substr(0, split), set.substr(split));
-                } catch(const std::exception& e) {
+                } catch (const std::exception& e) {
                     std::cerr << e.what() << std::endl;
                     return ReturnCode::BAD_PARSE;
                 }
@@ -204,7 +206,7 @@ int main(int argc, char* argv[]) {
     Spv::Program program;
     try {
         program.parse(std::bit_cast<uint8_t*>(buffer), length);
-    } catch(const std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }

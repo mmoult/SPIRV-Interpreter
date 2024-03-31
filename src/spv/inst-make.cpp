@@ -401,7 +401,11 @@ bool Spv::Instruction::makeResult(
     return true;
 }
 
-bool Spv::Instruction::makeResultGlsl(std::vector<Data>& data, unsigned location, unsigned result_at) const noexcept(false) {
+bool Spv::Instruction::makeResultGlsl(
+    std::vector<Data>& data,
+    unsigned location,
+    unsigned result_at
+) const noexcept(false) {
     // https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.pdf
     // extension opcode at operand[3]
     unsigned ext_opcode = std::get<unsigned>(operands[3].raw);

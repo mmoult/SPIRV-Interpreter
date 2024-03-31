@@ -93,7 +93,8 @@ public:
         unsigned size = elements.size();
         if (unsigned osize = other.elements.size(); osize != size) {
             std::stringstream err;
-            err << "Cannot copy from " << getTypeName() << " of a different size (" << osize << " -> " << size << ")!";
+            err << "Cannot copy from " << getTypeName() << " of a different size (" << osize << " -> " <<
+                   size << ")!";
             throw std::runtime_error(err.str());
         }
         for (unsigned i = 0; i < size; ++i)

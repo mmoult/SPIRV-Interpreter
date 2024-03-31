@@ -33,7 +33,7 @@ private:
                 }
                 continue;
             } else if (!std::isspace(c))
-                return std::tuple(c, valid);; // not whitespace!
+                return std::tuple(c, valid); // not whitespace!
             handler.skip(1);
         }
     }
@@ -139,8 +139,8 @@ private:
             Array* arr = new Array(*ut, elements.size());
             arr->addElements(elements);
             return arr;
-        } catch(const std::exception& e) {
-            for (auto* element: elements)
+        } catch (const std::exception& e) {
+            for (auto* element : elements)
                 delete element;
             throw std::runtime_error("Element parsed of incompatible type with other array elements!");
         }
@@ -215,7 +215,7 @@ private:
                 break;
             } else
                 name << c;
-            
+
             handler.skip(1);
         }
         return name.str();
@@ -271,7 +271,6 @@ protected:
     }
 
 public:
-
     void printFile(std::stringstream& out, const ValueMap& vars) override {
         //
     }

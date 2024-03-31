@@ -107,7 +107,11 @@ export namespace Spv {
         /// @param ins a list of ref indices in data pointing to in variables
         /// @param outs a list of ref indices in data pointing to out variables
         /// @return result of generation
-        void ioGen(std::vector<Data>& data, std::vector<unsigned>& ins, std::vector<unsigned>& outs) const noexcept(false) {
+        void ioGen(
+            std::vector<Data>& data,
+            std::vector<unsigned>& ins,
+            std::vector<unsigned>& outs
+        ) const noexcept(false) {
             assert(opcode == spv::OpEntryPoint);
 
             const unsigned len = data.size();
