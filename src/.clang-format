@@ -23,6 +23,7 @@ EmptyLineBeforeAccessModifier: Leave
 FixNamespaceComments: true
 InsertTrailingCommas: Wrapped
 MaxEmptyLinesToKeep: 2
+ReflowComments: true
 SpaceAfterTemplateKeyword: false
 SpaceBeforeCtorInitializerColon: false
 SpaceInEmptyBlock: false

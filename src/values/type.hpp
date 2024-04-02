@@ -41,7 +41,7 @@ class Type {
         base(base),
         subSize(sub_size),
         subElement(sub_element) {}
-    
+
     inline Type(std::vector<const Type*> sub_list, std::vector<std::string> name_list):
         base(DataType::STRUCT),
         subSize(0),

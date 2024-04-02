@@ -143,7 +143,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
     case DataType::INT: {
         if (base_str.empty())
             base_str = "Int";
-        
+
         // Shared logic for other primitives
         if (other.base == base ||
             other.base == DataType::UINT) { // UINT -> X
