@@ -101,10 +101,6 @@ public:
             elements[i]->copyFrom(*other.elements[i]);
     }
 
-    bool isNested() const override {
-        return true;
-    }
-
     bool equals(const Value& val) const override {
         if (!Value::equals(val)) // guarantees matching types
             return false;
@@ -133,35 +129,6 @@ public:
     unsigned getSize() const override {
         return type.getSize();
     }
-
-    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
-        bool noNested = true;
-        for (const auto& element: elements)
-            noNested &= !element->isNested();
-
-        if (noNested) {
-            dst << "[ ";
-            bool first = true;
-            for (const auto& element: elements) {
-                if (first)
-                    first = false;
-                else
-                    dst << ", ";
-                element->print(dst, indents + 1);
-            }
-            dst << " ]";
-        } else {
-            // If at least one element is nested, put each on its own line
-            dst << '[';
-            for (const auto& element: elements) {
-                newline(dst, indents + 1);
-                element->print(dst, indents + 1);
-                dst << ',';
-            }
-            newline(dst, indents);
-            dst << ']';
-        }
-    }
 };
 
 export class Struct : public Aggregate {
@@ -178,41 +145,5 @@ public:
 
     unsigned getSize() const override {
         return type.getFields().size();
-    }
-
-    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
-        bool noNested = true;
-        for (const auto& element: elements)
-            noNested &= !element->isNested();
-        const std::vector<std::string>& names = type.getNames();
-
-        if (noNested) {
-            dst << "{ ";
-            bool first = true;
-            for (unsigned i = 0; i < elements.size(); ++i) {
-                const auto& element = elements[i];
-                if (first)
-                    first = false;
-                else
-                    dst << ", ";
-                if (!names[i].empty())
-                    dst << names[i] << " = ";
-                element->print(dst, indents + 1);
-            }
-            dst << " }";
-        } else {
-            // If at least one element is nested, put each on its own line
-            dst << '{';
-            for (unsigned i = 0; i < elements.size(); ++i) {
-                const auto& element = elements[i];
-                newline(dst, indents + 1);
-                if (!names[i].empty())
-                    dst << names[i] << " = ";
-                element->print(dst, indents + 1);
-                dst << ',';
-            }
-            newline(dst, indents);
-            dst << '}';
-        }
     }
 };

@@ -15,6 +15,7 @@ module;
 export module format.toml;
 import format.parse;
 import value.aggregate;
+import value.pointer;
 import value.primitive;
 
 export class Toml : public ValueFormat {
@@ -270,8 +271,122 @@ protected:
         addToMap(vars, key, val);
     }
 
+    void printNameTag(std::stringstream& out, const std::string& name, unsigned indents = 0) const {
+        // Try to print the name without any quotes, but it may be needed
+        bool quote_needed = false;
+        for (unsigned i = 0; i < name.length(); ++i) {
+            if (std::isspace(name[i])) {
+                quote_needed = true;
+                break;
+            }
+        }
+        if (quote_needed)
+            out << "\"";
+        out << name;
+        if (quote_needed)
+            out << "\"";
+        out << " = ";
+    }
+
+    void printValue(std::stringstream& out, const Value& value, unsigned indents = 0) const {
+        const auto& type_base = value.getType().getBase();
+        switch (type_base) {
+        case DataType::FLOAT:
+            out << static_cast<const Primitive&>(value).data.fp32;
+            break;
+        case DataType::UINT:
+            out << static_cast<const Primitive&>(value).data.u32;
+            break;
+        case DataType::INT:
+            out << static_cast<const Primitive&>(value).data.i32;
+            break;
+        case DataType::BOOL:
+            if (static_cast<const Primitive&>(value).data.i32)
+                out << "true";
+            else
+                out << "false";
+            break;
+        case DataType::STRUCT:
+        case DataType::ARRAY: {
+            char open, close;
+            bool is_struct = type_base == DataType::STRUCT;
+            const std::vector<std::string>* names;
+            if (is_struct) {
+                open = '{';
+                close = '}';
+                names = &value.getType().getNames();
+            } else {
+                open = '[';
+                close = ']';
+            }
+            out << open;
+
+            const auto& agg = static_cast<const Aggregate&>(value);
+            // If any subelement is nested, print each on its own line
+            bool nested = false;
+            for (const auto& element: agg) {
+                if (isNested(*element)) {
+                    nested = true;
+                    break;
+                }
+            }
+
+            unsigned nindents = indents + 1;
+            if (nested) {
+                for (unsigned i = 0; i < agg.getSize(); ++i) {
+                    const auto& element = *agg[i];
+                    newline(out, nindents);
+
+                    if (is_struct)
+                        printNameTag(out, (*names)[i], nindents);
+                    printValue(out, element, nindents);
+
+                    out << ',';
+                }
+                newline(out, indents);
+            } else {
+                out << " ";
+                bool first = true;
+                for (unsigned i = 0; i < agg.getSize(); ++i) {
+                    const auto& element = *agg[i];
+                    if (first)
+                        first = false;
+                    else
+                        out << ", ";
+
+                    if (is_struct)
+                        printNameTag(out, (*names)[i], nindents);
+                    printValue(out, element, nindents);
+                }
+                out << " ";
+            }
+            out << close;
+            break;
+        }
+        case DataType::POINTER: {
+            const auto& pointer = static_cast<const Pointer&>(value);
+            out << "[" << pointer.getHead();
+            for (unsigned idx : pointer.getIndices())
+                out << ", " << idx;
+            out << "]";
+            break;
+        }
+        default: // VOID, FUNCTION
+            throw std::runtime_error("Cannot print value!");
+        }
+    }
+
+    bool isNested(const Value& val) const {
+        const auto base = val.getType().getBase();
+        return base == DataType::STRUCT || base == DataType::ARRAY || base == DataType::POINTER;
+    }
+
 public:
     void printFile(std::stringstream& out, const ValueMap& vars) override {
-        //
+        for (const auto& [name, value] : vars) {
+            printNameTag(out, name);
+            printValue(out, *value);
+            out << "\n";
+        }
     }
 };

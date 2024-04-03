@@ -17,12 +17,6 @@ class Value {
 protected:
     Type type;
 
-    void newline(std::stringstream& dst, unsigned indents) const {
-        dst << '\n';
-        for (unsigned i = 0; i < indents; ++i)
-            dst << "  ";
-    }
-
 public:
     Value(Type type): type(type) {}
     virtual ~Value() = default;
@@ -37,10 +31,6 @@ public:
         if (!new_val.getType().sameBase(getType()))
             throw std::runtime_error("Cannot copy from value of different type!");
     }
-
-    virtual void print(std::stringstream& dst, unsigned indents = 0) const = 0;
-
-    virtual bool isNested() const = 0;
 
     virtual bool equals(const Value& val) const {
         return type == val.type;

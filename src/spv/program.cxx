@@ -79,16 +79,13 @@ export namespace Spv {
             return true;
         }
 
-        void printVariables(std::stringstream& dst, const std::vector<unsigned>& vars) const {
-            bool first = true;
+        ValueMap getVariables(const std::vector<unsigned>& vars) const {
+            ValueMap ret;
             for (const auto v : vars) {
-                if (first)
-                    first = false;
-                else
-                    dst << '\n';
-                auto var = data[v].getVariable();
-                var->print(dst);
+                const auto var = data[v].getVariable();
+                ret.emplace(var->getName(), var->getVal());
             }
+            return ret;
         }
 
     public:
@@ -294,11 +291,11 @@ export namespace Spv {
             }
         }
 
-        void printInputs(std::stringstream& dst) const {
-            printVariables(dst, ins);
+        ValueMap getInputs() const {
+            return getVariables(ins);
         }
-        void printOutputs(std::stringstream& dst) const {
-            printVariables(dst, outs);
+        ValueMap getOutputs() const {
+            return getVariables(outs);
         }
     };
 };

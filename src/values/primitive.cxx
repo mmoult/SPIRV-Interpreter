@@ -121,32 +121,6 @@ public:
         type = t;
     }
 
-    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
-        switch (type.getBase()) { // copy from
-        case DataType::FLOAT:
-            dst << data.fp32;
-            break;
-        case DataType::UINT:
-            dst << data.u32;
-            break;
-        case DataType::INT:
-            dst << data.i32;
-            break;
-        case DataType::BOOL:
-            if (data.i32)
-                dst << "true";
-            else
-                dst << "false";
-            break;
-        default:
-            assert(false); // should not be possible to have another type!
-        }
-    }
-
-    bool isNested() const override {
-        return false;
-    }
-
     bool equals(const Value& val) const override {
         if (!Value::equals(val)) // guarantees matching types
             return false;

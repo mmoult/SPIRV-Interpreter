@@ -71,16 +71,6 @@ public:
     Value* getVal() {
         return val;
     }
-
-    void print(std::stringstream& dst) const {
-        if (name.empty())
-            dst << "\"\"";
-        else
-            dst << name;
-        dst << " = ";
-        val->print(dst);
-        dst << '\n';
-    }
 };
 
 export class Function {

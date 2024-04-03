@@ -85,9 +85,7 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
                     return false;
             }
 
-            if (after_dec)
-                break;
-            else {
+            if (!after_dec) {
                 // If we haven't seen a decimal, we must continue until we do (to verify that both
                 // are in the same power of 10).
                 for (++i; i < max_len; ++i) {
@@ -101,7 +99,6 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
                         break;
                     }
                 }
-                break;
             }
             return true;
         }
@@ -142,6 +139,6 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
 
     // If the compare mode was dichotomy (either X_HI or Y_HI), then encountering the end means the next character for
     // each is 0. This breaks the needed pattern.
-    return diff == CompareMode::TYPICAL || CompareMode::ZERO;
+    return diff == CompareMode::TYPICAL || diff == CompareMode::ZERO;
 }
 }; // namespace Util

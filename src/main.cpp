@@ -32,26 +32,32 @@ enum ReturnCode : int {
 
 Toml toml;
 Json json;
-ValueFormat* determineFormat(const std::string& preference, const std::string& file_name) {
-    if (file_name.ends_with(".toml"))
-        return &toml;
-    if (file_name.ends_with(".json"))
-        return &json;
-    if (preference == "toml")
-        return &toml;
-    if (preference == "json")
-        return &json;
-    assert(false);
+const unsigned NUM_FORMATS = 2;
+std::string format_names[] = {"toml", "json"};
+ValueFormat* format_vals[] = {&toml, &json};
+
+ValueFormat* determine_format(const std::string& file_name, ValueFormat* preference, bool exact = false) {
+    std::string to_match = file_name;
+    if (!exact) {
+        if (size_t dot = file_name.rfind('.'); dot != std::string::npos)
+            to_match = file_name.substr(dot + 1);
+    }
+
+    for (unsigned i = 0; i < NUM_FORMATS; ++i) {
+        if(to_match == format_names[i])
+            return format_vals[i];
+    }
+    return preference;
 }
 
-ReturnCode load_file(ValueMap& values, std::string& file_name, const std::string& preference) {
+ReturnCode load_file(ValueMap& values, std::string& file_name, ValueFormat* preference) {
     // Parse the variables in file
     std::ifstream ifs(file_name);
     if (!ifs.is_open()) {
         std::cerr << "Could not open file \"" << file_name << "\"!" << std::endl;
         return ReturnCode::BAD_FILE;
     }
-    ValueFormat* format = determineFormat(preference, file_name);
+    ValueFormat* format = determine_format(file_name, preference);
     try {
         format->parseFile(values, ifs);
     } catch (const std::exception& e) {
@@ -63,7 +69,7 @@ ReturnCode load_file(ValueMap& values, std::string& file_name, const std::string
 
 int main(int argc, char* argv[]) {
     std::string itemplate, in, out, check;
-    std::string format = "toml";
+    ValueFormat* format = &toml;
     bool verbose = false;
     ValueMap inputs;
     std::optional<std::string> spv;
@@ -92,9 +98,10 @@ int main(int argc, char* argv[]) {
                 COUT("Options:")
                 COUT("  -c / --check FILE     checks the output against the specified file, returning")
                 COUT("                        0 if equal.")
-                COUT("  -f / --format         specify a default value format {\"toml\", \"json\"}. One")
-                COUT("                        available formats will be selected from the extension,")
-                COUT("                        but the format is used for --set pairs or if the extension")
+                COUT("  -f / --format         specify a default value format {\"toml\", \"json\"}. The")
+                COUT("                        interpreter will try to assume desired format from the ")
+                COUT("                        extension of the file to read/write, but this argument is")
+                COUT("                        still useful for --set pairs, stdout, or if the extension")
                 COUT("                        is not recognized. Defaults to \"toml\".")
                 COUT("  -h / --help           print this help and exit")
                 COUT("  -i / --in FILE        specify a file to fetch input from. Alternatively, input")
@@ -121,9 +128,11 @@ int main(int argc, char* argv[]) {
             else if (arg == "-c" || arg == "--check") {
                 NEXT(check);
             } else if (arg == "-f" || arg == "--format") {
-                NEXT(format);
-                if (format != "json" && format != "toml") {
-                    std::cerr << "Unrecognized file format: " << format << std::endl;
+                std::string s_format;
+                NEXT(s_format);
+                format = determine_format(s_format, nullptr, true);
+                if (format == nullptr) {
+                    std::cerr << "Unrecognized file format: " << s_format << std::endl;
                     return ReturnCode::BAD_ARGS;
                 }
             } else if (arg == "-i" || arg == "--in") {
@@ -146,7 +155,7 @@ int main(int argc, char* argv[]) {
                 }
                 // Parse the value and save in the key
                 try {
-                    determineFormat(format, "")->parseValue(inputs, set.substr(0, split), set.substr(split));
+                    format->parseValue(inputs, set.substr(0, split), set.substr(split));
                 } catch (const std::exception& e) {
                     std::cerr << e.what() << std::endl;
                     return ReturnCode::BAD_PARSE;
@@ -215,7 +224,10 @@ int main(int argc, char* argv[]) {
     if (!itemplate.empty()) {
         // Print out needed variables to file specified
         std::stringstream ss;
-        program.printInputs(ss);
+        const auto& prog_ins = program.getInputs();
+        ValueFormat* format2 = determine_format(itemplate, format);
+        format2->printFile(ss, prog_ins);
+
         std::ofstream templateFile(itemplate);
         templateFile << ss.str();
         templateFile.close();
@@ -238,16 +250,22 @@ int main(int argc, char* argv[]) {
         return ReturnCode::FAILED_EXE;
     }
 
-    // Output the result
-    std::stringstream ss;
-    program.printOutputs(ss);
-    if (out.empty() && check.empty()) {
-        // Default to stdout, but don't print if checking is enabled
-        std::cout << ss.str() << std::flush;
-    } else {
-        std::ofstream outFile(out);
-        outFile << ss.str();
-        outFile.close();
+    // Output the result (If file output is not set, only print to stdout if checking isn't enabled)
+    if (bool out_set = !out.empty(); check.empty() || out_set) {
+        std::stringstream ss;
+        const auto& prog_outs = program.getOutputs();
+
+        if (out_set) {
+            ValueFormat* format2 = determine_format(out, format);
+            format2->printFile(ss, prog_outs);
+
+            std::ofstream outFile(out);
+            outFile << ss.str();
+            outFile.close();
+        } else {
+            format->printFile(ss, prog_outs);
+            std::cout << ss.str() << std::flush;
+        }
     }
 
     if (!check.empty()) {

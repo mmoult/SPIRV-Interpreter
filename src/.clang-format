@@ -27,4 +27,5 @@ ReflowComments: true
 SpaceAfterTemplateKeyword: false
 SpaceBeforeCtorInitializerColon: false
 SpaceInEmptyBlock: false
+SpacesBeforeTrailingComments: 2
 ...

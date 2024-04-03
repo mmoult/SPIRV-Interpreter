@@ -33,6 +33,9 @@ public:
     unsigned getHead() const {
         return head;
     }
+    const std::vector<unsigned>& getIndices() const {
+        return indices;
+    }
 
     Value* dereference(Value& start) noexcept(false) {
         Value* res = &start;
@@ -52,17 +55,6 @@ public:
             // Repeat the process for all indices
         }
         return res;
-    }
-
-    virtual void print(std::stringstream& dst, unsigned indents = 0) const override {
-        dst << "[ " << head;
-        for (unsigned u: indices)
-            dst << ", " << u;
-        dst << " ]";
-    }
-
-    bool isNested() const override {
-        return true;
     }
 
     bool equals(const Value& val) const override {
