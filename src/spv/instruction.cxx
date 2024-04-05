@@ -96,45 +96,41 @@ public:
     /// @param words a vector of words which holds the necesary arguments for the instruction
     /// @return a pointer to the instruction created. This is a convenience, where the pointer returned is the
     ///         last instruction in the insts vector.
-    static Instruction* makeOp(
+    static Instruction* readOp(
         std::vector<Instruction>& insts,
         uint16_t opcode,
         std::vector<uint32_t>& words
     ) noexcept(false);
 
-    /// @brief Sorts input and output variables given by this OpEntry into the provided vectors
+    /// @brief Lets the instruction add its variable to input and/or output lists
     /// @param data list of data to access for determining the storage class of each variable
     /// @param ins a list of ref indices in data pointing to in variables
     /// @param outs a list of ref indices in data pointing to out variables
-    /// @return result of generation
     void ioGen(std::vector<Data>& data, std::vector<unsigned>& ins, std::vector<unsigned>& outs) const noexcept(false) {
-        assert(opcode == spv::OpEntryPoint);
+        assert(opcode == spv::OpVariable);
 
         const unsigned len = data.size();
-        // Operands 3+ are the interface variables
-        for (unsigned i = 3; i < operands.size(); ++i) {
-            unsigned id = checkRef(i, len);
-            auto* var = data[id].getVariable();
-            if (var == nullptr) { // interface refs must be variables
-                std::stringstream error;
-                error << "Found interface reference, %" << id << ", which is not a variable!";
-                throw std::runtime_error(error.str());
-            }
+        Variable* var = getVariable(1, data);
+        unsigned id = std::get<unsigned>(operands[1].raw);
+        assert(var != nullptr);  // should have already been created
 
-            using SC = spv::StorageClass;
-            switch (var->getStorageClass()) {
-            case SC::StorageClassUniformConstant:
-            case SC::StorageClassInput:
-            case SC::StorageClassUniform:
-                ins.push_back(id);
-                break;
-            case SC::StorageClassOutput:
-                outs.push_back(id);
-                break;
-            default:
-                // TODO: it is likely there are other valid storage classes I have omitted above
-                throw std::runtime_error("Invalid storage class for interface variable!");
-            }
+        using SC = spv::StorageClass;
+        switch (var->getStorageClass()) {
+        case SC::StorageClassUniformConstant:
+        case SC::StorageClassInput:
+            ins.push_back(id);
+            break;
+        case SC::StorageClassUniform:
+            ins.push_back(id);
+            outs.push_back(id);
+            break;
+        case SC::StorageClassOutput:
+            outs.push_back(id);
+            break;
+        default:
+            // for now, the above cover all the interface storage classes
+            // There are other storage classes like Function, but they don't need to be used in io generation
+            break;
         }
     }
 

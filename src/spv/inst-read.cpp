@@ -61,7 +61,7 @@ void handleTypes(
     }
 }
 
-Spv::Instruction* Spv::Instruction::makeOp(
+Spv::Instruction* Spv::Instruction::readOp(
     std::vector<Spv::Instruction>& insts,
     uint16_t opcode,
     std::vector<uint32_t>& words
@@ -156,10 +156,17 @@ Spv::Instruction* Spv::Instruction::makeOp(
         to_load.push_back(Type::UINT);
         break;
     case spv::OpTypeArray: // 28
+    case spv::OpFAdd: // 129
+    case spv::OpFSub: // 131
+    case spv::OpFMul: // 133
+    case spv::OpVectorTimesScalar: // 142
+    case spv::OpLogicalOr: // 166
+    case spv::OpFOrdLessThan: // 184
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeRuntimeArray: // 29
+    case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
         to_load.push_back(Type::REF);
         break;
@@ -167,8 +174,6 @@ Spv::Instruction* Spv::Instruction::makeOp(
     case spv::OpTypeFunction: // 33
     case spv::OpConstantComposite: // 44
     case spv::OpCompositeConstruct: // 80
-    case spv::OpFAdd: // 129
-    case spv::OpVectorTimesScalar: // 142
         to_load.push_back(Type::REF);
         optional.push_back(Type::REF);
         repeating = true;
@@ -223,6 +228,17 @@ Spv::Instruction* Spv::Instruction::makeOp(
         to_load.push_back(Type::UINT);
         optional.push_back(Type::UINT);
         repeating = true;
+        break;
+    case spv::OpSelectionMerge: // 247
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::CONST);
+        break;
+    case spv::OpBranchConditional: // 250
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        optional.push_back(Type::UINT);
+        optional.push_back(Type::UINT);
         break;
     }
 

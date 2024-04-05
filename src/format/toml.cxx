@@ -273,7 +273,7 @@ protected:
 
     void printNameTag(std::stringstream& out, const std::string& name, unsigned indents = 0) const {
         // Try to print the name without any quotes, but it may be needed
-        bool quote_needed = false;
+        bool quote_needed = name.empty();
         for (unsigned i = 0; i < name.length(); ++i) {
             if (std::isspace(name[i])) {
                 quote_needed = true;
@@ -322,43 +322,45 @@ protected:
             out << open;
 
             const auto& agg = static_cast<const Aggregate&>(value);
-            // If any subelement is nested, print each on its own line
-            bool nested = false;
-            for (const auto& element: agg) {
-                if (isNested(*element)) {
-                    nested = true;
-                    break;
+            if (agg.getSize() > 0) {
+                // If any subelement is nested, print each on its own line
+                bool nested = false;
+                for (const auto& element: agg) {
+                    if (isNested(*element)) {
+                        nested = true;
+                        break;
+                    }
                 }
-            }
 
-            unsigned nindents = indents + 1;
-            if (nested) {
-                for (unsigned i = 0; i < agg.getSize(); ++i) {
-                    const auto& element = *agg[i];
-                    newline(out, nindents);
+                unsigned nindents = indents + 1;
+                if (nested) {
+                    for (unsigned i = 0; i < agg.getSize(); ++i) {
+                        const auto& element = *agg[i];
+                        newline(out, nindents);
 
-                    if (is_struct)
-                        printNameTag(out, (*names)[i], nindents);
-                    printValue(out, element, nindents);
+                        if (is_struct)
+                            printNameTag(out, (*names)[i], nindents);
+                        printValue(out, element, nindents);
 
-                    out << ',';
+                        out << ',';
+                    }
+                    newline(out, indents);
+                } else {
+                    out << " ";
+                    bool first = true;
+                    for (unsigned i = 0; i < agg.getSize(); ++i) {
+                        const auto& element = *agg[i];
+                        if (first)
+                            first = false;
+                        else
+                            out << ", ";
+
+                        if (is_struct)
+                            printNameTag(out, (*names)[i], nindents);
+                        printValue(out, element, nindents);
+                    }
+                    out << " ";
                 }
-                newline(out, indents);
-            } else {
-                out << " ";
-                bool first = true;
-                for (unsigned i = 0; i < agg.getSize(); ++i) {
-                    const auto& element = *agg[i];
-                    if (first)
-                        first = false;
-                    else
-                        out << ", ";
-
-                    if (is_struct)
-                        printNameTag(out, (*names)[i], nindents);
-                    printValue(out, element, nindents);
-                }
-                out << " ";
             }
             out << close;
             break;
@@ -383,10 +385,16 @@ protected:
 
 public:
     void printFile(std::stringstream& out, const ValueMap& vars) override {
+        bool first = true;
         for (const auto& [name, value] : vars) {
+            if (first)
+                first = false;
+            else
+                out << '\n';
+
             printNameTag(out, name);
             printValue(out, *value);
-            out << "\n";
+            out << '\n';
         }
     }
 };

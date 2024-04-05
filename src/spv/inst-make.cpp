@@ -36,6 +36,57 @@ const std::vector<unsigned>* findRequest(Spv::Instruction::DecoQueue* queue, uns
     return nullptr;
 }
 
+struct OpSrc {
+    Value* val1;
+    Value* val2;
+    DataType type;
+};
+struct OpDst {
+    Type* res;
+    unsigned at;
+};
+template<typename F> // (const Primitive*, const Primitive* -> data primitive)
+void elementBinOp(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, F&& op) {
+    // Operate on two float arrays or two floats
+    const Type& type1 = srcs.val1->getType();
+    const Type& type2 = srcs.val2->getType();
+    if (!type1.sameBase(type2))
+        throw std::runtime_error("Cannot use operands of different bases!");
+    std::vector<Primitive> prims;
+    std::vector<const Value*> pprims;
+
+    if (type1.getBase() == DataType::ARRAY) {
+        if (type1.getElement().getBase() != srcs.type)
+            throw std::runtime_error("Cannot do binary operation on other-typed arrays!");
+        const Array& op1 = *static_cast<const Array*>(srcs.val1);
+        const Array& op2 = *static_cast<const Array*>(srcs.val2);
+        if (op1.getSize() != op2.getSize())
+            throw std::runtime_error("Cannot do binary operation on arrays of different size!");
+        unsigned asize = op1.getSize();
+        prims.reserve(asize);
+        pprims.reserve(asize);
+        for (unsigned i = 0; i < asize; ++i) {
+            auto result = op(
+                static_cast<const Primitive*>(op1[i]),
+                static_cast<const Primitive*>(op2[i])
+            );
+            prims.emplace_back(result);
+            pprims.push_back(&prims[i]);
+        }
+    } else {
+        if (type1.getBase() != srcs.type)
+            throw std::runtime_error("Cannot do binary operation on other-typed elements!");
+        const Primitive* op1 = static_cast<const Primitive*>(srcs.val1);
+        const Primitive* op2 = static_cast<const Primitive*>(srcs.val2);
+        auto result = op(op1, op2);
+        prims.emplace_back(result);
+        pprims.push_back(&prims[0]);
+    }
+
+    Value* res = dst.res->construct(pprims);
+    data[dst.at].redefine(res);
+}
+
 bool Spv::Instruction::makeResult(
     std::vector<Data>& data,
     unsigned location,
@@ -88,6 +139,9 @@ bool Spv::Instruction::makeResult(
     case spv::OpTypeVoid: // 19
         data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
         break;
+    case spv::OpTypeBool: // 20
+        data[result_at].redefine(new Type(Type::primitive(DataType::BOOL)));
+        break;
     case spv::OpTypeInt: // 21
         assert(operands[1].type == Token::Type::UINT);
         assert(operands[2].type == Token::Type::UINT);
@@ -115,6 +169,12 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(new Type(
                 // The size must be a positive integer, so we can safely pull from u32
                 Type::array(len_val.data.u32, *sub)));
+        break;
+    }
+    case spv::OpTypeRuntimeArray: { // 29
+        Type* sub = getType(1, data);
+        // We use a length of 0 to indicate unknown
+        data[result_at].redefine(new Type(Type::array(0, *sub)));
         break;
     }
     case spv::OpTypeStruct: { // 30
@@ -322,44 +382,30 @@ bool Spv::Instruction::makeResult(
         break;
     }
     case spv::OpFAdd: { // 129
-        // Adds two float arrays or two floats
-        Value* val1 = getValue(2, data);
-        Value* val2 = getValue(3, data);
-        const Type& type1 = val1->getType();
-        const Type& type2 = val2->getType();
-        if (!type1.sameBase(type2))
-            throw std::runtime_error("Cannot add float operands of different bases!");
-        std::vector<Primitive> floats;
-        std::vector<const Value*> pfloats;
-
-        if (type1.getBase() == DataType::ARRAY) {
-            if (type1.getElement().getBase() != DataType::FLOAT)
-                throw std::runtime_error("Cannot use FAdd to add non-float arrays!");
-            const Array& op1 = *static_cast<const Array*>(val1);
-            const Array& op2 = *static_cast<const Array*>(val2);
-            if (op1.getSize() != op2.getSize())
-                throw std::runtime_error("Cannot FAdd arrays of different size!");
-            unsigned asize = op1.getSize();
-            floats.reserve(asize);
-            pfloats.reserve(asize);
-            for (unsigned i = 0; i < asize; ++i) {
-                floats.emplace_back(static_cast<const Primitive*>(op1[i])->data.fp32 + 
-                                    static_cast<const Primitive*>(op2[i])->data.fp32);
-                pfloats.push_back(&floats[i]);
-            }
-        } else {
-            // Must be a float
-            if (type1.getBase() != DataType::FLOAT)
-                throw std::runtime_error("Cannot use FAdd to add non-floats!");
-            const Primitive& op1 = *static_cast<const Primitive*>(val1);
-            const Primitive& op2 = *static_cast<const Primitive*>(val2);
-            floats.emplace_back(op1.data.fp32 + op2.data.fp32);
-            pfloats.push_back(&floats[0]);
-        }
-
-        Type* res_type = getType(0, data);
-        Value* res = res_type->construct(pfloats);
-        data[result_at].redefine(res);
+        OpSrc src{getValue(2, data), getValue(3, data), DataType::FLOAT};
+        OpDst dst{getType(0, data), result_at};
+        auto op = [](const Primitive* a, const Primitive* b) {
+            return a->data.fp32 + b->data.fp32;
+        };
+        elementBinOp(src, dst, data, op);
+        break;
+    }
+    case spv::OpFSub: { // 131
+        OpSrc src{getValue(2, data), getValue(3, data), DataType::FLOAT};
+        OpDst dst{getType(0, data), result_at};
+        auto op = [](const Primitive* a, const Primitive* b) {
+            return a->data.fp32 - b->data.fp32;
+        };
+        elementBinOp(src, dst, data, op);
+        break;
+    }
+    case spv::OpFMul: { // 133
+        OpSrc src{getValue(2, data), getValue(3, data), DataType::FLOAT};
+        OpDst dst{getType(0, data), result_at};
+        auto op = [](const Primitive* a, const Primitive* b) {
+            return a->data.fp32 * b->data.fp32;
+        };
+        elementBinOp(src, dst, data, op);
         break;
     }
     case spv::OpVectorTimesScalar: { // 142

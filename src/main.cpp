@@ -189,12 +189,6 @@ int main(int argc, char* argv[]) {
         return ReturnCode::BAD_ARGS;
     }
 
-    if (!in.empty()) {
-        auto res = load_file(inputs, in, format);
-        if (res != ReturnCode::OK)
-            return res;
-    }
-
     // Load the SPIR-V input file:
     std::ifstream ifs(spv.value(), std::ios::binary);
     if (!ifs.is_open()) {
@@ -232,6 +226,12 @@ int main(int argc, char* argv[]) {
         templateFile << ss.str();
         templateFile.close();
         return ReturnCode::INFO;
+    }
+
+    if (!in.empty()) {
+        auto res = load_file(inputs, in, format);
+        if (res != ReturnCode::OK)
+            return res;
     }
 
     // Verify that the inputs loaded match what the program expects

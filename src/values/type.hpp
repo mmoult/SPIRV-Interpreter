@@ -71,7 +71,8 @@ public:
     }
 
     /// @brief Construct an array type
-    /// @param array_size the size of the array. The number of elements
+    /// @param array_size the size of the array. The number of elements. Must be > 0 for regular arrays, == 0 for
+    ///                   runtime arrays.
     /// @param element a Type which will outlive this Type. Must not be null. Ownership is not transferred
     ///                to the constructed array- in other words, the allocator is expected to deallocate element
     ///                some time after the deallocation of this array

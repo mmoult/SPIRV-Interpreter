@@ -137,7 +137,7 @@ export namespace Spv {
                     words.push_back(word);
                 }
 
-                Instruction& inst = *(Instruction::makeOp(insts, opcode, words));
+                Instruction& inst = *(Instruction::readOp(insts, opcode, words));
                 unsigned location = insts.size() - 1;
 
                 if (static_ctn || inst.isStaticDependent()) {
@@ -156,13 +156,15 @@ export namespace Spv {
 
                     // Process the instruction as necessary
                     // If it has a static result, let it execute now on the data vector
-                    if (!inst.queueDecoration(data, location, decorations))
+                    if (!inst.queueDecoration(data, location, decorations)) {
                         inst.makeResult(data, location, &decorations);
+                        if (opcode == spv::OpVariable && static_ctn)
+                            inst.ioGen(data, ins, outs);
+                    }
                 }
             }
 
             REQUIRE(entry_found, "Missing entry function in SPIR-V source!");
-            insts[entry].ioGen(data, ins, outs);
 #undef REQUIRE
         }
 
