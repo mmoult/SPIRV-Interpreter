@@ -21,20 +21,25 @@ import value.primitive;
 export class Toml : public ValueFormat {
 
 private:
-    std::tuple<char, bool> skipWhitespace(LineHandler& handler) const {
+    /// @brief Skips whitespace until the next newline character
+    /// Note that newlines can be syntactically relevant to end the key-value pair
+    /// @param handler to parse from
+    /// @return (char, valid) of next non-whitespace or newline
+    std::tuple<char, bool> skipWhitespace(LineHandler& handler, bool breakAtNewline = false) const {
         while (true) {
             auto [c, valid] = handler.peek();
             if (!valid)
                 return std::tuple(c, valid);
             else if (c == '#') { // comment until end of line
-                while (c != '\n' && valid) {
+                while (valid && c != '\n') {
                     auto res = handler.next();
                     c = std::get<0>(res);
                     valid = std::get<1>(res);
                 }
-                continue;
-            } else if (!std::isspace(c))
-                return std::tuple(c, valid); // not whitespace!
+                if (breakAtNewline)
+                    return std::tuple(c, valid);
+            } else if (!std::isspace(c) || (breakAtNewline && c == '\n'))
+                return std::tuple(c, valid); // semantically relevant character
             handler.skip(1);
         }
     }
@@ -77,7 +82,7 @@ private:
                 names.push_back("");
 
             // Parse out an element
-            const Value* element = parse(handler);
+            const Value* element = parseValue(handler);
             elements.push_back(element);
 
             // Allow comma after each element (even after final element)
@@ -121,7 +126,7 @@ private:
             }
 
             // Parse out an element
-            const Value* element = parse(handler);
+            const Value* element = parseValue(handler);
             elements.push_back(element);
 
             // Allow comma after each element (even after final element)
@@ -145,34 +150,6 @@ private:
                 delete element;
             throw std::runtime_error("Element parsed of incompatible type with other array elements!");
         }
-    }
-
-    Value* parse(LineHandler& handler) {
-        // 1. number (which may begin with +, -, or .) or may be inf or nan
-        // 2. bool (true or false)
-        // 3. array (using [] syntax)
-        // 4. struct (using {member = value} syntax)
-        // Strings and dates (in TOML spec) not supported
-        while (true) {
-            auto [c, valid] = skipWhitespace(handler);
-            if (!valid)
-                break;
-
-            if (c == '[')
-                return parseArray(handler);
-            else if (c == '{')
-                return parseStruct(handler);
-
-            // Note: true, false, inf, nan are forbidden field names
-            else if (handler.matchId("true"))
-                return new Primitive(true);
-            else if (handler.matchId("false"))
-                return new Primitive(false);
-
-            // If it isn't an array, struct, or bool, it must be a number!
-            return parseNumber(handler);
-        }
-        throw std::runtime_error("Missing value!");
     }
 
     std::string parseName(LineHandler& handler) const {
@@ -222,53 +199,21 @@ private:
         return name.str();
     }
 
-protected:
-    void verifyBlank(LineHandler& handler) noexcept(false) override {
-        // Used when the value to parse has already been finalized. Should only find whitespace or
-        // comment(s) remaining before newline or invalid
+    void verifyBlank(LineHandler& handler, bool breakAtNewline) {
         while (true) {
-            auto [c, valid] = handler.peek();
-            if (!valid || c == '#' || c == '\n')
+            auto [c, valid] = skipWhitespace(handler, breakAtNewline);
+            handler.skip();
+            if (!valid)
                 break;
-            else if (!std::isspace(c)) {
+            else if (c == '\n') {
+                // Should only be triggered if break at newline true
+                break;
+            } else if (!std::isspace(c)) {
                 std::stringstream err;
                 err << "Unexpected character (" << c << ") found after value!";
                 throw std::runtime_error(err.str());
             }
-            handler.skip(1);
         }
-    }
-
-    void parseFile(ValueMap& vars, LineHandler& handler) override {
-        while (true) {
-            auto [c, valid] = skipWhitespace(handler);
-            if (!valid)
-                break;
-
-            // Expect an identifier
-            std::string name = parseName(handler);
-
-            // After the name, look for =
-            auto [c1, valid1] = skipWhitespace(handler);
-            if (c1 != '=' || !valid1) {
-                std::stringstream err;
-                err << "Missing '=' in definition of variable \"" << name << "\"!";
-                throw std::runtime_error(err.str());
-            }
-            handler.skip(1);
-
-            // Lastly, determine the type of the value
-            parseValue(vars, name, handler);
-
-            // Verify that there is nothing else before EOL
-            verifyBlank(handler);
-        }
-        // Empty file is permissible.
-    }
-
-    void parseValue(ValueMap& vars, std::string& key, LineHandler& handle) noexcept(false) override {
-        Value* val = parse(handle);
-        addToMap(vars, key, val);
     }
 
     void printNameTag(std::stringstream& out, const std::string& name, unsigned indents = 0) const {
@@ -381,6 +326,71 @@ protected:
     bool isNested(const Value& val) const {
         const auto base = val.getType().getBase();
         return base == DataType::STRUCT || base == DataType::ARRAY || base == DataType::POINTER;
+    }
+
+protected:
+    Value* parseValue(LineHandler& handler) noexcept(false) override {
+        // 1. number (which may begin with +, -, or .) or may be inf or nan
+        // 2. bool (true or false)
+        // 3. array (using [] syntax)
+        // 4. struct (using {member = value} syntax)
+        // Strings and dates (in TOML spec) not supported
+        while (true) {
+            auto [c, valid] = skipWhitespace(handler);
+            if (!valid)
+                break;
+
+            if (c == '[')
+                return parseArray(handler);
+            else if (c == '{')
+                return parseStruct(handler);
+
+            // Note: true, false, inf, nan are forbidden field names
+            else if (handler.matchId("true"))
+                return new Primitive(true);
+            else if (handler.matchId("false"))
+                return new Primitive(false);
+
+            // If it isn't an array, struct, or bool, it must be a number!
+            return parseNumber(handler);
+        }
+        throw std::runtime_error("Missing value!");
+    }
+
+    void verifyBlank(LineHandler& handler) noexcept(false) override {
+        verifyBlank(handler, false);
+    }
+
+    void parseFile(ValueMap& vars, LineHandler& handler) override {
+        while (true) {
+            auto [c, valid] = skipWhitespace(handler);
+            if (!valid)
+                break;
+            if (c == '\n') {
+                handler.skip();
+                continue;
+            }
+
+            // Expect an identifier
+            std::string name = parseName(handler);
+
+            // After the name, look for =
+            auto [c1, valid1] = skipWhitespace(handler);
+            if (c1 != '=' || !valid1) {
+                std::stringstream err;
+                err << "Missing '=' in definition of variable \"" << name << "\"!";
+                throw std::runtime_error(err.str());
+            }
+            handler.skip(1);
+
+            // Lastly, determine the type of the value
+            Value* val = parseValue(handler);
+            addToMap(vars, name, val);
+
+            // Verify that there is nothing else before EOL
+            verifyBlank(handler, true);
+        }
+        // Empty file is permissible.
     }
 
 public:

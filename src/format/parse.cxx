@@ -90,6 +90,8 @@ protected:
             }
         }
 
+        /// @brief Returns the next character (with its validity) and moves the string pointer to the next
+        /// @return (character, is_valid)
         MayChar next() {
             MayChar res = peek();
             ++idx;
@@ -137,7 +139,7 @@ protected:
             return std::tuple(pLine, idx);
         }
 
-        void skip(unsigned delta) {
+        void skip(unsigned delta = 1) {
             idx += delta;
         }
         void setIdx(unsigned i) {
@@ -164,16 +166,12 @@ protected:
         }
     };
 
-    virtual void parseValue(ValueMap& vars, std::string& key, LineHandler& handle) = 0;
-
-    virtual void parseFile(ValueMap& vars, LineHandler& handler) = 0;
-
-    virtual void verifyBlank(LineHandler& handle) = 0;
-
+    /// @brief Prints a newline character then the number of spaces needed for desired indentation
+    /// @param out the stream to write to
+    /// @param indents the number of indentations, where each indentation is two spaces
     void newline(std::stringstream& out, unsigned indents) const {
-        out << '\n';
-        for (unsigned i = 0; i < indents; ++i)
-            out<< "  ";
+        const unsigned INDENT_WIDTH = 2;
+        out << '\n' << std::string(INDENT_WIDTH * indents, ' ');
     }
 
     /// @brief Parse a number from the given index in the provided line
@@ -337,6 +335,10 @@ protected:
         }
     }
 
+    /// @brief Adds the key-value pair to the map, throwing an error if the key has already been mapped
+    /// @param vars variables to add this key-value pair to
+    /// @param key the name of the value
+    /// @param val the value associated with the given key
     void addToMap(ValueMap& vars, std::string key, Value* val) const {
         // If the map already has the key, we have a problem
         if (vars.contains(key)) {
@@ -346,6 +348,21 @@ protected:
         }
         vars[key] = val;
     }
+
+    /// @brief Parse the value associated with the given key and save it into the map of values
+    /// @param vars variables to save to- a map of names to values
+    /// @param handle a handler to parse the value from
+    virtual Value* parseValue(LineHandler& handle) = 0;
+
+    /// @brief Parse all key-value pairs given in the file. Save each into the map of values
+    /// @param vars variables to save to- a map of names to values
+    /// @param handler a handler to parse the value from
+    virtual void parseFile(ValueMap& vars, LineHandler& handler) = 0;
+
+    /// @brief Throw error if any characters before the parse end (signalled by an invalid character) are non-space.
+    /// Called after the completion of parseValue for single-string inputs. May also be called by other class methods.
+    /// @param handler the line handler used to parse from
+    virtual void verifyBlank(LineHandler& handle) = 0;
 
 public:
     /// @brief Parse values from the given file
@@ -362,7 +379,8 @@ public:
     void parseValue(ValueMap& vars, std::string key, std::string val) noexcept(false) {
         const std::string* pVal = &val; // need an r-value pointer even though the value should not change
         LineHandler handle(pVal, 0, nullptr);
-        parseValue(vars, key, handle);
+        Value* value = parseValue(handle);
+        addToMap(vars, key, value);
         verifyBlank(handle); // Verify there is only whitespace or comments after
     }
 
