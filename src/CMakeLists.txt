@@ -4,16 +4,10 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 cmake_minimum_required(VERSION 3.28)
 
-project(SPIRV-Interpreter CXX)
-
-# Set the version of C++ for the project
-set(CMAKE_CXX_STANDARD 20)
-
-add_executable(build)
-set_target_properties(build PROPERTIES OUTPUT_NAME "spirv-run")
+add_library(spv-interp)
 
 # Add module interface files
-target_sources(build
+target_sources(spv-interp
   PUBLIC
     FILE_SET CXX_MODULES FILES
       format/json.cxx
@@ -30,11 +24,14 @@ target_sources(build
       values/primitive.cxx
 )
 # Add other source files
-target_sources(build
+target_sources(spv-interp
   PUBLIC
-    main.cpp
     spv/inst-exec.cpp
     spv/inst-make.cpp
     spv/inst-read.cpp
     values/type.cpp
 )
+
+add_executable(spv-run main.cpp)
+set_target_properties(spv-run PROPERTIES OUTPUT_NAME "spirv-run")
+target_link_libraries(spv-run spv-interp)

@@ -7,7 +7,7 @@ import os
 
 # Check that the interpreter has been built
 test_path = os.path.dirname(__file__)
-interp_path = os.path.abspath(os.path.join(test_path, "..", "build", "spirv-run"))
+interp_path = os.path.abspath(os.path.join(test_path, "..", "build", "src", "spirv-run"))
 if not os.path.isfile(interp_path):
     print("Could not find interpreter! Is it built?")
     print("Looking at:", interp_path)
