@@ -91,6 +91,7 @@ public:
         // Do the actual copy now
         const Aggregate& other = static_cast<const Aggregate&>(new_val);
         unsigned size = elements.size();
+
         if (unsigned osize = other.elements.size(); osize != size) {
             std::stringstream err;
             err << "Cannot copy from " << getTypeName() << " of a different size (" << osize << " -> " <<
@@ -127,7 +128,27 @@ public:
     Array(const Type& sub_element, unsigned size): Aggregate(Type::array(size, sub_element)) {}
 
     unsigned getSize() const override {
-        return type.getSize();
+        unsigned tsize = type.getSize();
+        if (tsize == 0)
+            return elements.size();
+        return tsize;
+    }
+
+    void copyFrom(const Value& new_val) noexcept(false) override {
+        Value::copyFrom(new_val);
+        // Runtime arrays have size 0 by default. If this size is 0, then we assume the correct length from what is
+        // given now. Afterward, this should no longer have 0 length
+        if (elements.empty()) {
+            const Array& other = static_cast<const Array&>(new_val);
+            unsigned osize = other.elements.size();
+            // Initialize an element for each element in other to copy to
+            const Type& e_type = type.getElement();
+            for (unsigned i = 0; i < osize; ++i) {
+                Value* val = e_type.construct();
+                elements.push_back(val);
+            }
+        }
+        Aggregate::copyFrom(new_val);
     }
 };
 

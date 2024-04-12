@@ -271,11 +271,18 @@ int main(int argc, char* argv[]) {
     if (!check.empty()) {
         ValueMap check_map;
         load_file(check_map, check, format);
-        if (!program.checkOutputs(check_map)) {
+        auto [ok, total_tests] = program.checkOutputs(check_map);
+        if (!ok) {
             std::cerr << "Output did NOT match!" << std::endl;
             return ReturnCode::BAD_COMPARE;
         } else
-            std::cout << "Outputs match!" << std::endl;
+            // Print the number of variables checked to know whether it was a trivial pass
+            std::cout << total_tests;
+            if (total_tests == 1)
+                std::cout << " output matches!";
+            else
+                std::cout << " outputs match!";
+            std::cout << std::endl;
 
         for (const auto& [_, val] : check_map)
             delete val;

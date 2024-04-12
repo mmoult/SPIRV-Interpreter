@@ -98,6 +98,16 @@ bool Spv::Instruction::makeResult(
     // Result type comes before result, if present
     unsigned result_at = checkRef(hasResultType, data.size());
 
+#define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
+    OpSrc src{getValue(2, data), getValue(3, data), DataType::E_TYPE}; \
+    OpDst dst{getType(0, data), result_at}; \
+    auto op = [](const Primitive* a, const Primitive* b) { \
+        return BIN_OP; \
+    }; \
+    elementBinOp(src, dst, data, op); \
+    break; \
+}
+
     switch (opcode) {
     default: {
         std::stringstream err;
@@ -381,33 +391,12 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(to_ret);
         break;
     }
-    case spv::OpFAdd: { // 129
-        OpSrc src{getValue(2, data), getValue(3, data), DataType::FLOAT};
-        OpDst dst{getType(0, data), result_at};
-        auto op = [](const Primitive* a, const Primitive* b) {
-            return a->data.fp32 + b->data.fp32;
-        };
-        elementBinOp(src, dst, data, op);
-        break;
-    }
-    case spv::OpFSub: { // 131
-        OpSrc src{getValue(2, data), getValue(3, data), DataType::FLOAT};
-        OpDst dst{getType(0, data), result_at};
-        auto op = [](const Primitive* a, const Primitive* b) {
-            return a->data.fp32 - b->data.fp32;
-        };
-        elementBinOp(src, dst, data, op);
-        break;
-    }
-    case spv::OpFMul: { // 133
-        OpSrc src{getValue(2, data), getValue(3, data), DataType::FLOAT};
-        OpDst dst{getType(0, data), result_at};
-        auto op = [](const Primitive* a, const Primitive* b) {
-            return a->data.fp32 * b->data.fp32;
-        };
-        elementBinOp(src, dst, data, op);
-        break;
-    }
+    case spv::OpFAdd: // 129
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 + b->data.fp32);
+    case spv::OpFSub: // 131
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 - b->data.fp32);
+    case spv::OpFMul: // 133
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 * b->data.fp32);
     case spv::OpVectorTimesScalar: { // 142
         Value* vec_val = getValue(2, data);
         const Type& vec_type = vec_val->getType();
@@ -439,6 +428,26 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(res);
         break;
     }
+    case spv::OpLogicalEqual: // 164
+        TYPICAL_E_BIN_OP(BOOL, a->data.b32 == b->data.b32);
+    case spv::OpLogicalNotEqual: // 165
+        TYPICAL_E_BIN_OP(BOOL, a->data.b32 != b->data.b32);
+    case spv::OpLogicalOr: // 166
+        TYPICAL_E_BIN_OP(BOOL, a->data.b32 || b->data.b32);
+    case spv::OpLogicalAnd: // 167
+        TYPICAL_E_BIN_OP(BOOL, a->data.b32 && b->data.b32);
+    case spv::OpFOrdEqual: // 180
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 == b->data.fp32);
+    case spv::OpFOrdNotEqual: // 182
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 != b->data.fp32);
+    case spv::OpFOrdLessThan: // 184
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 < b->data.fp32);
+    case spv::OpFOrdGreaterThan: // 186
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 > b->data.fp32);
+    case spv::OpFOrdLessThanEqual: // 188
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 <= b->data.fp32);
+    case spv::OpFOrdGreaterThanEqual: // 190
+        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 >= b->data.fp32);
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;

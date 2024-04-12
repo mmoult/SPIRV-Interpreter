@@ -3,27 +3,38 @@
 An interpreter for SPIR-V shaders/kernels. Outputs the result after running the program on the given inputs.
 
 ## Features
-- Support for vertex, fragment, ... shaders
-- Specify inputs in TOML, with other formats coming soon
+- Support for vertex, fragment, compute, ... shaders
+- Specify inputs and print outputs in TOML, with other formats coming soon
 - Can generate template file for expected inputs
 - Option to check against expected results
 - Verbose trace of program execution (coming soon)
-- 3 test examples, and counting
+- 4 test examples, and counting
 
 ## Use
-The source of SPIRV-Interpreter follows the C++20 standard and uses modules. It can be built with CMake version 3.28 or
-higher. For example, you can do:
+This project aims to support the most recent versions of the full
+[SPIR-V specification](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html). It generally expects
+syntactically-correct SPIR-V files. It is not, nor does it intend to be, a SPIR-V validator. If that is what you need,
+use `spirv-val` in [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). If the input SPIR-V file is syntactically
+incorrect, the behavior of interpretation is undefined. This should not be a problem since most SPIR-V is
+auto-generated.
+
+Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
+
+## Building
+The source can be built with CMake version 3.28 or higher using a compiler which supports C++20 with modules (such as
+clang++ version 18 or g++ version ?). The source should be platform independent, but little to no testing has been done
+on Windows or Mac.
+
+Here are a couple example commands to run from the repository's root directory:
 
 ```
 cmake -B build -S . -G Ninja
 ninja -C build all
 ```
 
-from the root directory, assuming you have [cmake](https://github.com/Kitware/CMake) and
-[ninja](https://github.com/ninja-build/ninja) installed.
+assuming you have [cmake](https://github.com/Kitware/CMake) and [ninja](https://github.com/ninja-build/ninja) installed.
 
-After building, you should see the `spirv-run` executable at `build/src/spirv-run`.  Use `-h` or `--help` on the
-executable to see command line arguments and flags.
+After building, you should find the `spirv-run` executable at `build/src/spirv-run`.
 
 ## Testing
 The project has two complementary approaches to testing:
@@ -40,7 +51,7 @@ If you wish to run the unit tests, first verify that the submodule has been init
 git submodule update ---init --recursive
 ```
 
-then follow the steps to build, but include `-DBUILD_TESTING=ON` as an argument to cmake. After building, you should
+then follow the steps to build, also including `-DBUILD_TESTING=ON` as an argument to cmake. After building, you should
 find a `tests` executable at `build/test/tests`.
 
 ## Contributing
@@ -48,7 +59,7 @@ Contributions via merge requests are welcome! Contributions should:
 - Be provided under the same license as the project (MPL 2.0).
 - Follow the coding style. We recommend using clang-format (see [.clang-format](src/.clang-format)).
 - Be well-documented and have test cases (in `examples` and/or `test` directories).
-- Not break other test cases. Include the results of `test/example-runner.py` in your request.
+- Not break other code. Include the results of running `test/example-runner.py` and `tests` in requests as proof.
 
 ### License
 Full license terms are in [LICENSE.md](LICENSE.md).

@@ -222,7 +222,7 @@ export namespace Spv {
             }
         }
 
-        bool checkOutputs(ValueMap& checks) const noexcept(true) {
+        std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true) {
             // First, create a list of variables from outputs
             std::vector<const Variable*> outputs;
             for (const auto out : outs) {
@@ -230,6 +230,7 @@ export namespace Spv {
                 // var already checked not null in ioGen
                 outputs.push_back(var);
             }
+            unsigned total_tests = outputs.size();
 
             // Next go through checks and find the corresponding in outputs
             for (const auto& [name, val] : checks) {
@@ -253,11 +254,11 @@ export namespace Spv {
                             bool compare = dummy->equals(*var_val);
                             delete dummy;
                             if (!compare)
-                                return compare;
+                                return std::tuple(false, total_tests);
                         } catch(const std::exception& e) {
                             if (dummy != nullptr)
                                 delete dummy;
-                            return false;
+                            return std::tuple(false, total_tests);
                         }
                         // Remove the interface from the compare list
                         outputs.erase(outputs.begin() + i);
@@ -268,12 +269,12 @@ export namespace Spv {
                 }
 
                 if (!found)
-                    return false;
+                    return std::tuple(false, total_tests);
             }
 
             // At this point, all outputs should be removed. If not, there are more outputs than in the check file
             // (which means the output is not equal to the check)
-            return outputs.empty();
+            return std::tuple(outputs.empty(), total_tests);
         }
 
         void execute(bool verbose) noexcept(false) {

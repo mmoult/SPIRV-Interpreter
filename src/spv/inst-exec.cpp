@@ -35,6 +35,7 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
         // so assume inc_pc = true
         break;
     case spv::OpFunction: // 54
+    case spv::OpSelectionMerge: // 247
     case spv::OpLabel: // 248
         break;  // should print for verbose
     case spv::OpFunctionEnd: // 56
@@ -64,9 +65,18 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
         break;
     }
     case spv::OpBranch: { // 249
-        Value* dst = getValue(0, data);
-        Primitive* dst2 = static_cast<Primitive*>(dst);
-        frame.setPC(dst2->data.u32);
+        Value* dstv = getValue(0, data);
+        Primitive* dst = static_cast<Primitive*>(dstv);
+        frame.setPC(dst->data.u32);
+        inc_pc = false;
+        break;
+    }
+    case spv::OpBranchConditional: { // 250
+        Value* condv = getValue(0, data);
+        Primitive* cond = static_cast<Primitive*>(condv);
+        Value* branchv = getValue((cond->data.b32)? 1 : 2, data);
+        Primitive* branch = static_cast<Primitive*>(branchv);
+        frame.setPC(branch->data.u32);
         inc_pc = false;
         break;
     }

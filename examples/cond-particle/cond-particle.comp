@@ -2,18 +2,19 @@
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 struct Particle {
-  float position;
-  float velocity;
+    float position;
+    float velocity;
 };
 
 layout(std140, binding = 1) buffer ParticleIO {
-   Particle particles[];
+    Particle particles[];
 };
 
 void main() {
     const float location_bound = 100;
     float result = particles[gl_GlobalInvocationID.x].position
                  + particles[gl_GlobalInvocationID.x].velocity;
+    particles[gl_GlobalInvocationID.x].position = result;
     float diff = location_bound - result;
 
     // If the particle has gone out of bounds, then bounce location and velocity
