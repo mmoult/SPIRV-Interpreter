@@ -14,10 +14,10 @@
 
 import format.json;
 import format.parse;
-import format.toml;
+import format.yaml;
 import program;
 
-constexpr auto VERSION = "0.1.2";
+constexpr auto VERSION = "0.2.0";
 
 enum ReturnCode : int {
     OK = 0,
@@ -30,11 +30,11 @@ enum ReturnCode : int {
     BAD_COMPARE = 7,
 };
 
-Toml toml;
+Yaml yaml;
 Json json;
 const unsigned NUM_FORMATS = 2;
-std::string format_names[] = {"toml", "json"};
-ValueFormat* format_vals[] = {&toml, &json};
+std::string format_names[] = {"yaml", "json"};
+ValueFormat* format_vals[] = {&yaml, &json};
 
 ValueFormat* determine_format(const std::string& file_name, ValueFormat* preference, bool exact = false) {
     std::string to_match = file_name;
@@ -69,7 +69,7 @@ ReturnCode load_file(ValueMap& values, std::string& file_name, ValueFormat* pref
 
 int main(int argc, char* argv[]) {
     std::string itemplate, in, out, check;
-    ValueFormat* format = &toml;
+    ValueFormat* format = &yaml;
     bool verbose = false;
     ValueMap inputs;
     std::optional<std::string> spv;
@@ -98,11 +98,12 @@ int main(int argc, char* argv[]) {
                 COUT("Options:")
                 COUT("  -c / --check FILE     checks the output against the specified file, returning")
                 COUT("                        0 if equal.")
-                COUT("  -f / --format         specify a default value format {\"toml\", \"json\"}. The")
+                //COUT("  -d / --debug          launch an interactive execution")
+                COUT("  -f / --format         specify a default value format {\"yaml\", \"json\"}. The")
                 COUT("                        interpreter will try to assume desired format from the ")
                 COUT("                        extension of the file to read/write, but this argument is")
                 COUT("                        still useful for --set pairs, stdout, or if the extension")
-                COUT("                        is not recognized. Defaults to \"toml\".")
+                COUT("                        is not recognized. Defaults to \"yaml\".")
                 COUT("  -h / --help           print this help and exit")
                 COUT("  -i / --in FILE        specify a file to fetch input from. Alternatively, input")
                 COUT("                        may be specified in key=value pairs with --set.")
@@ -110,7 +111,7 @@ int main(int argc, char* argv[]) {
                 // COUT("  -p / -print           enable vebose printing")
                 COUT("  --set VAR=VAL         define input in the format of VAR=VAL pairs. May be")
                 COUT("                        given more than once.")
-                COUT("  -t / --template FiLE  creates a template input file with stubs for all needed")
+                COUT("  -t / --template FILE  creates a template input file with stubs for all needed")
                 COUT("                        inputs.")
                 COUT("  -v / --version        print version info and exit")
 #undef COUT
@@ -143,19 +144,14 @@ int main(int argc, char* argv[]) {
                 verbose = true;
             } else if (arg == "--set") {
                 if (++i >= argc) {
-                    std::cerr << "Missing key=val pair argument for flag set!" << std::endl;
+                    std::cerr << "Missing key-val pair argument for flag set!" << std::endl;
                     return ReturnCode::BAD_ARGS;
                 }
-                // find the delimiter, the first (and should be only) '=':
-                std::string set(argv[i]);
-                int split = set.find('=');
-                if (split == -1) {
-                    std::cerr << "Missing delimiter (=) in key=val pair argument for flag set!" << std::endl;
-                    return ReturnCode::BAD_ARGS;
-                }
+
                 // Parse the value and save in the key
+                std::string set = argv[i];
                 try {
-                    format->parseValue(inputs, set.substr(0, split), set.substr(split));
+                    format->parseVariable(inputs, set);
                 } catch (const std::exception& e) {
                     std::cerr << e.what() << std::endl;
                     return ReturnCode::BAD_PARSE;

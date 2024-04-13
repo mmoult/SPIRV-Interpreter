@@ -452,6 +452,7 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(new Primitive(location));
         break;
     }
+#undef TYPICAL_E_BIN_OP
 
     return true;
 }

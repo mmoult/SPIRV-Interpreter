@@ -31,9 +31,9 @@ for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True):
     output = None
     program = None
     for file in files:
-        if file == "in.toml":
+        if file == "in.yaml":
             input = file
-        elif file == "out.toml":
+        elif file == "out.yaml":
             output = file
         elif file.endswith(".spv"):
             program = file

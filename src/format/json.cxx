@@ -114,6 +114,11 @@ private:
     }
 
 protected:
+    SpecialFloatResult isSpecialFloat(LineHandler& handle) override {
+        // JSON parsing handles these cases by itself (within strings)
+        return SpecialFloatResult::F_NONE;
+    }
+
     void verifyBlank(LineHandler& handler) noexcept(false) override {
         auto [c, valid] = skipWhitespace(handler);
         if (!valid)
@@ -156,6 +161,7 @@ protected:
             if (c2 != '"')
                 throw std::runtime_error("Named value in JSON file must begin with '\"'!");
             handler.skip();
+            /*
             std::string name = parseName(handler);
 
             auto [c3, v3] = skipWhitespace(handler);
@@ -164,14 +170,15 @@ protected:
             handler.skip();
             Value* val = parseValue(handler);
             addToMap(vars, name, val);
+            */
         }
         handler.skip();
         verifyBlank(handler);
     }
 
-    Value* parseValue(LineHandler& handle) noexcept(false) override {
+    std::tuple<std::string, Value*> parseVariable(LineHandler& handle) noexcept(false) override {
         // TODO HERE
-        return nullptr;
+        return std::tuple("", nullptr);
     }
 
 public:

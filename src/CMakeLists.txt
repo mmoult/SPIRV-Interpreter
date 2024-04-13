@@ -12,7 +12,7 @@ target_sources(spv-interp
     FILE_SET CXX_MODULES FILES
       format/json.cxx
       format/parse.cxx
-      format/toml.cxx
+      format/yaml.cxx
       spv/data.cxx
       spv/frame.cxx
       spv/instruction.cxx

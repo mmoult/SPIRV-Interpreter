@@ -68,7 +68,7 @@ protected:
         IdValidity isIdent(char c, bool first) const {
             if ((c >= 'A' && c <= 'Z') || c == '_' || c == '-' || (c >= 'a' && c <= 'z'))
                 return IdValidity::VALID;
-            if (!first && ((c >= '0' && c <= '9') || c == '.'))
+            if (!first && ((c >= '0' && c <= '9')))
                 return IdValidity::VALID;
             if (std::isspace(c))
                 return IdValidity::BREAK;
@@ -139,6 +139,19 @@ protected:
             return std::tuple(pLine, idx);
         }
 
+        void resetToLineStart() {
+            // If this is a multi-line approach, we can just go to the beginning of this line
+            if (file != nullptr)
+                idx = 0;
+            else {
+                // Otherwise, we need to backtrack to the last newline
+                for (; idx > 0; --idx) {
+                    if ((*pLine)[idx] == '\n')
+                        break;
+                }
+            }
+        }
+
         void skip(unsigned delta = 1) {
             idx += delta;
         }
@@ -148,7 +161,7 @@ protected:
 
         /// @brief fetches (but does not advance beyond) the next character.
         MayChar peek() {
-            if (pLine == nullptr && idx > 0) {
+            if (pLine == nullptr) {
                 // fetch a new line
                 if (file == nullptr || !std::getline(*file, fromFile))
                     return std::tuple(0, false);
@@ -191,10 +204,14 @@ protected:
         }
 
         // Next, we check for special nums (inf and nan)
-        if (handler.matchId("inf"))
+        switch (isSpecialFloat(handler)) {
+        case SpecialFloatResult::F_INF:
             return new Primitive(std::numeric_limits<float>::infinity() * (sign? 1: -1));
-        else if (handler.matchId("nan"))
+        case SpecialFloatResult::F_NAN:
             return new Primitive(std::numeric_limits<float>::quiet_NaN() * (sign? 1: -1));
+        default:
+            break;
+        }
 
         // From here, we need more details than line handler gives us, so we take control
         auto [pline, idx] = handler.update();
@@ -349,10 +366,18 @@ protected:
         vars[key] = val;
     }
 
-    /// @brief Parse the value associated with the given key and save it into the map of values
+    enum class SpecialFloatResult {
+        F_NONE, F_INF, F_NAN,
+    };
+    /// @brief Give the derived class an opportunity to handle special floats while parsing a number
+    /// @param handle the handle to read from
+    /// @return one of none, infinity, or NaN
+    virtual SpecialFloatResult isSpecialFloat(LineHandler& handle) = 0;
+
+    /// @brief Parse and return a single key-value pair
     /// @param vars variables to save to- a map of names to values
     /// @param handle a handler to parse the value from
-    virtual Value* parseValue(LineHandler& handle) = 0;
+    virtual std::tuple<std::string, Value*> parseVariable(LineHandler& handle) = 0;
 
     /// @brief Parse all key-value pairs given in the file. Save each into the map of values
     /// @param vars variables to save to- a map of names to values
@@ -360,7 +385,7 @@ protected:
     virtual void parseFile(ValueMap& vars, LineHandler& handler) = 0;
 
     /// @brief Throw error if any characters before the parse end (signalled by an invalid character) are non-space.
-    /// Called after the completion of parseValue for single-string inputs. May also be called by other class methods.
+    /// Called after the completion of parseVariable for single-string inputs. May be reused by other methods.
     /// @param handler the line handler used to parse from
     virtual void verifyBlank(LineHandler& handle) = 0;
 
@@ -376,10 +401,10 @@ public:
     /// @param vars the map of pre-existing variables. Also the map new values are saved to
     /// @param key the name of the value to parse
     /// @param val the string to parse the value from
-    void parseValue(ValueMap& vars, std::string key, std::string val) noexcept(false) {
-        const std::string* pVal = &val; // need an r-value pointer even though the value should not change
-        LineHandler handle(pVal, 0, nullptr);
-        Value* value = parseValue(handle);
+    void parseVariable(ValueMap& vars, std::string keyval) noexcept(false) {
+        const std::string* pstr = &keyval; // need an r-value pointer even though the value should not change
+        LineHandler handle(pstr, 0, nullptr);
+        auto [key, value] = parseVariable(handle);
         addToMap(vars, key, value);
         verifyBlank(handle); // Verify there is only whitespace or comments after
     }
