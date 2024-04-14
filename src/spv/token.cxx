@@ -5,6 +5,8 @@
  */
 module;
 #include <cassert>
+//#include <format>
+#include <iostream>
 #include <string>
 #include <variant>
 export module token;
@@ -30,5 +32,36 @@ export namespace Spv {
         Token(int inum): type(Type::INT), raw(inum) {}
         Token(float fnum): type(Type::FLOAT), raw(fnum) {}
         Token(std::string str): type(Type::STRING), raw(str) {}
+
+        void print() const {
+            switch (type) {
+            case Type::REF:
+                std::cout << "%" << std::get<unsigned>(raw);
+                break;
+            case Type::CONST: {
+                // Below will will eventually when text formatting is supported by compiler:
+                //std::cout << std::format("{:#x}", std::get<unsigned>(raw));
+
+                // Until then, here is the workaround
+                std::ios oldState(nullptr);
+                oldState.copyfmt(std::cout);
+                std::cout << "0x" << std::hex << std::get<unsigned>(raw);
+                std::cout.copyfmt(oldState);
+                break;
+            }
+            case Type::UINT:
+                std::cout << std::get<unsigned>(raw);
+                break;
+            case Type::INT:
+                std::cout << std::get<int>(raw);
+                break;
+            case Type::FLOAT:
+                std::cout << std::get<float>(raw);
+                break;
+            case Type::STRING:
+                std::cout << "\"" << std::get<std::string>(raw) << "\"";
+                break;
+            }
+        }
     };
 };
