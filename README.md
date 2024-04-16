@@ -4,10 +4,10 @@ An interpreter for SPIR-V shaders/kernels. Outputs the result after running the 
 
 ## Features
 - Support for vertex, fragment, compute, ... shaders
-- Specify inputs and print outputs in TOML, with other formats coming soon
+- Specify inputs and print outputs in YAML or JSON
 - Can generate template file for expected inputs
 - Option to check against expected results
-- Verbose trace of program execution (coming soon)
+- Verbose trace of program execution
 - 4 test examples, and counting
 
 ## Use

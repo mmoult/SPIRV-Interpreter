@@ -17,6 +17,7 @@ module;
 
 #include "../values/value.hpp"
 export module format.parse;
+import value.aggregate;
 import value.primitive;
 
 export class ValueFormat {
@@ -179,12 +180,59 @@ protected:
         }
     };
 
+    bool isNested(const Value& val) const {
+        const auto base = val.getType().getBase();
+        return base == DataType::STRUCT || base == DataType::ARRAY || base == DataType::POINTER;
+    }
+
     /// @brief Prints a newline character then the number of spaces needed for desired indentation
     /// @param out the stream to write to
     /// @param indents the number of indentations, where each indentation is two spaces
     void newline(std::stringstream& out, unsigned indents) const {
         const unsigned INDENT_WIDTH = 2;
         out << '\n' << std::string(INDENT_WIDTH * indents, ' ');
+    }
+
+    /// @brief Adds the key-value pair to the map, throwing an error if the key has already been mapped
+    /// @param vars variables to add this key-value pair to
+    /// @param key the name of the value
+    /// @param val the value associated with the given key
+    void addToMap(ValueMap& vars, std::string key, Value* val) const {
+        // If the map already has the key, we have a problem
+        if (vars.contains(key)) {
+            std::stringstream err;
+            err << "Attempt to add variable \"" << key << "\" when one by the same name already exists!";
+            throw std::runtime_error(err.str());
+        }
+        vars[key] = val;
+    }
+
+    Value* constructArrayFrom(std::vector<const Value*>& elements) {
+        try {
+            Type union_type = Type::unionOf(elements);
+            Type* ut = new Type(union_type);
+            Array* arr = new Array(*ut, elements.size());
+            arr->addElements(elements);
+            return arr;
+        } catch (const std::exception& e) {
+            for (auto* element : elements)
+                delete element;
+            throw std::runtime_error("Element parsed of incompatible type with other array elements!");
+        }
+    }
+
+    Value* constructStructFrom(std::vector<std::string>& names, std::vector<const Value*>& elements) {
+        std::vector<const Type*> el_type_list;
+        for (const auto val : elements) {
+            const Type& vt = val->getType();
+            el_type_list.push_back(&vt);
+        }
+        Type ts = Type::structure(el_type_list);
+        for (unsigned i = 0; i < names.size(); ++i)
+            ts.nameMember(i, names[i]);
+        Struct* st = new Struct(ts);
+        st->addElements(elements);
+        return st;
     }
 
     /// @brief Parse a number from the given index in the provided line
@@ -350,20 +398,6 @@ protected:
             val *= std::pow(10, move_dec);
             return new Primitive(val);
         }
-    }
-
-    /// @brief Adds the key-value pair to the map, throwing an error if the key has already been mapped
-    /// @param vars variables to add this key-value pair to
-    /// @param key the name of the value
-    /// @param val the value associated with the given key
-    void addToMap(ValueMap& vars, std::string key, Value* val) const {
-        // If the map already has the key, we have a problem
-        if (vars.contains(key)) {
-            std::stringstream err;
-            err << "Attempt to add variable \"" << key << "\" when one by the same name already exists!";
-            throw std::runtime_error(err.str());
-        }
-        vars[key] = val;
     }
 
     enum class SpecialFloatResult {

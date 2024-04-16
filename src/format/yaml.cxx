@@ -61,34 +61,6 @@ private:
         return std::tuple(key, val);
     }
 
-    Value* constructListFrom(std::vector<const Value*>& elements) {
-        try {
-            Type union_type = Type::unionOf(elements);
-            Type* ut = new Type(union_type);
-            Array* arr = new Array(*ut, elements.size());
-            arr->addElements(elements);
-            return arr;
-        } catch (const std::exception& e) {
-            for (auto* element : elements)
-                delete element;
-            throw std::runtime_error("Element parsed of incompatible type with other array elements!");
-        }
-    }
-
-    Value* constructMapFrom(std::vector<std::string>& names, std::vector<const Value*>& elements) {
-        std::vector<const Type*> el_type_list;
-        for (const auto val : elements) {
-            const Type& vt = val->getType();
-            el_type_list.push_back(&vt);
-        }
-        Type ts = Type::structure(el_type_list);
-        for (unsigned i = 0; i < names.size(); ++i)
-            ts.nameMember(i, names[i]);
-        Struct* st = new Struct(ts);
-        st->addElements(elements);
-        return st;
-    }
-
     std::tuple<Value*, bool> parseAgg(LineHandler& handler, unsigned indent, bool list) {
         std::vector<const Value*> elements;
         std::vector<std::string> names;
@@ -134,7 +106,7 @@ private:
         // Reset to the start of the line so the next to process has the correct indent count
         handler.resetToLineStart();
         // Now that we are done parsing, add elements and form the type:
-        return std::tuple(list? constructListFrom(elements): constructMapFrom(names, elements), true);
+        return std::tuple(list? constructArrayFrom(elements): constructStructFrom(names, elements), true);
     }
 
     Value* parseInlineAgg(LineHandler& handler, bool list) {
@@ -178,8 +150,8 @@ private:
         }
         // Now that we are done parsing, add elements and form the type:
         if (list)
-            return constructListFrom(elements);
-        return constructMapFrom(names, elements);
+            return constructArrayFrom(elements);
+        return constructStructFrom(names, elements);
     }
 
     std::string parseName(LineHandler& handler) const {
@@ -367,11 +339,6 @@ private:
         default: // VOID, FUNCTION
             throw std::runtime_error("Cannot print value!");
         }
-    }
-
-    bool isNested(const Value& val) const {
-        const auto base = val.getType().getBase();
-        return base == DataType::STRUCT || base == DataType::ARRAY || base == DataType::POINTER;
     }
 
     unsigned countIndent(LineHandler& handler) const {
