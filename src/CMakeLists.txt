@@ -35,3 +35,4 @@ target_sources(spv-interp
 add_executable(spv-run main.cpp)
 set_target_properties(spv-run PROPERTIES OUTPUT_NAME "spirv-run")
 target_link_libraries(spv-run spv-interp)
+install(TARGETS spv-run)

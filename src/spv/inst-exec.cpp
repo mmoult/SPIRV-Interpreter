@@ -103,11 +103,9 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
         frame_stack.back().incPC();
 }
 
-void Spv::Instruction::print() const {
-#define CASE_OP(OP) case spv::OP: { \
-    std::cout << #OP; \
-    break; \
-}
+std::string Spv::Instruction::printOpcode(spv::Op opcode) {
+#define CASE_OP(OP) case spv::OP: \
+    return #OP;
 
     switch (opcode) {
     CASE_OP(OpNop);
@@ -827,10 +825,16 @@ void Spv::Instruction::print() const {
     CASE_OP(OpGroupLogicalXorKHR);
     CASE_OP(OpMaskedGatherINTEL);
     CASE_OP(OpMaskedScatterINTEL);
-    default:
-        std::cout << "OpUnknown(" << static_cast<unsigned>(opcode) << ")";
-    }
 #undef CASE_OP
+    default:
+        std::stringstream op;
+        op << "OpUnknown(" << static_cast<unsigned>(opcode) << ")";
+        return op.str();
+    }
+}
+
+void Spv::Instruction::print() const {
+    std::cout << printOpcode(opcode);
 
     unsigned i = 0;
     if (hasResultType) {

@@ -16,3 +16,4 @@ target_sources(tests
 )
 
 target_link_libraries(tests PRIVATE Catch2::Catch2WithMain spv-interp)
+install(TARGETS tests)

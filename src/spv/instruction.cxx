@@ -85,6 +85,7 @@ class Instruction {
     bool makeResultGlsl(std::vector<Data>& data, unsigned location, unsigned result_at) const noexcept(false);
 
     void print() const;
+    static std::string printOpcode(spv::Op opcode);
 
 public:
     Instruction(spv::Op opcode, bool has_result, bool has_result_type)

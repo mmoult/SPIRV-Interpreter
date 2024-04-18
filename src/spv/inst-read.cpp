@@ -85,7 +85,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     default: {
         // Unsupported op
         std::stringstream err;
-        err << "Cannot use unsupported SPIR-V instruction (" << opcode << ")!";
+        err << "Cannot use unsupported SPIR-V instruction (" << printOpcode(op) << ")!";
         throw std::invalid_argument(err.str());
     }
     case spv::OpNop: // 1
@@ -93,9 +93,12 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpTypeBool: // 20
     case spv::OpConstantTrue: // 41
     case spv::OpConstantFalse: // 42
+    case spv::OpFunctionParameter: // 55
     case spv::OpFunctionEnd: // 56
     case spv::OpLabel: // 248
+    case spv::OpKill: // 252
     case spv::OpReturn: // 253
+    case spv::OpTerminateInvocation: // 4416
         // no operands to handle (besides result and type, if present)
         break;
     case spv::OpSource: // 3
@@ -156,16 +159,30 @@ Spv::Instruction* Spv::Instruction::readOp(
         to_load.push_back(Type::UINT);
         break;
     case spv::OpTypeArray: // 28
+    case spv::OpIAdd: // 128
     case spv::OpFAdd: // 129
+    case spv::OpISub: // 130
     case spv::OpFSub: // 131
+    case spv::OpIMul: // 132
     case spv::OpFMul: // 133
+    case spv::OpFDiv: // 136
     case spv::OpVectorTimesScalar: // 142
+    case spv::OpDot: // 148
     case spv::OpLogicalOr: // 166
+    case spv::OpSGreaterThan: // 173
+    case spv::OpSGreaterThanEqual: // 175
+    case spv::OpSLessThan: // 177
+    case spv::OpSLessThanEqual: // 179
     case spv::OpFOrdLessThan: // 184
+    case spv::OpFOrdGreaterThan: // 186
+    case spv::OpFOrdLessThanEqual: // 188
+    case spv::OpFOrdGreaterThanEqual: // 190
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeRuntimeArray: // 29
+    case spv::OpConvertSToF: // 111
+    case spv::OpFNegate: // 127
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
         to_load.push_back(Type::REF);
@@ -173,6 +190,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpTypeStruct: // 30
     case spv::OpTypeFunction: // 33
     case spv::OpConstantComposite: // 44
+    case spv::OpFunctionCall: // 57
     case spv::OpCompositeConstruct: // 80
         to_load.push_back(Type::REF);
         optional.push_back(Type::REF);
@@ -226,6 +244,13 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpCompositeExtract: // 81
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
+        optional.push_back(Type::UINT);
+        repeating = true;
+        break;
+    case spv::OpLoopMerge: // 246
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::CONST);
         optional.push_back(Type::UINT);
         repeating = true;
         break;
