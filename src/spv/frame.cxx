@@ -12,29 +12,45 @@ export module frame;
 
 export class Frame {
     unsigned pc;
-    std::vector<Value*> args;
-    unsigned argCount;
+    std::vector<const Value*> args;
     /// Where to store the return value, if any. Should be 0 if no return expected
     unsigned retAt;
 
+    // Function calls put their arguments on the frame, then the function must pull all arguments, one per instruction,
+    // before any other instruction is seen:
+    // Function
+    // OpFunctionParameter
+    // ...
+    // OpLabel
+
+    /// The argument index to use next
+    unsigned argCount;
+    /// Whether this instruction needs to use an argument before incrementing the PC
+    bool first;
+
 public:
-    Frame(unsigned pc, std::vector<Value*>& args, unsigned ret_at): pc(pc), args(args), argCount(0), retAt(ret_at) {}
+    Frame(unsigned pc, std::vector<const Value*>& args, unsigned ret_at) :
+        pc(pc),
+        args(args),
+        retAt(ret_at),
+        argCount(0),
+        first(true) {}
 
     unsigned getPC() {
         return pc;
     }
 
-    Value* getArg() noexcept(false) {
+    const Value* getArg() noexcept(false) {
         if (argCount >= args.size())
             throw std::runtime_error("No more args to use!");
-        Value* ret = args[argCount];
-        ++argCount;
         ++pc;
-        return ret;
+        return args[argCount++];
     }
 
     void incPC() noexcept(false) {
-        if (argCount < args.size())
+        if (first)
+            first = false;
+        else if (argCount < args.size())
             throw std::runtime_error("Unused function argument(s)!");
         ++pc;
     }

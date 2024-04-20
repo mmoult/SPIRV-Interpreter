@@ -284,7 +284,7 @@ export namespace Spv {
             // SPIR-V forbids recursion (either direct or indirect), so we don't have to keep a stack frame for locals
             // However, we will simulate a stack frame for holding temporaries (args and returns) and pc
             std::vector<Frame> frame_stack;
-            std::vector<Value*> entry_args;
+            std::vector<const Value*> entry_args;
             frame_stack.emplace_back(start, entry_args, 0);
             while (!frame_stack.empty()) {
                 unsigned i_at = frame_stack.back().getPC();

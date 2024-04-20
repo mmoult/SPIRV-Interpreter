@@ -7,6 +7,7 @@ module;
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <limits> // for nan
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -37,9 +38,9 @@ const std::vector<unsigned>* findRequest(Spv::Instruction::DecoQueue* queue, uns
 }
 
 struct OpSrc {
+    DataType type;
     Value* val1;
     Value* val2;
-    DataType type;
 };
 struct OpDst {
     Type* res;
@@ -86,6 +87,37 @@ void elementBinOp(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, 
     Value* res = dst.res->construct(pprims);
     data[dst.at].redefine(res);
 }
+template<typename F> // (const Primitive*, const Primitive* -> data primitive)
+void elementUnaryOp(const OpSrc& src, const OpDst& dst, std::vector<Data>& data, F&& op) {
+    // Operate on float array or single float
+    const Type& type = src.val1->getType();
+    std::vector<Primitive> prims;
+    std::vector<const Value*> pprims;
+
+    if (type.getBase() == DataType::ARRAY) {
+        if (type.getElement().getBase() != src.type)
+            throw std::runtime_error("Cannot do unary operation on other-typed array!");
+        const Array& operand = *static_cast<const Array*>(src.val1);
+        unsigned asize = operand.getSize();
+        prims.reserve(asize);
+        pprims.reserve(asize);
+        for (unsigned i = 0; i < asize; ++i) {
+            auto result = op(static_cast<const Primitive*>(operand[i]));
+            prims.emplace_back(result);
+            pprims.push_back(&prims[i]);
+        }
+    } else {
+        if (type.getBase() != src.type)
+            throw std::runtime_error("Cannot do unary operation on other-typed element!");
+        const Primitive* operand = static_cast<const Primitive*>(src.val1);
+        auto result = op(operand);
+        prims.emplace_back(result);
+        pprims.push_back(&prims[0]);
+    }
+
+    Value* res = dst.res->construct(pprims);
+    data[dst.at].redefine(res);
+}
 
 bool Spv::Instruction::makeResult(
     std::vector<Data>& data,
@@ -99,7 +131,7 @@ bool Spv::Instruction::makeResult(
     unsigned result_at = checkRef(hasResultType, data.size());
 
 #define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
-    OpSrc src{getValue(2, data), getValue(3, data), DataType::E_TYPE}; \
+    OpSrc src{DataType::E_TYPE, getValue(2, data), getValue(3, data)}; \
     OpDst dst{getType(0, data), result_at}; \
     auto op = [](const Primitive* a, const Primitive* b) { \
         return BIN_OP; \
@@ -107,11 +139,20 @@ bool Spv::Instruction::makeResult(
     elementBinOp(src, dst, data, op); \
     break; \
 }
+#define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
+    OpSrc src{DataType::E_TYPE, getValue(2, data), nullptr}; \
+    OpDst dst{getType(0, data), result_at}; \
+    auto op = [](const Primitive* a) { \
+        return UNARY_OP; \
+    }; \
+    elementUnaryOp(src, dst, data, op); \
+    break; \
+}
 
     switch (opcode) {
     default: {
         std::stringstream err;
-        err << "Unsupported instruction: " << opcode << "! Cannot make result.";
+        err << "Cannot make result for unsupported instruction (" << printOpcode(opcode) << ")!";
         throw std::runtime_error(err.str());
     }
     case spv::OpExtInstImport: { // 11
@@ -391,12 +432,43 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(to_ret);
         break;
     }
+    case spv::OpConvertFToS: // 110
+        TYPICAL_E_UNARY_OP(INT, static_cast<uint32_t>(a->data.fp32));
+    case spv::OpConvertSToF: // 111
+        TYPICAL_E_UNARY_OP(INT, static_cast<float>(a->data.i32));
+    case spv::OpFNegate: // 227
+        TYPICAL_E_UNARY_OP(FLOAT, -a->data.fp32);
     case spv::OpFAdd: // 129
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 + b->data.fp32);
     case spv::OpFSub: // 131
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 - b->data.fp32);
+    case spv::OpIMul: // 132
+        // Spec requires a very specific type of edge behavior where: "
+        //   The resulting value equals the low-order N bits of the correct result R, where N is the component width
+        //   and R is computed with enough precision to avoid overflow and underflow.
+        // ".
+        // For the time being, we are ignoring this stipulation because checking is slow and well-formed programs are
+        // typically expected not to overflow or underflow.
+        TYPICAL_E_BIN_OP(INT, a->data.i32 * b->data.i32);
     case spv::OpFMul: // 133
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 * b->data.fp32);
+    case spv::OpFDiv: { // 136
+        OpSrc src{DataType::FLOAT, getValue(2, data), getValue(3, data)};
+        OpDst dst{getType(0, data), result_at};
+        auto op = [](const Primitive* a, const Primitive* b) {
+            // Spec says that the behavior is undefined if divisor is 0
+            // We will go with explicit IEE754 because it is a common (and often expected) standard
+            if (b->data.fp32 == 0.0) { // divisor is neg or pos zero
+                if (std::isnan(a->data.fp32))
+                    return a->data.fp32;
+                float ret = std::numeric_limits<float>::infinity();
+                return (std::signbit(b->data.fp32) != std::signbit(a->data.fp32))? -ret: ret;
+            }
+            return a->data.fp32 / b->data.fp32;
+        };
+        elementBinOp(src, dst, data, op);
+        break;
+    }
     case spv::OpVectorTimesScalar: { // 142
         Value* vec_val = getValue(2, data);
         const Type& vec_type = vec_val->getType();
@@ -404,7 +476,7 @@ bool Spv::Instruction::makeResult(
             throw std::runtime_error("Could not load vector in VectorTimesScalar!");
         const Array& vec = *static_cast<Array*>(vec_val);
         if (vec_type.getElement().getBase() != DataType::FLOAT)
-            throw std::runtime_error("Cannot mutliply vector with non-float element type!");
+            throw std::runtime_error("Cannot multiply vector with non-float element type!");
 
         Value* scal_val = getValue(3, data);
         if (scal_val == nullptr || scal_val->getType().getBase() != DataType::FLOAT)
@@ -428,6 +500,43 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(res);
         break;
     }
+    case spv::OpDot: { // 148
+        Value* ops[2];
+        ops[0] = getValue(2, data);
+        ops[1] = getValue(3, data);
+        const Array* arr[2];
+        // Operands 2 and 3 must be float arrays of the same size
+        for (unsigned i = 0; i < 2; ++i) {
+            const Type& vec_type = ops[i]->getType();
+            if (vec_type.getBase() != DataType::ARRAY) {
+                std::stringstream err;
+                err << "Operand " << i << " to OpDot must be a vector!";
+                throw std::runtime_error(err.str());
+            }
+            if (vec_type.getElement().getBase() != DataType::FLOAT) {
+                std::stringstream err;
+                err << "Operand " << i << " to OpDot must be a vector of floats!";
+                throw std::runtime_error(err.str());
+            }
+            arr[i] = static_cast<Array*>(ops[i]);
+        }
+        // Verify that both arrays have the same size
+        unsigned size = arr[0]->getSize();
+        if (unsigned osize = arr[1]->getSize(); osize != size) {
+            std::stringstream err;
+            err << "Cannot perform OpDot on vectors of different sizes! Found sizes " << size;
+            err << " and " << osize << ".";
+            throw std::runtime_error(err.str());
+        }
+        float total = 0;
+        for (unsigned i = 0; i < size; ++i) {
+            const Primitive& n0 = *static_cast<const Primitive*>((*arr[0])[i]);
+            const Primitive& n1 = *static_cast<const Primitive*>((*arr[1])[i]);
+            total += n0.data.fp32 * n1.data.fp32;
+        }
+        data[result_at].redefine(new Primitive(total));
+        break;
+    }
     case spv::OpLogicalEqual: // 164
         TYPICAL_E_BIN_OP(BOOL, a->data.b32 == b->data.b32);
     case spv::OpLogicalNotEqual: // 165
@@ -436,6 +545,14 @@ bool Spv::Instruction::makeResult(
         TYPICAL_E_BIN_OP(BOOL, a->data.b32 || b->data.b32);
     case spv::OpLogicalAnd: // 167
         TYPICAL_E_BIN_OP(BOOL, a->data.b32 && b->data.b32);
+    case spv::OpSGreaterThan: // 173
+        TYPICAL_E_BIN_OP(INT, a->data.i32 > b->data.i32);
+    case spv::OpSGreaterThanEqual: // 175
+        TYPICAL_E_BIN_OP(INT, a->data.i32 >= b->data.i32);
+    case spv::OpSLessThan: // 177
+        TYPICAL_E_BIN_OP(INT, a->data.i32 < b->data.i32);
+    case spv::OpSLessThanEqual: // 179
+        TYPICAL_E_BIN_OP(INT, a->data.i32 <= b->data.i32);
     case spv::OpFOrdEqual: // 180
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 == b->data.fp32);
     case spv::OpFOrdNotEqual: // 182
@@ -453,6 +570,7 @@ bool Spv::Instruction::makeResult(
         break;
     }
 #undef TYPICAL_E_BIN_OP
+#undef TYPICAL_E_UNARY_OP
 
     return true;
 }

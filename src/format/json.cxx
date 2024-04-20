@@ -134,16 +134,17 @@ private:
                     throw std::runtime_error("Missing '}' in JSON input!");
                 if (c1 == '}')
                     break;
-                if ((c1 != ',') && !first)
-                    throw std::runtime_error("Missing comma to delimit entries in JSON object!");
-                else
+                if (!first) {
+                    if (c1 != ',')
+                        throw std::runtime_error("Missing comma to delimit entries in JSON object!");
+                    handler.skip();
+                } else
                     first = false;
-                handler.skip();
                 auto [key, value] = parseVariable(handler);
                 names.push_back(key);
                 values.push_back(static_cast<const Value*>(value));
             }
-            handler.skip();
+            handler.skip();  // skip over the closing brace
             return constructStructFrom(names, values);
         } else if (c0 == '[') {
             handler.skip();
@@ -155,11 +156,12 @@ private:
                     throw std::runtime_error("Missing ']' in JSON input!");
                 if (c1 == ']')
                     break;
-                if ((c1 != ',') && !first)
-                    throw std::runtime_error("Missing comma to delimit entries in JSON array!");
-                else
+                if (!first) {
+                    if (c1 != ',')
+                        throw std::runtime_error("Missing comma to delimit entries in JSON array!");
+                    handler.skip();
+                } else
                     first = false;
-                handler.skip();
                 auto value = parseValue(handler);
                 values.push_back(static_cast<const Value*>(value));
             }

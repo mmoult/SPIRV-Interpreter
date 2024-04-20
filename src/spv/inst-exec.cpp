@@ -29,24 +29,62 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
     if (verbose)
         print();
 
+    unsigned result_at;
+    if (hasResult) {
+        unsigned idx = hasResultType? 1: 0;
+        assert(operands[idx].type == Token::Type::REF);
+        result_at = std::get<unsigned>(operands[idx].raw);
+    }
+
     Value* dst_val = nullptr;
     switch (opcode) {
     default:
         // fall back on the makeResult function (no fallback should use location!)
-        if (!makeResult(data, 0, nullptr))
-            throw std::runtime_error("Unsupported instruction execution!");
+        if (!makeResult(data, 0, nullptr)) {
+            std::stringstream err;
+            err << "Unsupported instruction execution (" << printOpcode(opcode) << ")!";
+            throw std::runtime_error(err.str());
+        }
         // If the instruction did make a result, success! These instructions cannot modify control flow,
         // so assume inc_pc = true
         break;
     case spv::OpFunction: // 54
+    case spv::OpLoopMerge: // 246
     case spv::OpSelectionMerge: // 247
     case spv::OpLabel: // 248
         break;  // should print for verbose
+    case spv::OpFunctionParameter: { // 55
+        inc_pc = false;  // get arg increments PC for us
+        spv::StorageClass storage = spv::StorageClass::StorageClassFunction;
+        Type* var_type = getType(0, data);
+        Variable* var = Variable::makeVariable(storage, *var_type);
+        const Value* arg = frame.getArg();
+        var->setVal(*arg);
+        data[result_at].redefine(var);
+        break;
+    }
     case spv::OpFunctionEnd: // 56
         throw std::runtime_error("Missing return before function end!");
+    case spv::OpFunctionCall: { // 57
+        Function* fx = getFunction(2, data);
+        std::vector<const Value*> args;
+        for (unsigned i = 3; i < operands.size(); ++i) {
+            const Variable* var = getVariable(i, data);
+            if (var == nullptr) {
+                std::stringstream err;
+                err << "Each argument to OpFunctionCall must be a variable! Operand " << (i - 3) << " is not.";
+                throw std::runtime_error(err.str());
+            }
+            args.push_back(var->getVal());
+        }
+
+        frame_stack.emplace_back(fx->getLocation(), args, result_at);
+        inc_pc = false;
+        break;
+    }
     case spv::OpVariable: // 59
-        // Since this instruction should be run statically, we can assume the variable already exists
-        // All we need to do here is set the default value (in case not set before)
+        // This instruction has been run before (during the static pass), so we can assume here the variable already
+        // exists. Now, all we need to do is set the default value (in case not set before)
         if (operands.size() > 3) { // included default value
             Variable* var = getVariable(1, data);
             Value* defaultVal = getValue(3, data);
@@ -84,6 +122,14 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
         inc_pc = false;
         break;
     }
+    case spv::OpKill: // 252
+    case spv::OpTerminateInvocation: { // 4416
+        // Completely stops execution
+        while (!frame_stack.empty())
+            frame_stack.pop_back();
+        inc_pc = false;
+        break;
+    }
     case spv::OpReturn: // 253
         // verify that the stack didn't expect a return value
         if (frame.hasReturn())
@@ -94,8 +140,7 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
     }
 
     if (dst_val != nullptr) {
-        assert(operands[1].type == Token::Type::REF);
-        auto result_at = std::get<unsigned>(operands[1].raw);
+        assert(hasResult);
         data[result_at].redefine(dst_val);
     }
 
