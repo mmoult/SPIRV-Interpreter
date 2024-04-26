@@ -25,7 +25,7 @@ import value.aggregate;
 import value.pointer;
 import value.primitive;
 
-const std::vector<unsigned>* findRequest(Spv::Instruction::DecoQueue* queue, unsigned at) {
+const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, unsigned at) {
     if (queue != nullptr) {
         for (const auto& request : *queue) {
             if (request.toDecorate == at) {
@@ -39,18 +39,21 @@ const std::vector<unsigned>* findRequest(Spv::Instruction::DecoQueue* queue, uns
 
 struct OpSrc {
     DataType type;
-    Value* val1;
-    Value* val2;
+    unsigned val1;
+    unsigned val2;
 };
 struct OpDst {
-    Type* res;
+    unsigned type;
     unsigned at;
 };
 template<typename F> // (const Primitive*, const Primitive* -> data primitive)
-void elementBinOp(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, F&& op) {
-    // Operate on two float arrays or two floats
-    const Type& type1 = srcs.val1->getType();
-    const Type& type2 = srcs.val2->getType();
+void element_bin_op(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, F&& op) {
+    const Value* src1 = data[srcs.val1].getValue();
+    const Value* src2 = data[srcs.val2].getValue();
+
+    // Operate on two primitive arrays or two primitive scalars
+    const Type& type1 = src1->getType();
+    const Type& type2 = src2->getType();
     if (!type1.sameBase(type2))
         throw std::runtime_error("Cannot use operands of different bases!");
     std::vector<Primitive> prims;
@@ -59,8 +62,8 @@ void elementBinOp(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, 
     if (type1.getBase() == DataType::ARRAY) {
         if (type1.getElement().getBase() != srcs.type)
             throw std::runtime_error("Cannot do binary operation on other-typed arrays!");
-        const Array& op1 = *static_cast<const Array*>(srcs.val1);
-        const Array& op2 = *static_cast<const Array*>(srcs.val2);
+        const Array& op1 = *static_cast<const Array*>(src1);
+        const Array& op2 = *static_cast<const Array*>(src2);
         if (op1.getSize() != op2.getSize())
             throw std::runtime_error("Cannot do binary operation on arrays of different size!");
         unsigned asize = op1.getSize();
@@ -77,27 +80,45 @@ void elementBinOp(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, 
     } else {
         if (type1.getBase() != srcs.type)
             throw std::runtime_error("Cannot do binary operation on other-typed elements!");
-        const Primitive* op1 = static_cast<const Primitive*>(srcs.val1);
-        const Primitive* op2 = static_cast<const Primitive*>(srcs.val2);
+        const Primitive* op1 = static_cast<const Primitive*>(src1);
+        const Primitive* op2 = static_cast<const Primitive*>(src2);
         auto result = op(op1, op2);
         prims.emplace_back(result);
         pprims.push_back(&prims[0]);
     }
 
-    Value* res = dst.res->construct(pprims);
+    Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
+template<typename UF, typename IF>
+void element_int_bin_op(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, UF&& u_op, IF&& i_op) {
+    Value* first = data[srcs.val1].getValue();
+    const Type& type = first->getType();
+    DataType dt = type.getBase();
+    if (dt == DataType::ARRAY)
+        dt = type.getElement().getBase();
+    if (dt != DataType::INT && dt != DataType::UINT)
+        throw std::runtime_error("Cannot perform integer-typed binary operation on non-integer base operands!");
+    OpSrc src{dt, srcs.val1, srcs.val2};
+
+    if (dt == DataType::UINT)
+        element_bin_op(src, dst, data, u_op);
+    else
+        element_bin_op(src, dst, data, i_op);
+}
 template<typename F> // (const Primitive*, const Primitive* -> data primitive)
-void elementUnaryOp(const OpSrc& src, const OpDst& dst, std::vector<Data>& data, F&& op) {
-    // Operate on float array or single float
-    const Type& type = src.val1->getType();
+void element_unary_op(const OpSrc& src, const OpDst& dst, std::vector<Data>& data, F&& op) {
+    const Value* src1 = data[src.val1].getValue();
+
+    // Operate on a single primitive scalar or array of primitives
+    const Type& type = src1->getType();
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
 
     if (type.getBase() == DataType::ARRAY) {
         if (type.getElement().getBase() != src.type)
             throw std::runtime_error("Cannot do unary operation on other-typed array!");
-        const Array& operand = *static_cast<const Array*>(src.val1);
+        const Array& operand = *static_cast<const Array*>(src1);
         unsigned asize = operand.getSize();
         prims.reserve(asize);
         pprims.reserve(asize);
@@ -109,13 +130,13 @@ void elementUnaryOp(const OpSrc& src, const OpDst& dst, std::vector<Data>& data,
     } else {
         if (type.getBase() != src.type)
             throw std::runtime_error("Cannot do unary operation on other-typed element!");
-        const Primitive* operand = static_cast<const Primitive*>(src.val1);
+        const Primitive* operand = static_cast<const Primitive*>(src1);
         auto result = op(operand);
         prims.emplace_back(result);
         pprims.push_back(&prims[0]);
     }
 
-    Value* res = dst.res->construct(pprims);
+    Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
 
@@ -128,24 +149,37 @@ bool Spv::Instruction::makeResult(
         return false; // no result made!
 
     // Result type comes before result, if present
-    unsigned result_at = checkRef(hasResultType, data.size());
+    unsigned data_len = data.size();
+    unsigned result_at = checkRef(hasResultType, data_len);
 
+// Typical element-wise binary operation
 #define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
-    OpSrc src{DataType::E_TYPE, getValue(2, data), getValue(3, data)}; \
-    OpDst dst{getType(0, data), result_at}; \
-    auto op = [](const Primitive* a, const Primitive* b) { \
-        return BIN_OP; \
-    }; \
-    elementBinOp(src, dst, data, op); \
+    OpSrc src{DataType::E_TYPE, checkRef(2, data_len), checkRef(3, data_len)}; \
+    OpDst dst{checkRef(0, data_len), result_at}; \
+    element_bin_op(src, dst, data, [](const Primitive* a, const Primitive* b) { return BIN_OP; }); \
+    break; \
+}
+// Integer (either signed or unsigned as long as they match) element-wise binary operation
+// Spec requires a very specific type of edge behavior where: "
+//   The resulting value equals the low-order N bits of the correct result R, where N is the component width and R is
+//   computed with enough precision to avoid overflow and underflow.
+// ".
+// For the time being, we are ignoring this stipulation because checking is slow and well-formed programs are typically
+// expected not to overflow or underflow.
+#define INT_E_BIN_OP(BIN_OP) { \
+    element_int_bin_op( \
+        OpSrc{DataType::INT, checkRef(2, data_len), checkRef(3, data_len)}, \
+        OpDst{checkRef(0, data_len), result_at}, \
+        data, \
+        [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }, \
+        [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; } \
+    ); \
     break; \
 }
 #define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
-    OpSrc src{DataType::E_TYPE, getValue(2, data), nullptr}; \
-    OpDst dst{getType(0, data), result_at}; \
-    auto op = [](const Primitive* a) { \
-        return UNARY_OP; \
-    }; \
-    elementUnaryOp(src, dst, data, op); \
+    OpSrc src{DataType::E_TYPE, checkRef(2, data_len), 0}; \
+    OpDst dst{checkRef(0, data_len), result_at}; \
+    element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
     break; \
 }
 
@@ -236,7 +270,7 @@ bool Spv::Instruction::makeResult(
         }
         Type* strct = new Type(Type::structure(fields));
         // Search for any decorations which apply
-        if (const auto* decorations = findRequest(queue, result_at); decorations != nullptr) {
+        if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
             for (auto location : *decorations) {
                 const Instruction& deco = queue->insts[location];
                 switch (deco.opcode) {
@@ -305,7 +339,7 @@ bool Spv::Instruction::makeResult(
         assert(operands[2].type == Token::Type::CONST);
         Type* fx_type = getType(3, data);
         auto fx = new Function(fx_type, location);
-        if (const auto* decorations = findRequest(queue, result_at); decorations != nullptr) {
+        if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
             for (auto location : *decorations) {
                 const Instruction& deco = queue->insts[location];
                 switch (deco.opcode) {
@@ -338,7 +372,7 @@ bool Spv::Instruction::makeResult(
             if (defaultVal != nullptr)
                 var->setVal(*defaultVal);
         }
-        if (const auto* decorations = findRequest(queue, result_at); decorations != nullptr) {
+        if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
             for (auto location : *decorations) {
                 const Instruction& deco = queue->insts[location];
                 switch (deco.opcode) {
@@ -433,28 +467,26 @@ bool Spv::Instruction::makeResult(
         break;
     }
     case spv::OpConvertFToS: // 110
-        TYPICAL_E_UNARY_OP(INT, static_cast<uint32_t>(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint32_t>(a->data.fp32));
     case spv::OpConvertSToF: // 111
         TYPICAL_E_UNARY_OP(INT, static_cast<float>(a->data.i32));
-    case spv::OpFNegate: // 227
+    case spv::OpFNegate: // 127
         TYPICAL_E_UNARY_OP(FLOAT, -a->data.fp32);
+    case spv::OpIAdd: // 128
+        INT_E_BIN_OP(+);
     case spv::OpFAdd: // 129
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 + b->data.fp32);
+    case spv::OpISub: // 130
+        INT_E_BIN_OP(-);
     case spv::OpFSub: // 131
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 - b->data.fp32);
     case spv::OpIMul: // 132
-        // Spec requires a very specific type of edge behavior where: "
-        //   The resulting value equals the low-order N bits of the correct result R, where N is the component width
-        //   and R is computed with enough precision to avoid overflow and underflow.
-        // ".
-        // For the time being, we are ignoring this stipulation because checking is slow and well-formed programs are
-        // typically expected not to overflow or underflow.
-        TYPICAL_E_BIN_OP(INT, a->data.i32 * b->data.i32);
+        INT_E_BIN_OP(*);
     case spv::OpFMul: // 133
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 * b->data.fp32);
     case spv::OpFDiv: { // 136
-        OpSrc src{DataType::FLOAT, getValue(2, data), getValue(3, data)};
-        OpDst dst{getType(0, data), result_at};
+        OpSrc src{DataType::FLOAT, checkRef(2, data_len), checkRef(3, data_len)};
+        OpDst dst{checkRef(0, data_len), result_at};
         auto op = [](const Primitive* a, const Primitive* b) {
             // Spec says that the behavior is undefined if divisor is 0
             // We will go with explicit IEE754 because it is a common (and often expected) standard
@@ -466,7 +498,7 @@ bool Spv::Instruction::makeResult(
             }
             return a->data.fp32 / b->data.fp32;
         };
-        elementBinOp(src, dst, data, op);
+        element_bin_op(src, dst, data, op);
         break;
     }
     case spv::OpVectorTimesScalar: { // 142
@@ -570,6 +602,7 @@ bool Spv::Instruction::makeResult(
         break;
     }
 #undef TYPICAL_E_BIN_OP
+#undef INT_E_BIN_OP
 #undef TYPICAL_E_UNARY_OP
 
     return true;

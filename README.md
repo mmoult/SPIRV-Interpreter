@@ -18,6 +18,8 @@ use `spirv-val` in [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). I
 incorrect, the behavior of interpretation is undefined. This should not be a problem since most SPIR-V is
 auto-generated.
 
+Static recursion is not *technically* forbidden by the SPIR-V spec, but it is forbidden by Vulkan (see VUID-StandaloneSpirv-None-04634). For the sake of simplicity and efficiency, the interpreter does not guarantee correct execution of programs with recursion.
+
 Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
 
 ## Building

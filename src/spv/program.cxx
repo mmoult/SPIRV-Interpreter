@@ -93,8 +93,9 @@ export namespace Spv {
 
         ~Program() {
             // The program manages the data, so it must clear on destruction
-            for (Data& dat : data)
-                dat.clear();
+            // (Don't use for-each here in case we need the index for debugging.)
+            for (unsigned i = 0; i < data.size(); ++i)
+                data[i].clear();
         } 
         Program(const Program& other) = delete;
         Program& operator=(const Program& other) = delete;

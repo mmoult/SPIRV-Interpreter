@@ -54,10 +54,7 @@ public:
         default:
             throw std::runtime_error("Cannot copy from non-primitive to a primitive type!");
         }
-
-        // Do the actual copy now
         const Primitive& other = static_cast<const Primitive&>(new_val);
-        const Type& from = other.getType();
 
         // TODO precision handling
         switch (type.getBase()) { // cast to
@@ -104,6 +101,7 @@ public:
             switch (from_base) {
             case DataType::BOOL:
                 data.b32 = other.data.b32;
+                break;
             case DataType::UINT:
                 data.b32 = other.data.u32 != 0;
                 break;

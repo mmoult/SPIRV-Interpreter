@@ -17,7 +17,7 @@ import format.parse;
 import format.yaml;
 import program;
 
-constexpr auto VERSION = "0.2.0";
+constexpr auto VERSION = "0.3.0";
 
 enum ReturnCode : int {
     OK = 0,

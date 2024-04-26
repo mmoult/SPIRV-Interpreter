@@ -137,6 +137,19 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
         frame_stack.pop_back();
         inc_pc = !frame_stack.empty(); // don't increment PC if we are at the end of program
         break;
+    case spv::OpReturnValue: { // 254
+        if (!frame.hasReturn())
+            throw std::runtime_error("Void function tried to return a value!");
+        Value* val = getValue(0, data);
+        // For correctness, we must clone. Consider the case where the return of some function is passed as an argument
+        // to another call of the same function. The return could be (re)defined before the argument is used.
+        Value* ret = val->getType().construct();
+        ret->copyFrom(*val);
+        data[frame.getReturn()].redefine(ret);
+        frame_stack.pop_back();
+        inc_pc = !frame_stack.empty();
+        break;
+    }
     }
 
     if (dst_val != nullptr) {

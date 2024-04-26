@@ -21,30 +21,53 @@ if len(sys.argv) > 1:
 else:
     launch_dir = os.path.join(test_path, "..", "examples")
 
+def extract_num(name, prefix):
+    pref_len = len(prefix)
+    dot = name.find(".", pref_len)
+    if dot == -1:
+        dot = len(name)
+    if dot == pref_len:
+        return 0
+    return int(name[pref_len:dot])
+
 # Read through passlist.txt:
 # Each line is the path of a test to run
 fails = 0
 total = 0
+ionames = ["in", "out"]
 import subprocess
 for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True): 
-    input = None
-    output = None
+    iopairs = {}
     program = None
     for file in files:
-        if file == "in.yaml":
-            input = file
-        elif file == "out.yaml":
-            output = file
-        elif file.endswith(".spv"):
-            program = file
-    if input is not None and output is not None and program is not None:
-        total += 1
-        res = subprocess.run([interp_path, "-i", input, "-c", output, program],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
-        if res.returncode != 0:
-            fails += 1
-            print("X", os.path.relpath(os.path.join(root, program), launch_dir))
-        continue
+        for i in range(len(ionames)):
+            prefix = ionames[i]
+            if file.startswith(prefix):
+                num = extract_num(file, prefix)
+                if not (num in iopairs):
+                    iopairs[num] = [None, None]
+                if iopairs[num][i] is not None:
+                    print("Run configuration ", i, " has more than one ", "input" if i == 0 else "output", "!", sep='')
+                iopairs[num][i] = file
+                break
+        else:
+            if file.endswith(".spv"):
+                program = file
+
+    if program is not None:
+        for num, pair in iopairs.items():
+            input = pair[0]
+            output = pair[1]
+            if input is not None and output is not None:
+                total += 1
+                res = subprocess.run([interp_path, "-i", input, "-c", output, program],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
+                if res.returncode != 0:
+                    fails += 1
+                    print("X", os.path.relpath(os.path.join(root, program), launch_dir), end=' ')
+                    if len(iopairs) > 1:
+                        print("#", num, sep='')
+                continue
 
 # Print results
 if total == 0:
