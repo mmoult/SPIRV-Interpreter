@@ -33,7 +33,7 @@ bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstr
     return false; // we reached the end of string before expected (no 0 termination)!
 }
 
-void handleTypes(
+void handle_type(
     const Spv::Token::Type& type,
     std::vector<Spv::Token>& operands,
     const std::vector<uint32_t>& words,
@@ -183,6 +183,9 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpTypeRuntimeArray: // 29
     case spv::OpConvertSToF: // 111
     case spv::OpFNegate: // 127
+    case spv::OpIsNan: // 156
+    case spv::OpIsInf: // 157
+    case spv::OpLogicalNot: // 168
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
         to_load.push_back(Type::REF);
@@ -247,6 +250,18 @@ Spv::Instruction* Spv::Instruction::readOp(
         optional.push_back(Type::UINT);
         repeating = true;
         break;
+    case spv::OpSelect: // 169
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        break;
+    case spv::OpPhi: // 245
+        to_load.push_back(Type::REF); // value
+        to_load.push_back(Type::REF); // block
+        optional.push_back(Type::REF);
+        optional.push_back(Type::REF);
+        repeating = true;
+        break;
     case spv::OpLoopMerge: // 246
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
@@ -274,7 +289,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     auto check_limit = [&](const std::string& parse_what) {
         if (i >= words.size()) {
             std::stringstream err;
-            err << "Missing words while parsing " << parse_what << "instruction " << opcode << "!";
+            err << "Missing words while parsing " << parse_what << "instruction " << printOpcode(op) << "!";
             throw std::length_error(err.str());
         }
     };
@@ -292,26 +307,28 @@ Spv::Instruction* Spv::Instruction::readOp(
 
     for (const auto& type : to_load) {
         check_limit("");
-        handleTypes(type, inst.operands, words, i);
+        handle_type(type, inst.operands, words, i);
     }
 
-    for (unsigned ii = 0; ii < optional.size(); ++ii) {
-        const auto& type = optional[ii];
+    if (!optional.empty()) {
+        // Try optional.
+        // If any in optional are present, all in list must exist
+        // The list may be repeated if "repeating" is true
         do {
             if (i >= words.size())
-                goto after_optional; // no more needed!
+                break;
 
-            handleTypes(type, inst.operands, words, i);
-
-        // If on last iteration and repeating, go again (and until no words left)
-        } while (ii >= (optional.size() - 1) && repeating);
+            for (const auto opt_type : optional) {
+                check_limit("");
+                handle_type(opt_type, inst.operands, words, i);
+            }
+        } while (repeating);
     }
-    after_optional:
 
     // Verify that there are no extra words
     if (i < words.size()) {
         std::stringstream err;
-        err << "Extra words while parsing instruction " << opcode << "!";
+        err << "Extra words while parsing instruction " << printOpcode(op) << "!";
         throw std::length_error(err.str());
     }
 

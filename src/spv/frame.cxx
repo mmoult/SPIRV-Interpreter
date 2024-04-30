@@ -12,6 +12,11 @@ export module frame;
 
 export class Frame {
     unsigned pc;
+
+    // pair of label values used for phis. You can only read one and only set the other
+    unsigned curLabel;
+    unsigned lastLabel;
+
     std::vector<const Value*> args;
     /// Where to store the return value, if any. Should be 0 if no return expected
     unsigned retAt;
@@ -31,6 +36,8 @@ export class Frame {
 public:
     Frame(unsigned pc, std::vector<const Value*>& args, unsigned ret_at) :
         pc(pc),
+        curLabel(0),
+        lastLabel(0),
         args(args),
         retAt(ret_at),
         argCount(0),
@@ -66,5 +73,13 @@ public:
     }
     bool hasReturn() {
         return retAt != 0;
+    }
+
+    void setLabel(unsigned label) {
+        lastLabel = curLabel;
+        curLabel = label;
+    }
+    unsigned getLabel() {
+        return lastLabel;
     }
 };

@@ -569,6 +569,10 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(new Primitive(total));
         break;
     }
+    case spv::OpIsNan: // 156
+        TYPICAL_E_UNARY_OP(FLOAT, std::isnan(a->data.fp32));
+    case spv::OpIsInf: // 157
+        TYPICAL_E_UNARY_OP(FLOAT, std::isinf(a->data.fp32));
     case spv::OpLogicalEqual: // 164
         TYPICAL_E_BIN_OP(BOOL, a->data.b32 == b->data.b32);
     case spv::OpLogicalNotEqual: // 165
@@ -577,6 +581,66 @@ bool Spv::Instruction::makeResult(
         TYPICAL_E_BIN_OP(BOOL, a->data.b32 || b->data.b32);
     case spv::OpLogicalAnd: // 167
         TYPICAL_E_BIN_OP(BOOL, a->data.b32 && b->data.b32);
+    case spv::OpLogicalNot: // 168
+        TYPICAL_E_UNARY_OP(BOOL, !(a->data.b32));
+    case spv::OpSelect: { // 169
+        Value* condition = getValue(2, data);
+        Value* first = getValue(3, data);
+        Value* second = getValue(4, data);
+
+        const Type& type = condition->getType();
+        DataType dt = type.getBase();
+        // Condition must be a scalar or a vector of boolean type
+        if (dt != DataType::ARRAY) {
+            // Simple case, we can choose between the two options
+            assert(dt == DataType::BOOL);
+            auto cond = static_cast<Primitive*>(condition);
+            Value* to_use = (cond->data.b32)? first : second;
+            // Now we must clone to result
+            Value* cloned = to_use->getType().construct();
+            cloned->copyFrom(*to_use);
+            data[result_at].redefine(cloned);
+        } else {
+            // Complex case, we must build a result where each component of condition chooses a value to use
+            const auto& cond_arr = *static_cast<Array*>(condition);
+            unsigned cond_size = cond_arr.getSize();
+            const Type& first_type = first->getType();
+            if (const auto base = first_type.getBase(); base != DataType::ARRAY && base != DataType::STRUCT)
+                throw std::runtime_error("First option in Select with vector condition must be either vector, array, "
+                                         "or struct!");
+            const Type& second_type = second->getType();
+            if (const auto base = second_type.getBase(); base != DataType::ARRAY && base != DataType::STRUCT)
+                throw std::runtime_error("Second option in Select with vector condition must be either vector, array, "
+                                         "or struct!");
+            const auto& first_agg = *static_cast<Aggregate*>(first);
+            if (unsigned size = first_agg.getSize(); size != cond_size) {
+                std::stringstream err;
+                err << "Size of first option in Select does not match condition! " << size << " vs " << cond_size;
+                throw std::runtime_error(err.str());
+            }
+            const auto& second_agg = *static_cast<Aggregate*>(second);
+            if (unsigned size = second_agg.getSize(); size != cond_size) {
+                std::stringstream err;
+                err << "Size of second option in Select does not match condition! " << size << " vs " << cond_size;
+                throw std::runtime_error(err.str());
+            }
+
+            std::vector<const Value*> es;
+            for (unsigned i = 0; i < cond_size; ++i) {
+                const Value* cond_i = cond_arr[i];
+                const Primitive& cond_bool = static_cast<const Primitive*>(cond_i);
+                es.push_back(cond_bool.data.b32? first_agg[i]: second_agg[i]);
+            }
+
+            Type* res_type = getType(0, data);
+            Aggregate* result = (res_type->getBase() == DataType::ARRAY)?
+                static_cast<Aggregate*>(new Array(res_type->getElement(), cond_size)):
+                static_cast<Aggregate*>(new Struct(*res_type));
+            result->addElements(es);
+            data[result_at].redefine(result);
+        }
+        break;
+    }
     case spv::OpSGreaterThan: // 173
         TYPICAL_E_BIN_OP(INT, a->data.i32 > b->data.i32);
     case spv::OpSGreaterThanEqual: // 175

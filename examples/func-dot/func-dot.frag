@@ -28,4 +28,5 @@ void main() {
         if (x >= i)
             diffuseColor -= directionalComp(diffuseColor, float(x));
     }
+    diffuseColor.a = (isnan(coords.y) || isinf(coords.x)) ? 0 : 1;
 }

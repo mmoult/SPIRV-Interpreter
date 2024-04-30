@@ -51,7 +51,6 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
     case spv::OpFunction: // 54
     case spv::OpLoopMerge: // 246
     case spv::OpSelectionMerge: // 247
-    case spv::OpLabel: // 248
         break;  // should print for verbose
     case spv::OpFunctionParameter: { // 55
         inc_pc = false;  // get arg increments PC for us
@@ -104,6 +103,32 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
         Value* val = getValue(1, data);
         Value* store_to = getFromPointer(0, data);
         store_to->copyFrom(*val);
+        break;
+    }
+    case spv::OpPhi: { // 245
+        unsigned last_label = frame.getLabel();
+        // We must find a label in the phi which matches the last block seen
+        for (unsigned i = 3; i < operands.size(); i += 2) {
+            Value* block = getValue(i, data);
+            auto p_block = static_cast<Primitive*>(block);
+            if (p_block->data.u32 == last_label) {
+                dst_val = getValue(i - 1, data);
+                break;
+            }
+        }
+        if (dst_val == nullptr)
+            throw std::runtime_error("Phi encountered without a label for the last block!");
+
+        // Need to clone the destination value for data safety
+        Value* real_dst = dst_val->getType().construct();
+        real_dst->copyFrom(*dst_val);
+        dst_val = real_dst;
+        break;
+    }
+    case spv::OpLabel: { // 248
+        Value* val = getValue(0, data);  // get the label value which has been made earlier
+        auto prim = static_cast<Primitive*>(val);
+        frame.setLabel(prim->data.u32);
         break;
     }
     case spv::OpBranch: { // 249
