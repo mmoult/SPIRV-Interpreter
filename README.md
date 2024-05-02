@@ -8,7 +8,7 @@ An interpreter for SPIR-V shaders/kernels. Outputs the result after running the 
 - Can generate template file for expected inputs
 - Option to check against expected results
 - Verbose trace of program execution
-- 4 test examples, and counting
+- 5 test examples, and counting
 
 ## Use
 This project aims to support the most recent versions of the full
@@ -18,14 +18,16 @@ use `spirv-val` in [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). I
 incorrect, the behavior of interpretation is undefined. This should not be a problem since most SPIR-V is
 auto-generated.
 
-Static recursion is not *technically* forbidden by the SPIR-V spec, but it is forbidden by Vulkan (see VUID-StandaloneSpirv-None-04634). For the sake of simplicity and efficiency, the interpreter does not guarantee correct execution of programs with recursion.
+Static recursion is not *technically* forbidden by the SPIR-V spec, but it is forbidden by Vulkan (see
+`VUID-StandaloneSpirv-None-04634`). For the sake of simplicity and efficiency, the interpreter does not guarantee
+correct execution of programs with recursion.
 
 Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
 
 ## Building
 The source can be built with CMake version 3.28 or higher using a compiler which supports C++20 with modules (such as
-clang++ version 18 or g++ version ?). The source should be platform independent, but little to no testing has been done
-on Windows or Mac.
+clang++ version ≥ 16 or g++ version ≥ 14). The source should be platform independent, but little to no testing has been
+done on Windows or Mac.
 
 Here are a couple example commands to run from the repository's root directory:
 

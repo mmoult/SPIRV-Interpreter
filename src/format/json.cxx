@@ -370,15 +370,13 @@ protected:
 public:
     void printFile(std::stringstream& out, const ValueMap& vars) override {
         out << "{";
-        newline(out, 1);
         bool first = true;
         for (const auto& [key, val] : vars) {
             if (first)
                 first = false;
-            else {
+            else
                 out << ",";
-                newline(out, 1);
-            }
+            newline(out, 1);
             printKey(out, key);
             out << " : ";
             printValue(out, *val, 1);

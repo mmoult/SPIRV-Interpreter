@@ -12,6 +12,8 @@ set_target_properties(tests PROPERTIES OUTPUT_NAME "tests")
 
 target_sources(tests
     PUBLIC
+      format/json-test.cpp
+      format/yaml-test.cpp
       util-test.cpp
 )
 
