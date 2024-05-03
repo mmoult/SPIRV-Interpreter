@@ -25,14 +25,13 @@ correct execution of programs with recursion.
 Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
 
 ## Building
-The source can be built with CMake version 3.28 or higher using a compiler which supports C++20 with modules (such as
-clang++ version ≥ 16 or g++ version ≥ 14). The source should be platform independent, but little to no testing has been
-done on Windows or Mac.
+The source can be built with CMake using a compiler which supports C++20 with modules (such as clang++ version ≥ 16 or
+g++ version ≥ 14). The source should be platform independent, but little to no testing has been done on Windows or Mac.
 
 Here are a couple example commands to run from the repository's root directory:
 
 ```
-cmake -B build -S . -G Ninja
+cmake -B build -G Ninja
 ninja -C build all
 ```
 
@@ -44,7 +43,7 @@ After building, you should find the `spirv-run` executable at `build/src/spirv-r
 ## Testing
 The project has two complementary approaches to testing:
 
-1) Integration tests on SPIR-V shaders in `examples`, commonly launched through `tests/example-runner.py`.
+1) Integration tests on SPIR-V shaders in `examples`, commonly launched through `test/example-runner.py`.
 2) Unit tests via [Catch2](https://github.com/catchorg/Catch2) in the `test` directory
 
 > [!NOTE]
@@ -56,8 +55,8 @@ If you wish to run the unit tests, first verify that the submodule has been init
 git submodule update ---init --recursive
 ```
 
-then follow the steps to build, also including `-DBUILD_TESTING=ON` as an argument to cmake. After building, you should
-find a `tests` executable at `build/test/tests`.
+then follow the steps to build, also including `-DBUILD_TESTING=ON` as an argument to `cmake`. After building, you
+should find a `tests` executable at `build/test/tests`.
 
 ## Contributing
 Contributions via merge requests are welcome! Contributions should:
