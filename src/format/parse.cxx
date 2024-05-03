@@ -55,6 +55,11 @@ private:
     }
 
 protected:
+    // Output settings
+    bool templatize = false;
+    bool preferTabs = true;
+    unsigned indentSize = 2;
+
     class LineHandler {
         std::ifstream* file;
         std::string fromFile;
@@ -187,10 +192,14 @@ protected:
 
     /// @brief Prints a newline character then the number of spaces needed for desired indentation
     /// @param out the stream to write to
+    /// @param spaces whether to force the use of spaces
     /// @param indents the number of indentations, where each indentation is two spaces
-    void newline(std::stringstream& out, unsigned indents) const {
-        const unsigned INDENT_WIDTH = 2;
-        out << '\n' << std::string(INDENT_WIDTH * indents, ' ');
+    void newline(std::stringstream& out, bool spaces, unsigned indents) const {
+        out << '\n';
+        if (spaces || !preferTabs)
+            out << std::string(indentSize * indents, ' ');
+        else
+            out << std::string(indents, '\t');
     }
 
     /// @brief Adds the key-value pair to the map, throwing an error if the key has already been mapped
@@ -424,6 +433,14 @@ protected:
     virtual void verifyBlank(LineHandler& handle) = 0;
 
 public:
+    void setTemplate(bool print_template) {
+        templatize = print_template;
+    }
+    void setIndentSize(unsigned size_in_spaces) {
+        indentSize = size_in_spaces;
+        preferTabs = false;
+    }
+
     /// @brief Parse values from the given file
     /// @param vars the map of pre-existing variables. Also the map new values are saved to
     void parseFile(ValueMap& vars, std::ifstream& file) noexcept(false) {

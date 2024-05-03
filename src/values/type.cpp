@@ -174,6 +174,15 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
             return *other.subElement;
         throw std::runtime_error("Cannot currently take union of arrays with different unioned subelements!");
     }
+    case DataType::STRUCT: {
+        // TODO more complex logic to compare nonequivalent types
+        // The issue is data management- we may need to construct a new type, but if that type is discarded or
+        // superseded, data is leaked. The function may need an extra argument of new datas to be deleted if the value
+        // is discarded
+        if (*this == other)
+            return *this;
+        throw std::runtime_error("Cannot currently take union of different struct types!");
+    }
     // TODO support other types
     }
     return t;

@@ -36,7 +36,8 @@ cmake -B build -S . -G Ninja
 ninja -C build all
 ```
 
-assuming you have [cmake](https://github.com/Kitware/CMake) and [ninja](https://github.com/ninja-build/ninja) installed.
+assuming you have [cmake](https://github.com/Kitware/CMake) version ≥ 3.28 and
+[ninja](https://github.com/ninja-build/ninja) version ≥ 1.11 installed.
 
 After building, you should find the `spirv-run` executable at `build/src/spirv-run`.
 

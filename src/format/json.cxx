@@ -216,6 +216,10 @@ private:
         const auto& type_base = value.getType().getBase();
         switch (type_base) {
         case DataType::FLOAT: {
+            if (templatize) {
+                out << "<float>";
+                break;
+            }
             float fp = static_cast<const Primitive&>(value).data.fp32;
             if (std::isinf(fp)) {
                 if (fp >= 0)
@@ -229,13 +233,25 @@ private:
             break;
         }
         case DataType::UINT:
+            if (templatize) {
+                out << "<uint>";
+                break;
+            }
             out << static_cast<const Primitive&>(value).data.u32;
             break;
         case DataType::INT:
+            if (templatize) {
+                out << "<int>";
+                break;
+            }
             out << static_cast<const Primitive&>(value).data.i32;
             break;
         case DataType::BOOL:
-            if (static_cast<const Primitive&>(value).data.i32)
+            if (templatize) {
+                out << "<bool>";
+                break;
+            }
+            if (static_cast<const Primitive&>(value).data.b32)
                 out << "true";
             else
                 out << "false";
@@ -244,20 +260,23 @@ private:
         case DataType::ARRAY: {
             char close;
             bool is_struct = type_base == DataType::STRUCT;
+            unsigned inline_max;
             const std::vector<std::string>* names;
             if (is_struct) {
                 out << '{';
                 close = '}';
                 names = &value.getType().getNames();
+                inline_max = 2;
             } else {
                 out << '[';
                 close = ']';
+                inline_max = 4;
             }
 
             const auto& agg = static_cast<const Aggregate&>(value);
             // If any subelement is nested, print each on its own line
             unsigned agg_size = agg.getSize();
-            bool each_line = agg_size > 4 || agg_size == 0;
+            bool each_line = agg_size > inline_max || agg_size == 0;
             if (!each_line) {
                 for (const auto& element: agg) {
                     if (isNested(*element)) {
@@ -271,7 +290,7 @@ private:
                 if (i > 0)
                     out << ',';
                 if (each_line)
-                    newline(out, indents + 1);
+                    newline(out, false, indents + 1);
                 else
                     out << ' ';
 
@@ -283,7 +302,7 @@ private:
                 printValue(out, element, indents + 1);
             }
             if (each_line)
-                newline(out, indents);
+                newline(out, false, indents);
             else
                 out << " "; // space the final value from the end brace
             out << close;
@@ -376,12 +395,12 @@ public:
                 first = false;
             else
                 out << ",";
-            newline(out, 1);
+            newline(out, false, 1);
             printKey(out, key);
             out << " : ";
             printValue(out, *val, 1);
         }
-        newline(out, 0);
+        newline(out, false, 0);
         out << "}\n";
     }
 };

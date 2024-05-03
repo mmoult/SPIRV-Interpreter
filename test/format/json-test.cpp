@@ -29,7 +29,7 @@ TEST_CASE("output", "[json]") {
         format.printFile(out, vars);
         REQUIRE(out.str() ==
             "{\n"
-            "  \"foo\" : 2\n"
+            "\t\"foo\" : 2\n"
             "}\n"
         );
     }
@@ -47,10 +47,10 @@ TEST_CASE("output", "[json]") {
         format.printFile(out, vars);
         REQUIRE(out.str() ==
             "{\n"
-            "  \"first\" : true,\n"
-            "  \"fourth\" : false,\n"
-            "  \"second\" : -0.2,\n"
-            "  \"third\" : -3\n"
+            "\t\"first\" : true,\n"
+            "\t\"fourth\" : false,\n"
+            "\t\"second\" : -0.2,\n"
+            "\t\"third\" : -3\n"
             "}\n"
         );
     }
@@ -76,8 +76,8 @@ TEST_CASE("output", "[json]") {
         format.printFile(out, vars);
         REQUIRE(out.str() ==
             "{\n"
-            "  \"arr\" : [ 3.14, 1.59, 2.65, 3.59 ],\n"
-            "  \"bar\" : 7\n"
+            "\t\"arr\" : [ 3.14, 1.59, 2.65, 3.59 ],\n"
+            "\t\"bar\" : 7\n"
             "}\n"
         );
     }
@@ -87,23 +87,19 @@ TEST_CASE("output", "[json]") {
         std::vector<const Type*> struct_fields;
         const Type first = Type::primitive(DataType::INT);
         const Type second = Type::primitive(DataType::BOOL);
-        const Type third = Type::primitive(DataType::FLOAT);
         struct_fields.push_back(&first);
         struct_fields.push_back(&second);
-        struct_fields.push_back(&third);
         Type struct_type = Type::structure(struct_fields);
-        std::string names[] = {"first", "second", "third"};
-        for (unsigned i = 0; i < 3; ++i)
+        std::string names[] = {"first", "second"};
+        for (unsigned i = 0; i < 2; ++i)
             struct_type.nameMember(i, names[i]);
         Struct foo(struct_type);
 
         std::vector<const Value*> fields;
         const Primitive firstp(-8);
         const Primitive secondp(true);
-        const Primitive thirdp(0.09f);
         fields.push_back(&firstp);
         fields.push_back(&secondp);
-        fields.push_back(&thirdp);
         foo.addElements(fields);
         vars["spaced and \\ name"] = &foo;
         format.printFile(out, vars);
@@ -111,7 +107,7 @@ TEST_CASE("output", "[json]") {
             "{\n"
             // About the four backslashes: since they occur in a string literal, there are only 2 in the result.
             // The JSON output requires two because they are within a string literal- one escapes the other.
-            "  \"spaced and \\\\ name\" : { \"first\" : -8, \"second\" : true, \"third\" : 0.09 }\n"
+            "\t\"spaced and \\\\ name\" : { \"first\" : -8, \"second\" : true }\n"
             "}\n"
         );
     }

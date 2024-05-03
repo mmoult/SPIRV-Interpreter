@@ -243,6 +243,10 @@ private:
         const auto& type_base = value.getType().getBase();
         switch (type_base) {
         case DataType::FLOAT: {
+            if (templatize) {
+                out << "<float>";
+                break;
+            }
             float fp = static_cast<const Primitive&>(value).data.fp32;
             if (std::isinf(fp)) {
                 if (fp >= 0)
@@ -256,13 +260,25 @@ private:
             break;
         }
         case DataType::UINT:
+            if (templatize) {
+                out << "<uint>";
+                break;
+            }
             out << static_cast<const Primitive&>(value).data.u32;
             break;
         case DataType::INT:
+            if (templatize) {
+                out << "<int>";
+                break;
+            }
             out << static_cast<const Primitive&>(value).data.i32;
             break;
         case DataType::BOOL:
-            if (static_cast<const Primitive&>(value).data.i32)
+            if (templatize) {
+                out << "<bool>";
+                break;
+            }
+            if (static_cast<const Primitive&>(value).data.b32)
                 out << "true";
             else
                 out << "false";
@@ -272,13 +288,16 @@ private:
             char open, close;
             bool is_struct = type_base == DataType::STRUCT;
             const std::vector<std::string>* names;
+            unsigned inline_max;
             if (is_struct) {
                 open = '{';
                 close = '}';
                 names = &value.getType().getNames();
+                inline_max = 2;
             } else {
                 open = '[';
                 close = ']';
+                inline_max = 4;
             }
 
             const auto& agg = static_cast<const Aggregate&>(value);
@@ -292,10 +311,10 @@ private:
                     }
                 }
 
-                if (nested || agg_size > 4) {
+                if (nested || agg_size > inline_max) {
                     for (unsigned i = 0; i < agg.getSize(); ++i) {
                         const auto& element = *agg[i];
-                        newline(out, indents);
+                        newline(out, true, indents);
 
                         if (is_struct)
                             printKeyValue(out, (*names)[i], element, indents);

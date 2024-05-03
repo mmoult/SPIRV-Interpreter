@@ -73,6 +73,8 @@ int main(int argc, char* argv[]) {
     bool verbose = false;
     ValueMap inputs;
     std::optional<std::string> spv;
+    unsigned indent_size = 0;
+    bool never_templatize = false;
 
     bool args_only = false;
     // Remember to skip argv[0] which is the path to the executable
@@ -96,24 +98,27 @@ int main(int argc, char* argv[]) {
                 COUT("where 'SPV' is a path to a spv file, which must have an OpEntry instruction.")
                 COUT("")
                 COUT("Options:")
-                COUT("  -c / --check FILE     checks the output against the specified file, returning")
+                COUT("  -c / --check FILE     Checks the output against the specified file, returning")
                 COUT("                        0 if equal.")
                 //COUT("  -d / --debug          launch an interactive execution")
-                COUT("  -f / --format         specify a default value format {\"yaml\", \"json\"}. The")
+                COUT("  --default             Print default values in any template file generated")
+                COUT("  -f / --format         Specify a default value format {\"yaml\", \"json\"}. The")
                 COUT("                        interpreter will try to assume desired format from the ")
                 COUT("                        extension of the file to read/write, but this argument is")
                 COUT("                        still useful for --set pairs, stdout, or if the extension")
                 COUT("                        is not recognized. Defaults to \"yaml\".")
-                COUT("  -h / --help           print this help and exit")
-                COUT("  -i / --in FILE        specify a file to fetch input from. Alternatively, input")
+                COUT("  -h / --help           Print this help and exit")
+                COUT("  -i / --in FILE        Specify a file to fetch input from. Alternatively, input")
                 COUT("                        may be specified in key=value pairs with --set.")
-                COUT("  -o / --out FILE       specify a file to output to. Defaults to stdout")
-                COUT("  -p / --print          enable vebose printing")
-                COUT("  --set KEY_VAL         define key-value pair in the default format. May be given")
+                COUT("  --indent SIZE         Specify the size of each indent (in spaces) for outputs")
+                COUT("  -o / --out FILE       Specify a file to output to. Defaults to stdout")
+                COUT("  -p / --print          Enable vebose printing")
+                COUT("  --set KEY_VAL         Define key-value pair in the default format. May be given")
                 COUT("                        more than once.")
-                COUT("  -t / --template FILE  creates a template input file with stubs for all needed")
-                COUT("                        inputs.")
-                COUT("  -v / --version        print version info and exit")
+                COUT("  -t / --template FILE  Creates a template input file with stubs for all needed")
+                COUT("                        inputs. If --default is set, the default values will be")
+                COUT("                        printed instead of <type> stubs.")
+                COUT("  -v / --version        Print version info and exit")
 #undef COUT
                 return ReturnCode::INFO;
             }
@@ -128,6 +133,8 @@ int main(int argc, char* argv[]) {
 
             else if (arg == "-c" || arg == "--check") {
                 NEXT(check);
+            } else if (arg == "--default") {
+                never_templatize = true;
             } else if (arg == "-f" || arg == "--format") {
                 std::string s_format;
                 NEXT(s_format);
@@ -138,6 +145,21 @@ int main(int argc, char* argv[]) {
                 }
             } else if (arg == "-i" || arg == "--in") {
                 NEXT(in);
+            } else if (arg == "--indent") {
+                std::string indent_size_str;
+                NEXT(indent_size_str);
+                try {
+                    int parsed = std::stoi(indent_size_str, nullptr);
+                    if (parsed <= 0) {
+                        std::cerr << "The number of spaces per indent must be > 0, but " << parsed << " was found!";
+                        return ReturnCode::BAD_ARGS;
+                    }
+                    indent_size = static_cast<unsigned>(parsed);
+                } catch (const std::exception& ex) {
+                    std::cerr << "Could not parse a number of spaces per indent from argument string \"";
+                    std::cerr << indent_size_str << "\"!";
+                    return ReturnCode::BAD_ARGS;
+                }
             } else if (arg == "-o" || arg == "--out") {
                 NEXT(out);
             } else if (arg == "-p" || arg == "--print") {
@@ -216,7 +238,12 @@ int main(int argc, char* argv[]) {
         std::stringstream ss;
         const auto& prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
+        if (indent_size > 0)
+            format2->setIndentSize(indent_size);
+        if (!never_templatize)
+            format2->setTemplate(true);
         format2->printFile(ss, prog_ins);
+        format2->setTemplate(false);
 
         std::ofstream templateFile(itemplate);
         templateFile << ss.str();
@@ -253,6 +280,8 @@ int main(int argc, char* argv[]) {
 
         if (out_set) {
             ValueFormat* format2 = determine_format(out, format);
+            if (indent_size > 0)
+                format2->setIndentSize(indent_size);
             format2->printFile(ss, prog_outs);
 
             std::ofstream outFile(out);
