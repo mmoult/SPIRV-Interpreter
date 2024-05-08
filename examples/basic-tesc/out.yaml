@@ -1,0 +1,6 @@
+gl_TessLevelInner: [ 1, 1 ]
+
+gl_TessLevelOuter: [ 2, 2, 2, 2 ]
+
+pv: 
+  bez: [ 0.1, 0.2, 0.3, 0.4 ]

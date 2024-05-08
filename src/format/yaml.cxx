@@ -77,7 +77,6 @@ private:
                     break;
                 handler.skip();
                 // We should know validity because we checked when first identifying or asserting indentation
-                skipWhitespace(handler, true);
                 auto [element, new_line] = parseValue(handler, indent);
                 if (!new_line)
                     verifyBlank(handler, true);

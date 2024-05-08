@@ -3,12 +3,12 @@
 An interpreter for SPIR-V shaders/kernels. Outputs the result after running the program on the given inputs.
 
 ## Features
-- Support for vertex, fragment, compute, ... shaders
+- Support for vertex, fragment, compute, hull, ... shaders
 - Specify inputs and print outputs in YAML or JSON
 - Can generate template file for expected inputs
 - Option to check against expected results
 - Verbose trace of program execution
-- 5 test examples, and counting
+- 7 test examples, and counting
 
 ## Use
 This project aims to support the most recent versions of the full
@@ -65,7 +65,7 @@ Contributions via merge requests are welcome! Contributions should:
 - Be well-documented and have test cases (in `examples` and/or `test` directories).
 - Not break other code. Include the results of running `test/example-runner.py` and `tests` in requests as proof.
 
-### License
+## License
 Full license terms are in [LICENSE.md](LICENSE.md).
 
 ```
