@@ -232,10 +232,13 @@ private:
     void printKeyValue(std::stringstream& out, const std::string& key, const Value& value, unsigned indents) const {
         printKey(out, key);
         out << ": ";
-        // If element is an array, we have a special exception
-        // (This is because the element bullet "- " serves as the indent)
-        unsigned nindents = indents + ((value.getType().getBase() == DataType::ARRAY)? 0 : 1);
-        printValue(out, value, nindents);
+        printValue(out, value, indents);
+    }
+
+    void printArrayIndent(std::stringstream& out) const {
+        out << '-';
+        if (indentSize > 1)
+            out << std::string(indentSize - 1, ' ');
     }
 
     void printValue(std::stringstream& out, const Value& value, unsigned indents = 0) const {
@@ -254,8 +257,12 @@ private:
                     out << "-.inf";
             } else if (std::isnan(fp)) {
                 out << ".NAN";
-            } else
+            } else {
                 out << fp;
+                // Print extra decimal in case the number would have printed without
+                if (std::modf(fp, &fp) == 0)
+                    out << ".0";
+            }
             break;
         }
         case DataType::UINT:
@@ -288,62 +295,76 @@ private:
             bool is_struct = type_base == DataType::STRUCT;
             const std::vector<std::string>* names;
             unsigned inline_max;
+            unsigned e_indents;
             if (is_struct) {
                 open = '{';
                 close = '}';
                 names = &value.getType().getNames();
                 inline_max = 2;
+                e_indents = indents + 1;
             } else {
                 open = '[';
                 close = ']';
                 inline_max = 4;
+                e_indents = indents;
             }
 
             const auto& agg = static_cast<const Aggregate&>(value);
-            if (unsigned agg_size = agg.getSize(); agg_size > 0) {
-                // If any subelement is nested, print each on its own line
-                bool nested = false;
+            unsigned agg_size = agg.getSize();
+            // If any subelement is nested, print each on its own line
+            bool nested = agg_size == 0 || agg_size > inline_max;
+            if (!nested) {
                 for (const auto& element: agg) {
                     if (isNested(*element)) {
                         nested = true;
                         break;
                     }
                 }
+            }
 
-                if (nested || agg_size > inline_max) {
-                    for (unsigned i = 0; i < agg.getSize(); ++i) {
-                        const auto& element = *agg[i];
-                        newline(out, true, indents);
+            if (nested) {
+                if (templatize && !is_struct && agg_size == 0) {
+                    // This is a runtime array: we want to provide a dummy element for the template
+                    const Type& e_type = agg.getType().getElement();
+                    Value* dummy = e_type.construct();
+                    newline(out, true, e_indents);
+                    printArrayIndent(out);
+                    printValue(out, *dummy, indents + 1);
+                    delete dummy;
+                    newline(out, true, e_indents);
+                    printArrayIndent(out);
+                    out << "<...>";
+                }
 
-                        if (is_struct)
-                            printKeyValue(out, (*names)[i], element, indents);
-                        else {
-                            out << "- ";
-                            printValue(out, element, indents + 1);
-                        }
+                for (unsigned i = 0; i < agg.getSize(); ++i) {
+                    const auto& element = *agg[i];
+                    newline(out, true, e_indents);
+
+                    if (is_struct)
+                        printKeyValue(out, (*names)[i], element, indents + 1);
+                    else {
+                        printArrayIndent(out);
+                        printValue(out, element, indents + 1);
                     }
-                    break;
                 }
-                // If we did not print, fall through intentionally
-            }
+            } else {
+                // Inline print
+                out << open << " ";
+                bool first = true;
+                for (unsigned i = 0; i < agg_size; ++i) {
+                    const auto& element = *agg[i];
+                    if (first)
+                        first = false;
+                    else
+                        out << ", ";
 
-            // Inline print
-            out << open << " ";
-            bool first = true;
-            for (unsigned i = 0; i < agg.getSize(); ++i) {
-                const auto& element = *agg[i];
-                if (first)
-                    first = false;
-                else
-                    out << ", ";
-
-                if (is_struct) {
-                    printKey(out, (*names)[i]);
-                    out << ": ";
+                    if (is_struct)
+                        printKeyValue(out, (*names)[i], element, indents);
+                    else
+                        printValue(out, element, indents);
                 }
-                printValue(out, element, indents + 1);
+                out << " " << close;
             }
-            out << " " << close;
             break;
         }
         case DataType::POINTER: {

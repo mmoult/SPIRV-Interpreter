@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <map>
 #include <string>
 #include <sstream>
@@ -47,27 +48,60 @@ TEST_CASE("output", "[yaml]") {
         REQUIRE(out.str() ==
             "foo: \n"
             "- \n"
-            "  - 0\n"
-            "  - 1\n"
-            "  - 2\n"
-            "  - 3\n"
-            "  - 4\n"
+            "  - 0.0\n"
+            "  - 1.0\n"
+            "  - 2.0\n"
+            "  - 3.0\n"
+            "  - 4.0\n"
             "- \n"
-            "  - 1\n"
-            "  - 2\n"
-            "  - 3\n"
-            "  - 4\n"
-            "  - 5\n"
+            "  - 1.0\n"
+            "  - 2.0\n"
+            "  - 3.0\n"
+            "  - 4.0\n"
+            "  - 5.0\n"
             "- \n"
-            "  - 2\n"
-            "  - 3\n"
-            "  - 4\n"
-            "  - 5\n"
-            "  - 6\n"
+            "  - 2.0\n"
+            "  - 3.0\n"
+            "  - 4.0\n"
+            "  - 5.0\n"
+            "  - 6.0\n"
             );
 
         for (const Value* val : news)
             delete val;
+    }
+
+    SECTION("atypical indent") {
+        SETUP
+        Yaml sformat;
+        sformat.setIndentSize(5);
+
+        constexpr unsigned arr_size = 6;
+        std::vector<Primitive> prims;
+        prims.reserve(arr_size);
+        Type fp32 = Type::primitive(DataType::UINT);
+
+        std::vector<const Value*> es;
+        for (unsigned i = 0; i < arr_size; ++i) {
+            prims.emplace_back(static_cast<uint32_t>(i));
+            // It should be fine to access the vector pointer directly because we should never assign more than the
+            // initial allocation.
+            es.push_back(&prims[i]);
+        }
+        Array test(fp32, es.size());
+        test.addElements(es);
+        vars["some array"] = &test;
+
+        sformat.printFile(out, vars);
+        REQUIRE(out.str() ==
+            "\"some array\": \n"
+            "-    0\n"
+            "-    1\n"
+            "-    2\n"
+            "-    3\n"
+            "-    4\n"
+            "-    5\n"
+            );
     }
 
 /*
