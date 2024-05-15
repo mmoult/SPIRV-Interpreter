@@ -85,7 +85,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     default: {
         // Unsupported op
         std::stringstream err;
-        err << "Cannot use unsupported SPIR-V instruction (" << printOpcode(op) << ")!";
+        err << "Cannot parse unsupported SPIR-V instruction (" << printOpcode(op) << ")!";
         throw std::invalid_argument(err.str());
     }
     case spv::OpNop: // 1
@@ -167,6 +167,10 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpFMul: // 133
     case spv::OpFDiv: // 136
     case spv::OpVectorTimesScalar: // 142
+    case spv::OpMatrixTimesScalar: // 143
+    case spv::OpVectorTimesMatrix: // 144
+    case spv::OpMatrixTimesVector: // 145
+    case spv::OpMatrixTimesMatrix: // 146
     case spv::OpDot: // 148
     case spv::OpLogicalOr: // 166
     case spv::OpSGreaterThan: // 173
@@ -233,7 +237,6 @@ Spv::Instruction* Spv::Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
         to_load.push_back(Type::CONST);
-        to_load.push_back(Type::UINT);
         optional.push_back(Type::UINT);
         repeating = true;
         break;

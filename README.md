@@ -25,8 +25,8 @@ correct execution of programs with recursion.
 Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
 
 ## Building
-The source can be built with CMake using a compiler which supports C++20 with modules (such as clang++ version ≥ 16 or
-g++ version ≥ 14). The source should be platform independent, but little to no testing has been done on Windows or Mac.
+The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16 or `g++`
+version ≥ 14). The source should be platform independent, but little to no testing has been done on Windows or Mac.
 
 Here are a couple example commands to run from the repository's root directory:
 
@@ -61,7 +61,7 @@ should find a `tests` executable at `build/test/tests`.
 ## Contributing
 Contributions via merge requests are welcome! Contributions should:
 - Be provided under the same license as the project (MPL 2.0).
-- Follow the coding style. We recommend using clang-format (see [.clang-format](src/.clang-format)).
+- Follow the coding style. We recommend using `clang-format` (see settings at [.clang-format](src/.clang-format)).
 - Be well-documented and have test cases (in `examples` and/or `test` directories).
 - Not break other code. Include the results of running `test/example-runner.py` and `tests` in requests as proof.
 

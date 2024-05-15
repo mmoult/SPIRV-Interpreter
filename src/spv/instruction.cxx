@@ -121,6 +121,7 @@ public:
         switch (var->getStorageClass()) {
         case SC::StorageClassUniformConstant:
         case SC::StorageClassInput:
+        case SC::StorageClassPushConstant:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:

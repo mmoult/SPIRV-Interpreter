@@ -1,0 +1,121 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 11
+; Bound: 86
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main" %out_color %perspective
+               OpSource GLSL 450
+               OpName %main "main"
+               OpName %mat_mul "mat_mul"
+               OpName %PC "PC"
+               OpMemberName %PC 0 "render_mat"
+               OpMemberName %PC 1 "other_mat"
+               OpMemberName %PC 2 "data"
+               OpName %push_data "push_data"
+               OpName %el_mul "el_mul"
+               OpName %sum "sum"
+               OpName %out_color "out_color"
+               OpName %perspective "perspective"
+               OpMemberDecorate %PC 0 ColMajor
+               OpMemberDecorate %PC 0 Offset 0
+               OpMemberDecorate %PC 0 MatrixStride 16
+               OpMemberDecorate %PC 1 ColMajor
+               OpMemberDecorate %PC 1 Offset 64
+               OpMemberDecorate %PC 1 MatrixStride 16
+               OpMemberDecorate %PC 2 Offset 128
+               OpDecorate %PC Block
+               OpDecorate %out_color Location 0
+               OpDecorate %perspective Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%mat4v4float = OpTypeMatrix %v4float 4
+%_ptr_Function_mat4v4float = OpTypePointer Function %mat4v4float
+         %PC = OpTypeStruct %mat4v4float %mat4v4float %v4float
+%_ptr_PushConstant_PC = OpTypePointer PushConstant %PC
+  %push_data = OpVariable %_ptr_PushConstant_PC PushConstant
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+%_ptr_PushConstant_mat4v4float = OpTypePointer PushConstant %mat4v4float
+      %int_1 = OpConstant %int 1
+%float_5_38999987 = OpConstant %float 5.38999987
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+  %out_color = OpVariable %_ptr_Output_v4float Output
+    %v3float = OpTypeVector %float 3
+%_ptr_Input_v3float = OpTypePointer Input %v3float
+%perspective = OpVariable %_ptr_Input_v3float Input
+    %float_1 = OpConstant %float 1
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+    %mat_mul = OpVariable %_ptr_Function_mat4v4float Function
+     %el_mul = OpVariable %_ptr_Function_mat4v4float Function
+        %sum = OpVariable %_ptr_Function_mat4v4float Function
+         %17 = OpAccessChain %_ptr_PushConstant_mat4v4float %push_data %int_0
+         %18 = OpLoad %mat4v4float %17
+         %20 = OpAccessChain %_ptr_PushConstant_mat4v4float %push_data %int_1
+         %21 = OpLoad %mat4v4float %20
+         %22 = OpMatrixTimesMatrix %mat4v4float %18 %21
+               OpStore %mat_mul %22
+         %24 = OpAccessChain %_ptr_PushConstant_mat4v4float %push_data %int_0
+         %25 = OpLoad %mat4v4float %24
+         %26 = OpAccessChain %_ptr_PushConstant_mat4v4float %push_data %int_1
+         %27 = OpLoad %mat4v4float %26
+         %28 = OpCompositeExtract %v4float %25 0
+         %29 = OpCompositeExtract %v4float %27 0
+         %30 = OpFMul %v4float %28 %29
+         %31 = OpCompositeExtract %v4float %25 1
+         %32 = OpCompositeExtract %v4float %27 1
+         %33 = OpFMul %v4float %31 %32
+         %34 = OpCompositeExtract %v4float %25 2
+         %35 = OpCompositeExtract %v4float %27 2
+         %36 = OpFMul %v4float %34 %35
+         %37 = OpCompositeExtract %v4float %25 3
+         %38 = OpCompositeExtract %v4float %27 3
+         %39 = OpFMul %v4float %37 %38
+         %40 = OpCompositeConstruct %mat4v4float %30 %33 %36 %39
+               OpStore %el_mul %40
+         %42 = OpLoad %mat4v4float %mat_mul
+         %43 = OpLoad %mat4v4float %el_mul
+         %44 = OpCompositeExtract %v4float %42 0
+         %45 = OpCompositeExtract %v4float %43 0
+         %46 = OpFAdd %v4float %44 %45
+         %47 = OpCompositeExtract %v4float %42 1
+         %48 = OpCompositeExtract %v4float %43 1
+         %49 = OpFAdd %v4float %47 %48
+         %50 = OpCompositeExtract %v4float %42 2
+         %51 = OpCompositeExtract %v4float %43 2
+         %52 = OpFAdd %v4float %50 %51
+         %53 = OpCompositeExtract %v4float %42 3
+         %54 = OpCompositeExtract %v4float %43 3
+         %55 = OpFAdd %v4float %53 %54
+         %56 = OpCompositeConstruct %mat4v4float %46 %49 %52 %55
+         %58 = OpMatrixTimesScalar %mat4v4float %56 %float_5_38999987
+         %59 = OpLoad %mat4v4float %mat_mul
+         %60 = OpCompositeExtract %v4float %58 0
+         %61 = OpCompositeExtract %v4float %59 0
+         %62 = OpFSub %v4float %60 %61
+         %63 = OpCompositeExtract %v4float %58 1
+         %64 = OpCompositeExtract %v4float %59 1
+         %65 = OpFSub %v4float %63 %64
+         %66 = OpCompositeExtract %v4float %58 2
+         %67 = OpCompositeExtract %v4float %59 2
+         %68 = OpFSub %v4float %66 %67
+         %69 = OpCompositeExtract %v4float %58 3
+         %70 = OpCompositeExtract %v4float %59 3
+         %71 = OpFSub %v4float %69 %70
+         %72 = OpCompositeConstruct %mat4v4float %62 %65 %68 %71
+               OpStore %sum %72
+         %75 = OpLoad %mat4v4float %sum
+         %79 = OpLoad %v3float %perspective
+         %81 = OpCompositeExtract %float %79 0
+         %82 = OpCompositeExtract %float %79 1
+         %83 = OpCompositeExtract %float %79 2
+         %84 = OpCompositeConstruct %v4float %81 %82 %83 %float_1
+         %85 = OpMatrixTimesVector %v4float %75 %84
+               OpStore %out_color %85
+               OpReturn
+               OpFunctionEnd

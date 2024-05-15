@@ -37,6 +37,42 @@ const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, un
     return nullptr;
 }
 
+/**
+ * Multiplies the two primitives, x and y, of unknown type, although their type must be the same. Returns the value of
+ * the same type.
+ */
+Primitive multiply_same(const Primitive& x, const Primitive& y) {
+    switch (x.getType().getBase()) {
+    case DataType::FLOAT:
+        return Primitive(x.data.fp32 * y.data.fp32);
+    case DataType::UINT:
+        return Primitive(x.data.u32 * y.data.u32);
+    case DataType::INT:
+        return Primitive(x.data.i32 * y.data.i32);
+    default:
+        throw std::invalid_argument("Can only multiply primitives of type float, uint, or int!");
+    }
+}
+
+/**
+ * Adds the two primitives, storing the result into x.
+ */
+void accum_same(Primitive& x, const Primitive& y) {
+    switch (x.getType().getBase()) {
+    case DataType::FLOAT:
+        x.data.fp32 += y.data.fp32;
+        break;
+    case DataType::UINT:
+        x.data.u32 += y.data.u32;
+        break;
+    case DataType::INT:
+        x.data.i32 += y.data.i32;
+        break;
+    default:
+        throw std::invalid_argument("Can only multiply primitives of type float, uint, or int!");
+    }
+}
+
 struct OpSrc {
     DataType type;
     unsigned val1;
@@ -186,7 +222,7 @@ bool Spv::Instruction::makeResult(
     switch (opcode) {
     default: {
         std::stringstream err;
-        err << "Cannot make result for unsupported instruction (" << printOpcode(opcode) << ")!";
+        err << "Cannot make result for unsupported instruction " << printOpcode(opcode) << "!";
         throw std::runtime_error(err.str());
     }
     case spv::OpExtInstImport: { // 11
@@ -240,7 +276,10 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(new Type(Type::primitive(DataType::FLOAT,
                 std::get<unsigned>(operands[1].raw))));
         break;
-    case spv::OpTypeVector: { // 23
+    case spv::OpTypeVector:   // 23
+    case spv::OpTypeMatrix: { // 24
+        // Element type for vectors, Column type for matrices
+        // A matrix is an array of columns. This is a little confusing because its "columns" are displayed horizontally
         Type* sub = getType(1, data);
         assert(operands[2].type == Token::Type::UINT);
         data[result_at].redefine(new Type(
@@ -531,6 +570,102 @@ bool Spv::Instruction::makeResult(
         Value* res = res_type->construct(pfloats);
         data[result_at].redefine(res);
         break;
+    }
+    case spv::OpMatrixTimesScalar: { // 143
+        Type* res_type = getType(0, data);
+        Value* res = res_type->construct();
+        Array& mres = *static_cast<Array*>(res);
+        const Array& mat = *static_cast<Array*>(getValue(2, data));
+        const Primitive& cons = *static_cast<Primitive*>(getValue(3, data));
+        unsigned ncols = mat.getSize();
+        unsigned nrows = mat.getType().getElement().getSize();
+        for (unsigned i = 0; i < ncols; ++i) {
+            const Array& column = *static_cast<const Array*>(mat[i]);
+            Array& dst_col = *static_cast<Array*>(mres[i]);
+            for (unsigned j = 0; j < nrows; ++j) {
+                const Primitive& val = *static_cast<const Primitive*>(column[j]);
+                Primitive el = multiply_same(val, cons);
+                Primitive& dst = *static_cast<Primitive*>(dst_col[j]);
+                dst.copyFrom(el);
+            }
+        }
+        data[result_at].redefine(res);
+        break;
+    }
+    case spv::OpVectorTimesMatrix: { // 144
+        Type* res_type = getType(0, data);
+        // V * M
+        // (1xA) * (AxB) = (1xB)
+        // Vector's "number of components must equal the number of components in each column in Matrix."
+        // Rows x Columns -> mat[column][row]
+        Value* res = res_type->construct();
+        Array& vres = *static_cast<Array*>(res);
+        const Array& vec = *static_cast<Array*>(getValue(2, data));
+        const Array& mat = *static_cast<Array*>(getValue(3, data));
+
+        //           [3 4 5]   [(0*3 + 1*4 + 2*5)]
+        // [0 1 2] * [6 7 8] = [(0*6 + 1*7 + 2*8)]
+        unsigned ncols = vres.getSize();
+        unsigned nrows = vec.getSize();
+        for (unsigned i = 0; i < ncols; ++i) {
+            Primitive el(0);
+            const Array& mcolumn = *static_cast<const Array*>(mat[i]);
+            for (unsigned j = 0; j < nrows; ++j) {
+                const Primitive& vecv = *static_cast<const Primitive*>(vec[j]);
+                const Primitive& matv = *static_cast<const Primitive*>(mcolumn[j]);
+                Primitive eli = multiply_same(vecv, matv);
+                if (j == 0)
+                    el = eli;
+                else
+                    accum_same(el, eli);
+            }
+            Primitive& dst = *static_cast<Primitive*>(vres[i]);
+            dst.copyFrom(el);
+        }
+        data[result_at].redefine(res);
+        break;
+    }
+    case spv::OpMatrixTimesVector: { // 145
+        Type* res_type = getType(0, data);
+        // M * V
+        // (AxB) * (Bx1) = (Ax1)
+        // Vector's "number of components must equal the number of columns in Matrix."
+        // Rows x Columns -> mat[column][row]
+        Value* res = res_type->construct();
+        Array& vres = *static_cast<Array*>(res);
+        const Array& mat = *static_cast<Array*>(getValue(2, data));
+        const Array& vec = *static_cast<Array*>(getValue(3, data));
+
+        // [0 1]   [6]
+        // [2 3] * [7] = [(0*6 + 2*7 + 4*8) (1*6 + 3*7 + 5*8)]
+        // [4 5]   [8]
+        unsigned ncols = vec.getSize();
+        unsigned nrows = vres.getSize();
+        for (unsigned i = 0; i < ncols; ++i) {
+            const Primitive& vecv = *static_cast<const Primitive*>(vec[i]);
+            Primitive el(0);
+            for (unsigned j = 0; j < nrows; ++j) {
+                const Array& mcolumn = *static_cast<const Array*>(mat[i]);
+                const Primitive& matv = *static_cast<const Primitive*>(mcolumn[j]);
+                Primitive eli = multiply_same(vecv, matv);
+                if (j == 0)
+                    el = eli;
+                else
+                    accum_same(el, eli);
+            }
+            Primitive& dst = *static_cast<Primitive*>(vres[i]);
+            dst.copyFrom(el);
+        }
+        data[result_at].redefine(res);
+        break;
+    }
+    case spv::OpMatrixTimesMatrix: { // 146
+        Type* res_type = getType(0, data);
+        Value* res = res_type->construct();
+        Array& mres = *static_cast<Array*>(res);
+        throw std::runtime_error("Unimplemented behavior!");
+        //data[result_at].redefine(res);
+        //break;
     }
     case spv::OpDot: { // 148
         Value* ops[2];
