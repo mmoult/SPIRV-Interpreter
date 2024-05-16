@@ -98,13 +98,14 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpLabel: // 248
     case spv::OpKill: // 252
     case spv::OpReturn: // 253
+    case spv::OpNoLine: // 317
     case spv::OpTerminateInvocation: // 4416
         // no operands to handle (besides result and type, if present)
         break;
     case spv::OpSource: // 3
         to_load.push_back(Type::CONST);
         to_load.push_back(Type::UINT);
-        optional.push_back(Type::STRING);
+        optional.push_back(Type::REF);
         optional.push_back(Type::STRING);
         break;
     case spv::OpName: // 5
@@ -116,8 +117,15 @@ Spv::Instruction* Spv::Instruction::readOp(
         to_load.push_back(Type::UINT);
         to_load.push_back(Type::STRING);
         break;
+    case spv::OpString: // 7
     case spv::OpExtInstImport: // 11
+    case spv::OpModuleProcessed: // 330
         to_load.push_back(Type::STRING);
+        break;
+    case spv::OpLine: // 8
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::UINT);
+        to_load.push_back(Type::UINT);
         break;
     case spv::OpExtInst: // 12
         to_load.push_back(Type::REF);
