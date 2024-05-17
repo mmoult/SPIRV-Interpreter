@@ -18,7 +18,7 @@ target_sources(spv-interp
       spv/instruction.cxx
       spv/program.cxx
       spv/token.cxx
-      util.cxx
+      util/compare.cxx
       values/aggregate.cxx
       values/pointer.cxx
       values/primitive.cxx

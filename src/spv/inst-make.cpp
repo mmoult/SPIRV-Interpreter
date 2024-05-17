@@ -605,12 +605,12 @@ bool Spv::Instruction::makeResult(
 
         //           [3 4 5]   [(0*3 + 1*4 + 2*5)]
         // [0 1 2] * [6 7 8] = [(0*6 + 1*7 + 2*8)]
-        unsigned ncols = vres.getSize();
-        unsigned nrows = vec.getSize();
-        for (unsigned i = 0; i < ncols; ++i) {
+        unsigned b = vres.getSize();
+        unsigned a = vec.getSize();
+        for (unsigned i = 0; i < b; ++i) {
             Primitive el(0);
             const Array& mcolumn = *static_cast<const Array*>(mat[i]);
-            for (unsigned j = 0; j < nrows; ++j) {
+            for (unsigned j = 0; j < a; ++j) {
                 const Primitive& vecv = *static_cast<const Primitive*>(vec[j]);
                 const Primitive& matv = *static_cast<const Primitive*>(mcolumn[j]);
                 Primitive eli = multiply_same(vecv, matv);
@@ -639,12 +639,12 @@ bool Spv::Instruction::makeResult(
         // [0 1]   [6]
         // [2 3] * [7] = [(0*6 + 2*7 + 4*8) (1*6 + 3*7 + 5*8)]
         // [4 5]   [8]
-        unsigned ncols = vec.getSize();
-        unsigned nrows = vres.getSize();
-        for (unsigned i = 0; i < ncols; ++i) {
+        unsigned b = vec.getSize();
+        unsigned a = vres.getSize();
+        for (unsigned i = 0; i < b; ++i) {
             const Primitive& vecv = *static_cast<const Primitive*>(vec[i]);
             Primitive el(0);
-            for (unsigned j = 0; j < nrows; ++j) {
+            for (unsigned j = 0; j < a; ++j) {
                 const Array& mcolumn = *static_cast<const Array*>(mat[i]);
                 const Primitive& matv = *static_cast<const Primitive*>(mcolumn[j]);
                 Primitive eli = multiply_same(vecv, matv);
@@ -661,11 +661,39 @@ bool Spv::Instruction::makeResult(
     }
     case spv::OpMatrixTimesMatrix: { // 146
         Type* res_type = getType(0, data);
+        // (AxB) * (BxC) = (AxC)
+        // RightMatrix's "number of columns must equal the number of columns in Result Type. Its columns must have the
+        // same number of components as the number of columns in LeftMatrix."
+        // Rows x Columns -> mat[column][row]
         Value* res = res_type->construct();
         Array& mres = *static_cast<Array*>(res);
-        throw std::runtime_error("Unimplemented behavior!");
-        //data[result_at].redefine(res);
-        //break;
+        const Array& lmat = *static_cast<Array*>(getValue(2, data));
+        const Array& rmat = *static_cast<Array*>(getValue(3, data));
+        unsigned a = lmat.getType().getElement().getSize();
+        unsigned b = lmat.getSize();
+        unsigned c = rmat.getSize();
+        for (unsigned i = 0; i < c; ++i) {
+            Array& res_column = *static_cast<Array*>(mres[i]);
+            for (unsigned j = 0; j < a; ++j) {
+                const Array& right_column = *static_cast<const Array*>(rmat[i]);
+                Primitive el(0);
+                for (unsigned k = 0; k < b; ++k) {
+                    // Get (k, j) in left, (i, k) in right
+                    const Primitive& rv = *static_cast<const Primitive*>(right_column[k]);
+                    const Array& lcolumn = *static_cast<const Array*>(lmat[k]);
+                    const Primitive& lv = *static_cast<const Primitive*>(lcolumn[j]);
+                    Primitive eli = multiply_same(lv, rv);
+                    if (k == 0)
+                        el = eli;
+                    else
+                        accum_same(el, eli);
+                }
+                Primitive& dst = *static_cast<Primitive*>(res_column[j]);
+                dst.copyFrom(el);
+            }
+        }
+        data[result_at].redefine(res);
+        break;
     }
     case spv::OpDot: { // 148
         Value* ops[2];

@@ -12,7 +12,7 @@ module;
 #include "type.hpp"
 #include "value.hpp"
 export module value.primitive;
-import util;
+import compare;
 
 export struct Primitive : public Value {
 
@@ -125,7 +125,7 @@ public:
         const auto& other = static_cast<const Primitive&>(val);
         switch (type.getBase()) {
         case FLOAT:
-            return Util::eq_float(data.fp32, other.data.fp32, 6);
+            return Compare::eq_float(data.fp32, other.data.fp32, 6);
         case UINT:
             return data.u32 == other.data.u32;
         case INT:

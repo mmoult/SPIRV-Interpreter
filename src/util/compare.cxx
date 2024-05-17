@@ -10,7 +10,7 @@ module;
 #include <string>
 #include <tuple>
 
-export module util;
+export module compare;
 
 std::string to_signed_string(float x) {
     std::stringstream f;
@@ -35,7 +35,7 @@ std::tuple<char, char> select(CompareMode diff, char xc, char yc) {
     return (diff == CompareMode::X_HI) ? std::tuple(xc, yc) : std::tuple(yc, xc);
 };
 
-export namespace Util {
+export namespace Compare {
 bool eq_float(float x, float y, unsigned needed_sigfigs) {
     bool xnan = std::isnan(x);
     bool ynan = std::isnan(y);
@@ -141,4 +141,4 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
     // each is 0. This breaks the needed pattern.
     return diff == CompareMode::TYPICAL || diff == CompareMode::ZERO;
 }
-}; // namespace Util
+}; // namespace Compare

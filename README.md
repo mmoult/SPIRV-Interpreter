@@ -5,13 +5,13 @@ An interpreter for SPIR-V shaders/kernels. Outputs the result after running the 
 ## Features
 - Support for vertex, fragment, compute, hull, ... shaders
 - Specify inputs and print outputs in YAML or JSON
-- Can generate template file for expected inputs
-- Option to check against expected results
+- Generate template files for expected inputs
+- Check against expected results
 - Verbose trace of program execution
-- 7 test examples, and counting
+- 8 test examples, and counting
 
 ## Use
-This project aims to support the most recent versions of the full
+This project aims to support the full
 [SPIR-V specification](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html). It generally expects
 syntactically-correct SPIR-V files. It is not, nor does it intend to be, a SPIR-V validator. If that is what you need,
 use `spirv-val` in [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). If the input SPIR-V file is syntactically
