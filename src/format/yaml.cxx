@@ -18,6 +18,7 @@ import format.parse;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
+import value.string;
 
 export class Yaml : public ValueFormat {
 
@@ -373,6 +374,12 @@ private:
             for (unsigned idx : pointer.getIndices())
                 out << ", " << idx;
             out << "]";
+            break;
+        }
+        case DataType::STRING: {
+            const auto& strv = static_cast<const String&>(value);
+            // TODO process special chars
+            out << strv.get();
             break;
         }
         default: // VOID, FUNCTION

@@ -12,6 +12,7 @@
 #include "value.hpp"
 import value.aggregate;
 import value.primitive;
+import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values) const {
     switch (base) {
@@ -53,6 +54,8 @@ Value* Type::construct(std::vector<const Value*>* values) const {
             agg->dummyFill();
         return agg;
     }
+    case DataType::STRING:
+        return new String("");
     // TODO support other types
     }
 }
@@ -185,4 +188,26 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
     // TODO support other types
     }
     return t;
+}
+
+Value* Type::asValue(std::vector<Type*>& to_delete) const {
+    // This could easily balloon to a recursive nightmare. I don't want to do that, however, so let's implement it very
+    // simply and we can expand as needed
+#define SIMPLE(TYPE, LOWER) \
+    case DataType::TYPE: \
+        return new String(#LOWER);
+
+    switch (base) {
+    SIMPLE(FLOAT, float);
+    SIMPLE(UINT, uint);
+    SIMPLE(INT, int);
+    SIMPLE(BOOL, bool);
+    SIMPLE(STRUCT, struct);
+    SIMPLE(ARRAY, array);
+    SIMPLE(STRING, string);
+    SIMPLE(VOID, void);
+    SIMPLE(FUNCTION, function);
+    SIMPLE(POINTER, pointer);
+    }
+#undef SIMPLE
 }

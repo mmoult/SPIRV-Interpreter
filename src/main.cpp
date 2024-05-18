@@ -350,7 +350,7 @@ int main(int argc, char* argv[]) {
 
     // Run the program
     try {
-        program.execute(verbose);
+        program.execute(verbose, *format);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::FAILED_EXE;
@@ -372,6 +372,10 @@ int main(int argc, char* argv[]) {
             outFile.close();
         } else {
             format->printFile(ss, prog_outs);
+
+            if (verbose)
+                std::cout << "\nResults=" << std::endl;
+            // The file print should end with a newline, so omit that here but still flush
             std::cout << ss.str() << std::flush;
         }
     }

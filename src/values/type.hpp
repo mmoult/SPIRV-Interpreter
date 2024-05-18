@@ -19,10 +19,11 @@ enum DataType : unsigned {
     BOOL = 3,
     STRUCT = 4,
     ARRAY = 5,
+    STRING = 6,
     // Above is usable in TOML, below only internal to SPIR-V
-    VOID = 6,
-    FUNCTION = 7,
-    POINTER = 8,
+    VOID = 7,
+    FUNCTION = 8,
+    POINTER = 9,
 };
 
 // necessary forward reference
@@ -112,6 +113,10 @@ public:
         return Type(DataType::POINTER, 0, &point_to);
     }
 
+    static inline Type string() {
+        return Type(DataType::STRING, 0, nullptr);
+    }
+
     // Other methods:
 
     /// @brief Creates a value corresponding to this type, filling in values with dummies as necessary
@@ -155,7 +160,7 @@ public:
         return base == rhs.base;
     }
 
-    inline void nameMember(unsigned i, std::string& name) noexcept(false) {
+    inline void nameMember(unsigned i, std::string name) noexcept(false) {
         assert(base == DataType::STRUCT);
         if (i >= nameList.size())
             throw std::invalid_argument("Cannot name member at index beyond existing!");
@@ -177,5 +182,7 @@ public:
     inline DataType getBase() const {
         return base;
     }
+
+    Value* asValue(std::vector<Type*>& to_delete) const;
 };
 #endif

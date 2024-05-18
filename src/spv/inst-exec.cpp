@@ -26,9 +26,6 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
     bool inc_pc = true;
     Frame& frame = frame_stack.back();
 
-    if (verbose)
-        print();
-
     unsigned result_at;
     if (hasResult) {
         unsigned idx = hasResultType? 1: 0;
@@ -184,6 +181,10 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
 
     if (inc_pc)
         frame_stack.back().incPC();
+
+    if (verbose && hasResult) {
+        // TODO
+    }
 }
 
 std::string Spv::Instruction::printOpcode(spv::Op opcode) {

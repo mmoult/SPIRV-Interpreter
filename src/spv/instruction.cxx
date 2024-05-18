@@ -84,7 +84,6 @@ class Instruction {
 
     bool makeResultGlsl(std::vector<Data>& data, unsigned location, unsigned result_at) const noexcept(false);
 
-    void print() const;
     static std::string printOpcode(spv::Op opcode);
 
 public:
@@ -206,5 +205,15 @@ public:
     }
 
     void execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const;
+
+    void print() const;
+
+    /// @brief Returns the result index. If there is none, 0 is returned.
+    /// @return the result index
+    unsigned getResult() const {
+        if (hasResult)
+            return std::get<unsigned>(operands[hasResultType? 1: 0].raw);
+        return 0;
+    }
 };
 }; // namespace Spv
