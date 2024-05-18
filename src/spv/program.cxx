@@ -6,8 +6,6 @@
 module;
 #include <cassert>
 #include <cstdint>
-#include <iostream>
-#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -15,6 +13,7 @@ module;
 #include "../values/value.hpp"
 export module program;
 import data;
+import debug;
 import format.parse;
 import frame;
 import instruction;
@@ -79,18 +78,6 @@ export namespace Spv {
                 return false;
             idx += delta;
             return true;
-        }
-
-        /// @brief Calculate the number digits to display the input number
-        /// @param num the number to be displayed
-        /// @return the number of digits
-        unsigned numDigits(unsigned num) const {
-            unsigned spaces = 1;
-            unsigned power = 10;
-            // assumes that the number of lines < UINT_MAX / 10
-            for (; num >= power; power *= 10)
-                ++spaces;
-            return spaces;
         }
 
         ValueMap getVariables(const std::vector<unsigned>& vars) const {
@@ -292,12 +279,10 @@ export namespace Spv {
             return std::tuple(outputs.empty(), total_tests);
         }
 
-        void execute(bool verbose, ValueFormat& format) noexcept(false) {
+        void execute(bool verbose, bool debug, ValueFormat& format) noexcept(false) {
+            Debugger debugger(insts, format);
             Instruction& entry_inst = insts[entry];
             unsigned start = entry_inst.getEntryStart(data);
-            unsigned line_spaces;
-            if (verbose)
-                line_spaces = numDigits(insts.size());
 
             // SPIR-V forbids recursion (either direct or indirect), so we don't have to keep a stack frame for locals
             // However, we will simulate a stack frame for holding temporaries (args and returns) and pc
@@ -309,46 +294,19 @@ export namespace Spv {
                 if (i_at >= insts.size())
                     throw std::runtime_error("Program execution left program's boundaries!");
 
-                if (verbose) {
-                    constexpr unsigned BUFFER = 2;
-                    std::cout << i_at << std::string(line_spaces - numDigits(i_at) + BUFFER, ' ');
-                    insts[i_at].print();
+                // Print the line and invoke the debugger, if enabled
+                if (verbose)
+                    debugger.printLine(i_at);
+                if (debug) {
+                    if (debugger.invoke(i_at, data))
+                        break;
                 }
-                insts[i_at].execute(data, frame_stack, verbose);
+
+                insts[i_at].execute(data, frame_stack, verbose);  // execute the line of code
+
+                // print the result if verbose
                 if (unsigned result = insts[i_at].getResult(); verbose && result > 0) {
-                    std::stringstream out;
-                    ValueMap vars;
-                    std::stringstream result_name;
-                    result_name << '%' << result;
-
-                    const Value* val;
-                    bool deleteAfter = true;
-                    std::vector<Type*> to_delete;
-
-                    if (Value* agot = data[result].getValue(); agot != nullptr) {
-                        val = agot;
-                        deleteAfter = false;
-                    } else if (Type* tgot = data[result].getType(); tgot != nullptr)
-                        val = tgot->asValue(to_delete);
-                    else if (Variable* vgot = data[result].getVariable(); vgot != nullptr)
-                        val = vgot->asValue(to_delete);
-                    else if (Function* fgot = data[result].getFunction(); fgot != nullptr)
-                        val = fgot->asValue(to_delete);
-                    else
-                        // Forgot to enumerate a case of data!
-                        assert(false);
-                    vars[result_name.str()] = val;
-
-                    // Print the result
-                    format.printFile(out, vars);
-                    std::cout << out.str() << std::flush;
-
-                    // Clean up temporary variables
-                    if (deleteAfter) {
-                        delete val;
-                        for (const Type* t : to_delete)
-                            delete t;
-                    }
+                    debugger.print(result, data);
                 }
             }
         }

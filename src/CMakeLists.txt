@@ -13,6 +13,8 @@ target_sources(spv-interp
       format/json.cxx
       format/parse.cxx
       format/yaml.cxx
+      frontend/console.cxx
+      frontend/debug.cxx
       spv/data.cxx
       spv/frame.cxx
       spv/instruction.cxx

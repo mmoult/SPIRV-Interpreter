@@ -3,14 +3,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-#if defined(WIN32) || defined(_WIN32)
-    #include <windows.h>
-#else
-    #include <sys/ioctl.h>
-    #include <stdio.h>
-    #include <unistd.h>
-#endif
-
 #include <bit>
 #include <cstdint>
 #include <fstream>
@@ -19,7 +11,7 @@
 #include <string>
 
 #include "values/value.hpp"
-
+import console;
 import format.json;
 import format.parse;
 import format.yaml;
@@ -75,56 +67,11 @@ ReturnCode load_file(ValueMap& values, std::string& file_name, ValueFormat* pref
     return ReturnCode::OK;
 }
 
-void print(std::string msg, unsigned width, std::string header = "", unsigned header_width = 0) {
-    unsigned len = 0;
-    bool use_header = !header.empty();
-    bool crunched = header_width + 10 >= width;
-    if (use_header) {
-        std::cout << "  " << header;
-        len += 2 + header.length();
-        // If the header exceeded the header width (should be atypical), print on the next line. Otherwise, print
-        // spaces until the header width ends
-        if (len > header_width || len > width) {
-            std::cout << '\n';
-            len = 0;
-            if (!crunched) {
-                std::cout << std::string(header_width, ' ');
-                len += header_width;
-            }
-        } else {
-            std::cout << std::string(header_width - len, ' ');
-            len = header_width;
-        }
-    }
-    while (len + msg.length() > width) {
-        // Find a convenient breaking point starting from as much as will fit on the line
-        unsigned fit = width - len;
-        unsigned breakAt = fit;
-        for (; breakAt > 0; --breakAt) {
-            if (msg[breakAt] == ' ')
-                break;
-        }
-        bool breakFound = breakAt != 0;
-        if (!breakFound)
-            breakAt = fit;
-
-        std::cout << msg.substr(0, breakAt) << '\n';
-        len = 0;
-        if (use_header && !crunched) {
-            std::cout << std::string(header_width, ' ');
-            len += header_width;
-        }
-        msg = msg.substr(breakAt + (breakFound? 1:0));
-    }
-    std::cout << msg << std::endl;
-    if (crunched)  // print an extra newline to separate entries
-        std::cout << std::endl;
-}
-
 int main(int argc, char* argv[]) {
     std::string itemplate, in, out, check;
     ValueFormat* format = &yaml;
     bool verbose = false;
+    bool debug = false;
     ValueMap inputs;
     std::optional<std::string> spv;
     unsigned indent_size = 0;
@@ -144,58 +91,47 @@ int main(int argc, char* argv[]) {
 
             // Help first, then alphabetic
             if (arg == "-h" || arg == "--help") {
-                unsigned width;
-#if defined(WIN32) || defined(_WIN32)
-                CONSOLE_SCREEN_BUFFER_INFO csbi;
-                GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-                width = static_cast<unsigned>(csbi.srWindow.Right - csbi.srWindow.Left + 1);
-#else
-                struct winsize w;
-                ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-                width = w.ws_col;
-#endif
-
-                unsigned hwidth = 24;
-                print("spirv-run - Interpret SPIR-V shaders", width);
-                print("", width);
-                print("Usage: spirv-run [options] SPV", width);
-                print("where 'SPV' is a path to a spv file, which must have an OpEntry instruction.", width);
-                print("", width);
-                print("Options:", width);
-                print(
-                    "Checks the output against the specified file, returning 0 if equal.", width,
-                    "-c / --check FILE", hwidth
+                Console console(24);
+                console.print("spirv-run - Interpret SPIR-V shaders");
+                console.print("");
+                console.print("Usage: spirv-run [options] SPV");
+                console.print("where 'SPV' is a path to a spv file, which must have an OpEntry instruction.");
+                console.print("");
+                console.print("Options:");
+                console.print(
+                    "Checks the output against the specified file, returning 0 if equal.",
+                    "-c / --check FILE"
                 );
-                //print("Launch an interactive execution. Enables -p implicitly.", width, "-d / --debug", hwidth);
-                print(
-                    "Print default values in the template file generated. Enables --template implicitly.", width,
-                    "--default", hwidth
+                console.print("Launch an interactive execution. Enables -p implicitly.", "-d / --debug");
+                console.print(
+                    "Print default values in the template file generated. Enables --template implicitly.",
+                    "--default"
                 );
-                print(
+                console.print(
                     "Specify a default value format {\"yaml\", \"json\"}. The interpreter will try to assume desired "
                     "format from the extension of the file to read/write, but this argument is still useful for --set "
-                    "pairs, stdout, or if the extension is not recognized. Defaults to \"yaml\".", width,
-                    "-f / --format", hwidth
+                    "pairs, stdout, or if the extension is not recognized. Defaults to \"yaml\".",
+                    "-f / --format"
                 );
-                print("Print this help and exit.", width, "-h / --help", hwidth);
-                print(
+                console.print("Print this help and exit.", "-h / --help");
+                console.print(
                     "Specify a file to fetch input from. Alternatively, input may be specified in key-value pairs with "
-                    "--set.", width,
-                    "-i / --in FILE", hwidth
+                    "--set.",
+                    "-i / --in FILE"
                 );
-                print("Specify the size of each indent (in spaces) for outputs.", width, "--indent SIZE", hwidth);
-                print("Specify a file to output to. Defaults to stdout.", width, "-o / --out FILE", hwidth);
-                print("Enable vebose printing.", width, "-p / --print", hwidth);
-                print(
-                    "Define key-value pair in the default format. May be given more than once.", width,
-                    "--set KEY_VAL", hwidth
+                console.print("Specify the size of each indent (in spaces) for outputs.", "--indent SIZE");
+                console.print("Specify a file to output to. Defaults to stdout.", "-o / --out FILE");
+                console.print("Enable vebose printing.", "-p / --print");
+                console.print(
+                    "Define key-value pair in the default format. May be given more than once.",
+                    "--set KEY_VAL"
                 );
-                print(
+                console.print(
                     "Creates a template input file with stubs for all needed inputs. If --default is set, the default "
-                    "values will be printed instead of <type> stubs. Use '-' as the FILE to output to stdout.", width,
-                    "-t / --template FILE", hwidth
+                    "values will be printed instead of <type> stubs. Use '-' as the FILE to output to stdout.",
+                    "-t / --template FILE"
                 );
-                print("Print version info and exit.", width, "-v / --version", hwidth);
+                console.print("Print version info and exit.", "-v / --version");
                 return ReturnCode::INFO;
             }
 
@@ -209,6 +145,9 @@ int main(int argc, char* argv[]) {
 
             else if (arg == "-c" || arg == "--check") {
                 NEXT(check);
+            } else if (arg == "-d" || arg == "--debug") {
+                debug = true;
+                verbose = true;
             } else if (arg == "--default") {
                 never_templatize = true;
                 if (itemplate.empty())
@@ -350,7 +289,7 @@ int main(int argc, char* argv[]) {
 
     // Run the program
     try {
-        program.execute(verbose, *format);
+        program.execute(verbose, debug, *format);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::FAILED_EXE;
