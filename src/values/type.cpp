@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "value.hpp"
-
 import value.aggregate;
 import value.primitive;
 

@@ -29,6 +29,7 @@ target_sources(spv-interp
     spv/inst-exec.cpp
     spv/inst-make.cpp
     spv/inst-read.cpp
+    util/trie.cpp
     values/type.cpp
 )
 

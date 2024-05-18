@@ -178,5 +178,4 @@ public:
         return base;
     }
 };
-
 #endif

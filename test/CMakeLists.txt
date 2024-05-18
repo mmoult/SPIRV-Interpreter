@@ -15,6 +15,7 @@ target_sources(tests
       format/json-test.cpp
       format/yaml-test.cpp
       util/compare-test.cpp
+      util/trie-test.cpp
 )
 
 target_link_libraries(tests PRIVATE Catch2::Catch2WithMain spv-interp)

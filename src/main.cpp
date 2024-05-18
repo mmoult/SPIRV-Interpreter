@@ -167,7 +167,10 @@ int main(int argc, char* argv[]) {
                     "-c / --check FILE", hwidth
                 );
                 //print("Launch an interactive execution. Enables -p implicitly.", width, "-d / --debug", hwidth);
-                print("Print default values in any template file generated", width, "--default", hwidth);
+                print(
+                    "Print default values in the template file generated. Enables --template implicitly.", width,
+                    "--default", hwidth
+                );
                 print(
                     "Specify a default value format {\"yaml\", \"json\"}. The interpreter will try to assume desired "
                     "format from the extension of the file to read/write, but this argument is still useful for --set "
@@ -176,7 +179,7 @@ int main(int argc, char* argv[]) {
                 );
                 print("Print this help and exit.", width, "-h / --help", hwidth);
                 print(
-                    "Specify a file to fetch input from. Alternatively, input may be specified in key=value pairs with "
+                    "Specify a file to fetch input from. Alternatively, input may be specified in key-value pairs with "
                     "--set.", width,
                     "-i / --in FILE", hwidth
                 );
@@ -189,7 +192,7 @@ int main(int argc, char* argv[]) {
                 );
                 print(
                     "Creates a template input file with stubs for all needed inputs. If --default is set, the default "
-                    "values will be printed instead of <type> stubs.", width,
+                    "values will be printed instead of <type> stubs. Use '-' as the FILE to output to stdout.", width,
                     "-t / --template FILE", hwidth
                 );
                 print("Print version info and exit.", width, "-v / --version", hwidth);
@@ -208,6 +211,8 @@ int main(int argc, char* argv[]) {
                 NEXT(check);
             } else if (arg == "--default") {
                 never_templatize = true;
+                if (itemplate.empty())
+                    itemplate = "-";
             } else if (arg == "-f" || arg == "--format") {
                 std::string s_format;
                 NEXT(s_format);
@@ -319,9 +324,13 @@ int main(int argc, char* argv[]) {
         format2->printFile(ss, prog_ins);
         format2->setTemplate(false);
 
-        std::ofstream templateFile(itemplate);
-        templateFile << ss.str();
-        templateFile.close();
+        if (itemplate == "-") {
+            std::cout << ss.str() << std::endl;
+        } else {
+            std::ofstream templateFile(itemplate);
+            templateFile << ss.str();
+            templateFile.close();
+        }
         return ReturnCode::INFO;
     }
 

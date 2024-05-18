@@ -4,11 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #include <catch2/catch_test_macros.hpp>
-
 import compare;
 
 TEST_CASE("eq_float", "[compare]") {
-    REQUIRE(Compare::eq_float(0.0f, 0.0f, 6)); // trivial eq
-    REQUIRE(Compare::eq_float(-0.0004f, 0.f, 4)); // negative to positive, round down
-    REQUIRE(!Compare::eq_float(3.4567f, 3.4564f, 4));
+    CHECK(Compare::eq_float(0.0f, 0.0f, 6)); // trivial eq
+    CHECK(Compare::eq_float(-0.0004f, 0.f, 4)); // negative to positive, round down
+    CHECK(!Compare::eq_float(3.4567f, 3.4564f, 4));
 }
