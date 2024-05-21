@@ -7,6 +7,7 @@ module;
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -24,17 +25,18 @@ private:
     // 1. JSON doesn't have comments, but // and /* */ are common, so we will parse (but *never* output) them
     // 2. JSON has no representation for inf, nan, but "Infinity", "-Infinity", "NaN" coerce to expected in JavaScript.
 
-    std::tuple<char, bool> skipWhitespace(LineHandler& handler) const {
+    std::optional<char> skipWhitespace(LineHandler& handler) const {
         // newlines are not ever relevant in JSON, so we skip them with all whitespace
         char last = '\0';
         bool in_comment = false;
 
         while (true) {
-            auto [c, valid] = handler.peek();
-
-            if (!valid)
+            auto cc = handler.peek();
+            if (!cc.has_value())
                 break;
-            else if (in_comment) {
+
+            char c = *cc;
+            if (in_comment) {
                 if (last == '*' && c == '/') {
                     in_comment = false;
                     // even though the last is a slash, it cannot be used to form comments (is already consumed).
@@ -46,27 +48,28 @@ private:
                     in_comment = true;
                 else if (last == '/' && c == '/') {
                     // Line comment: proceed to next newline
-                    while (c != '\n' && valid) {
-                        auto res = handler.next();
-                        c = std::get<0>(res);
-                        valid = std::get<1>(res);
-                    }
-                    if (!valid)
-                        break;
+                    handler.skip();
+                    do {
+                        auto cc1 = handler.next();
+                        if (!cc1.has_value())
+                            goto after;
+                        c = *cc1;
+                    } while (c != '\n');
                 } else if (c != '/') // If c is a slash, it could be the start of a comment
-                    return std::tuple(c, valid);
+                    return {c};
 
                 last = c;
             }
             handler.skip(1);
         }
+        after:
 
         // If we end and last was / out of comment, it is NOT blank
         if (!in_comment && last == '/')
             throw std::runtime_error("Character '/' found in string expected to be blank!");
         // It is possible to have an unterminated comment (in_comment == true), but we won't worry about it here
 
-        return std::tuple(0, false);
+        return {};
     }
 
     /// @brief Parse and return the name found in the next string
@@ -77,16 +80,17 @@ private:
         std::stringstream name;
         bool escape = false;
         while (true) {
-            auto [c3, v3] = handler.next();
-            if (!v3)
+            auto cc = handler.next();
+            if (!cc.has_value())
                 throw std::runtime_error("Unterminated name string in JSON!");
+            char c = *cc;
 
             if (escape) {
                 escape = false;
                 // TODO support \u0123 hex chars
                 // The 3 cases (", \, /") can print normally, intentional fallthrough for them
-                if (c3 != '"' && c3 != '\\' && c3 != '/') {
-                    switch (c3) {
+                if (c != '"' && c != '\\' && c != '/') {
+                    switch (c) {
                     case 'b':
                         name << '\b';
                         break;
@@ -104,35 +108,37 @@ private:
                         break;
                     default:
                         std::stringstream err;
-                        err << "Unknown escape sequence in JSON string: \\" << c3 << "!";
+                        err << "Unknown escape sequence in JSON string: \\" << c << "!";
                         throw std::runtime_error(err.str());
                     }
                     continue; // do not fall through to print
                 }
-            } else if (c3 == '"')
+            } else if (c == '"')
                 break;
-            else if (c3 == '\\') {
+            else if (c == '\\') {
                 escape = true;
                 continue;
             }
-            name << c3;
+            name << c;
         }
         return name.str();
     }
 
     Value* parseValue(LineHandler& handler) {
-        auto [c0, v0] = skipWhitespace(handler);
-        if (!v0)
+        auto cc0 = skipWhitespace(handler);
+        if (!cc0.has_value())
             throw std::runtime_error("Missing value!");
+        char c0 = *cc0;
         if (c0 == '{') {
             handler.skip();
             std::vector<std::string> names;
             std::vector<const Value*> values;
             bool first = true;
             while (true) {
-                auto [c1, v1] = skipWhitespace(handler);
-                if (!v1)
+                auto cc1 = skipWhitespace(handler);
+                if (!cc1.has_value())
                     throw std::runtime_error("Missing '}' in JSON input!");
+                char c1 = *cc1;
                 if (c1 == '}')
                     break;
                 if (!first) {
@@ -152,9 +158,10 @@ private:
             std::vector<const Value*> values;
             bool first = true;
             while (true) {
-                auto [c1, v1] = skipWhitespace(handler);
-                if (!v1)
+                auto cc1 = skipWhitespace(handler);
+                if (!cc1.has_value())
                     throw std::runtime_error("Missing ']' in JSON input!");
+                char c1 = *cc1;
                 if (c1 == ']')
                     break;
                 if (!first) {
@@ -350,18 +357,18 @@ protected:
     }
 
     void verifyBlank(LineHandler& handler) noexcept(false) override {
-        auto [c, valid] = skipWhitespace(handler);
-        if (!valid)
+        auto cc = skipWhitespace(handler);
+        if (!cc.has_value())
             return;
 
         std::stringstream err;
-        err << "Unexpected character (" << c << ") found after value!";
+        err << "Unexpected character (" << *cc << ") found after value!";
         throw std::runtime_error(err.str());
     }
 
     void parseFile(ValueMap& vars, LineHandler& handler) override {
-        auto [c1, v1] = skipWhitespace(handler);
-        if (!v1 || c1 != '{')
+        auto cc0 = skipWhitespace(handler);
+        if (cc0.value_or(0) != '{')
             throw std::runtime_error("JSON file must begin with '{'!");
         handler.skip();
 
@@ -371,17 +378,18 @@ protected:
         // I don't think JSON allows trailing commas, and file can be empty
         bool first = true;
         while (true) {
-            auto [c3, v3] = skipWhitespace(handler);
-            if (!v3)
+            auto cc1 = skipWhitespace(handler);
+            if (!cc1.has_value())
                 throw std::runtime_error("Missing '}' in JSON file!");
-            if (c3 == '}')
+            char c1 = *cc1;
+            if (c1 == '}')
                 break;
 
             if (first)
                 first = false;
             else {
                 // We must see a comma to separate multiple values!
-                if (c3 != ',')
+                if (c1 != ',')
                     throw std::runtime_error("Missing , to delimit entries in JSON file!");
                 handler.skip();
             }
@@ -395,17 +403,17 @@ protected:
     }
 
     std::tuple<std::string, Value*> parseVariable(LineHandler& handler) noexcept(false) override {
-        auto [c2, v2] = skipWhitespace(handler);
-        if (c2 != '"' || !v2)
+        auto cc0 = skipWhitespace(handler);
+        if (cc0.value_or(0) != '"')
             throw std::runtime_error("Named value in JSON input must begin with '\"'!");
         handler.skip();
         std::string name = parseName(handler);
-        auto [c3, v3] = skipWhitespace(handler);
-        if (!v3 || c3 != ':')
+        auto cc1 = skipWhitespace(handler);
+        if (cc1.value_or(0) != ':')
             throw std::runtime_error("Missing colon after JSON name!");
         handler.skip();
         Value* val = parseValue(handler);
-        return std::tuple(name, val);
+        return {name, val};
     }
 
 public:

@@ -7,6 +7,7 @@ module;
 #include <cctype> // for std::isspace
 #include <cmath> // for std::isinf and std::isnan
 #include <iostream>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -27,29 +28,32 @@ private:
     /// @param handler to parse from
     /// @param breakAtNewline whether to stop at newlines (true) or treat them as regular space (false)
     /// @return (char, valid) of next non-whitespace or newline
-    std::tuple<char, bool> skipWhitespace(LineHandler& handler, bool breakAtNewline) const {
+    std::optional<char> skipWhitespace(LineHandler& handler, bool breakAtNewline) const {
         while (true) {
-            auto [c, valid] = handler.peek();
-            if (!valid)
-                return std::tuple(c, valid);
-            else if (c == '#') { // comment until end of line
-                while (valid && c != '\n') {
-                    auto res = handler.next();
-                    c = std::get<0>(res);
-                    valid = std::get<1>(res);
-                }
+            auto cc = handler.peek();
+            if (!cc.has_value())
+                return {};
+
+            char c = *cc;
+            if (c == '#') { // comment until end of line
+                do {
+                    auto cc1 = handler.next();
+                    if (!cc1.has_value())
+                        return {};
+                    c = *cc1;
+                } while (c != '\n');
                 if (breakAtNewline)
-                    return std::tuple(c, valid);
+                    return {c};
             } else if (!std::isspace(c) || (breakAtNewline && c == '\n'))
-                return std::tuple(c, valid); // semantically relevant character
+                return {c}; // semantically relevant character
             handler.skip(1);
         }
     }
 
     std::tuple<std::string, Value*> parseVariable(LineHandler& handler, unsigned min_indent, bool end_check = true) {
         std::string key = parseName(handler);
-        auto [c1, v1] = skipWhitespace(handler, true);
-        if (!v1 || c1 != ':') {
+        auto cc = skipWhitespace(handler, true);
+        if (cc.value_or(0) != ':') {
             std::stringstream err;
             err << "Missing colon in definition for '" << key << "'!";
             throw std::runtime_error(err.str());
@@ -59,7 +63,7 @@ private:
         // queue up the next line (and verify there is no more content on this)
         if (!next_line && end_check)
             verifyBlank(handler, true);
-        return std::tuple(key, val);
+        return {key, val};
     }
 
     std::tuple<Value*, bool> parseAgg(LineHandler& handler, unsigned indent, bool list) {
@@ -71,8 +75,8 @@ private:
             const Value* celement;
             if (list) {
                 // Must see '-' and then some optional space
-                auto [c0, _] = handler.peek();
-                if (c0 != '-')
+                auto c0 = handler.peek();
+                if (*c0 != '-')
                     // The list is done because this line doesn't have a bullet. This cannot happen on the first element
                     // because we must see a bullet to get to this logic.
                     break;
@@ -106,7 +110,7 @@ private:
         // Reset to the start of the line so the next to process has the correct indent count
         handler.resetToLineStart();
         // Now that we are done parsing, add elements and form the type:
-        return std::tuple(list? constructArrayFrom(elements): constructStructFrom(names, elements), true);
+        return {list? constructArrayFrom(elements): constructStructFrom(names, elements), true};
     }
 
     Value* parseInlineAgg(LineHandler& handler, bool list) {
@@ -115,9 +119,10 @@ private:
         std::vector<const Value*> elements;
         std::vector<std::string> names;
         while (true) {
-            auto [c, valid] = skipWhitespace(handler, false);
-            if (!valid)
+            auto cc0 = skipWhitespace(handler, false);
+            if (!cc0.has_value())
                 throw std::runtime_error("Premature end found while parsing aggregate!");
+            char c = *cc0;
 
             if ((list && c == ']') || (!list && c == '}')) {
                 // Consume the end token
@@ -140,11 +145,12 @@ private:
             elements.push_back(celement);
 
             // Allow comma after each element ((even after final element))
-            auto [c2, valid2] = skipWhitespace(handler, false);
-            if (valid2) {
-                if (c2 == ',')
-                    handler.skip(1);
-                else if ((list && c2 != ']') || (!list && c2 != '}'))
+            auto cc1 = skipWhitespace(handler, false);
+            if (cc1.has_value()) {
+                char c1 = *cc1;
+                if (c1 == ',')
+                    handler.skip();
+                else if ((list && c1 != ']') || (!list && c1 != '}'))
                     throw std::runtime_error("Missing comma between elements in inline aggregate!");
             }
         }
@@ -160,9 +166,10 @@ private:
         unsigned in_str = 0;
         bool escape = false;
         while (true) {
-            auto [c, valid] = handler.peek();
-            if (!valid)
+            auto cc = handler.peek();
+            if (!cc.has_value())
                 break;
+            char c = *cc;
 
             if (in_str > 0) {
                 if (in_str == 1) {
@@ -192,18 +199,18 @@ private:
             else
                 name << c;
 
-            handler.skip(1);
+            handler.skip();
         }
         return name.str();
     }
 
     void verifyBlank(LineHandler& handler, bool breakAtNewline) {
         while (true) {
-            auto [c, valid] = skipWhitespace(handler, breakAtNewline);
-            handler.skip();
-            if (!valid)
+            auto cc = skipWhitespace(handler, breakAtNewline);
+            if (!cc.has_value())
                 break;
-            else if (c == '\n') {
+            char c = *cc;
+            if (c == '\n') {
                 // Should only be triggered if break at newline true
                 break;
             } else if (!std::isspace(c)) {
@@ -390,16 +397,20 @@ private:
     unsigned countIndent(LineHandler& handler) const {
         unsigned indent = 0;
         while (true) {
-            auto [c, valid] = handler.peek();
-            if (!valid)
+            auto cc = handler.peek();
+            if (!cc.has_value())
                 return 0;
-            else if (c == '#') { // comment until end of line. count indent on next
-                while (valid && c != '\n') {
-                    auto res = handler.next();
-                    c = std::get<0>(res);
-                    valid = std::get<1>(res);
-                }
+            char c = *cc;
+            if (c == '#') { // comment until end of line. count indent on next
+                do {
+                    handler.skip(1);
+                    auto cc1 = handler.peek();
+                    if (!cc1.has_value())
+                        return 0;
+                    c = *cc1;
+                } while (c != '\n');
                 indent = 0; // reset indent because we are on next line
+                continue;
             } else if (c == ' ') { // YAML only allows space for indents
                 ++indent;
             } else if (c == '\n') {
@@ -407,21 +418,22 @@ private:
                 indent = 0; // restart for next linestd::tuple<std::string, Value*>
             } else // encountered semantically relevant character
                 return indent;
-            handler.skip(1);
+            handler.skip();
         }
     }
 
     std::tuple<Value*, bool> parseValue(LineHandler& handler, unsigned min_indent) {
         while (true) {
-            auto [c, valid] = skipWhitespace(handler, true);
-            if (!valid)
+            auto cc = skipWhitespace(handler, true);
+            if (!cc.has_value())
                 break;
+            char c = *cc;
 
             // Inline lists or maps
             if (c == '[')
-                return std::tuple(parseInlineAgg(handler, true), false);
+                return {parseInlineAgg(handler, true), false};
             else if (c == '{')
-                return std::tuple(parseInlineAgg(handler, false), false);
+                return {parseInlineAgg(handler, false), false};
             else if (c == '\n') {
                 // Nothing on this line, so it must be an aggregate
                 unsigned next = countIndent(handler);
@@ -431,20 +443,20 @@ private:
                     throw std::runtime_error(err.str());
                 }
                 // If we see a -, then this is a list. Otherwise, it is a map
-                auto [c1, v1] = handler.peek();
-                if (!v1)
+                auto cc1 = handler.peek();
+                if (!cc1.has_value())
                     break; // missing value
-                return parseAgg(handler, next, c1 == '-');
+                return parseAgg(handler, next, *cc1 == '-');
             }
 
             // Note: true, false are forbidden field names
             else if (handler.matchId("true"))
-                return std::tuple(new Primitive(true), false);
+                return {new Primitive(true), false};
             else if (handler.matchId("false"))
-                return std::tuple(new Primitive(false), false);
+                return {new Primitive(false), false};
 
             // If it isn't an array, struct, or bool, it must be a number!
-            return std::tuple(parseNumber(handler), false);
+            return {parseNumber(handler), false};
         }
         throw std::runtime_error("Missing value!");
     }
@@ -460,8 +472,7 @@ protected:
 
     std::tuple<std::string, Value*> parseVariable(LineHandler& handler) override {
         unsigned indent = countIndent(handler);
-        auto [key, val] = parseVariable(handler, indent);
-        return std::tuple(key, val);
+        return parseVariable(handler, indent);
     }
 
     void verifyBlank(LineHandler& handler) noexcept(false) override {
@@ -476,8 +487,8 @@ protected:
                 err << "Variable at file root defined at indent " << i << "!";
                 throw std::runtime_error(err.str());
             }
-            auto [c, valid] = handler.peek();
-            if (!valid)
+            auto cc = handler.peek();
+            if (!cc.has_value())
                 break;
 
             auto [key, val] = parseVariable(handler, 0);

@@ -17,7 +17,7 @@ import format.parse;
 import format.yaml;
 import program;
 
-constexpr auto VERSION = "0.3.0";
+constexpr auto VERSION = "0.4.0";
 
 enum ReturnCode : int {
     OK = 0,
@@ -51,19 +51,25 @@ ValueFormat* determine_format(const std::string& file_name, ValueFormat* prefere
 }
 
 ReturnCode load_file(ValueMap& values, std::string& file_name, ValueFormat* preference) {
-    // Parse the variables in file
-    std::ifstream ifs(file_name);
-    if (!ifs.is_open()) {
-        std::cerr << "Could not open file \"" << file_name << "\"!" << std::endl;
-        return ReturnCode::BAD_FILE;
-    }
-    ValueFormat* format = determine_format(file_name, preference);
     try {
-        format->parseFile(values, ifs);
+        if (file_name == "-") {
+            // TODO message to indicate the program expects user input and how to terminate
+            preference->parseFile(values, std::cin);
+        } else {
+            // Parse the variables in file
+            std::ifstream ifs(file_name);
+            if (!ifs.is_open()) {
+                std::cerr << "Could not open file \"" << file_name << "\"!" << std::endl;
+                return ReturnCode::BAD_FILE;
+            }
+            ValueFormat* format = determine_format(file_name, preference);
+            format->parseFile(values, ifs);
+        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }
+
     return ReturnCode::OK;
 }
 
@@ -97,15 +103,20 @@ int main(int argc, char* argv[]) {
                 console.print("Usage: spirv-run [options] SPV");
                 console.print("where 'SPV' is a path to a spv file, which must have an OpEntry instruction.");
                 console.print("");
-                console.print("Options:");
                 console.print(
-                    "Checks the output against the specified file, returning 0 if equal.",
+                    "Options may be given in any order or not at all. For all options which accept FILE as an argument,"
+                    " \"-\" may be given to use stdin or stdout instead."
+                );
+                console.print("The list of options is given below:");
+                console.print(
+                    "Check the output against the specified file. Returns 0 if equal.",
                     "-c / --check FILE"
                 );
-                console.print("Launch an interactive execution. Enables -p implicitly.", "-d / --debug");
+                console.print("Launch an interactive execution. Enables --print implicitly.", "-d / --debug");
                 console.print(
-                    "Print default values in the template file generated. Enables --template implicitly.",
-                    "--default"
+                    "Generate default values for the template file instead of <type> stubs. Enables --template "
+                    "implicitly.",
+                    "-g / --default"
                 );
                 console.print(
                     "Specify a default value format {\"yaml\", \"json\"}. The interpreter will try to assume desired "
@@ -119,16 +130,16 @@ int main(int argc, char* argv[]) {
                     "--set.",
                     "-i / --in FILE"
                 );
-                console.print("Specify the size of each indent (in spaces) for outputs.", "--indent SIZE");
-                console.print("Specify a file to output to. Defaults to stdout.", "-o / --out FILE");
+                console.print("Specify the size of each indent (in spaces) for outputs.", "-n / --indent SIZE");
+                console.print("Specify a file to output to. By default, output prints to stdout.", "-o / --out FILE");
                 console.print("Enable vebose printing.", "-p / --print");
                 console.print(
                     "Define key-value pair in the default format. May be given more than once.",
-                    "--set KEY_VAL"
+                    "-s / --set KEY_VAL"
                 );
                 console.print(
                     "Creates a template input file with stubs for all needed inputs. If --default is set, the default "
-                    "values will be printed instead of <type> stubs. Use '-' as the FILE to output to stdout.",
+                    "values will be printed instead of <type> stubs.",
                     "-t / --template FILE"
                 );
                 console.print("Print version info and exit.", "-v / --version");
@@ -148,7 +159,7 @@ int main(int argc, char* argv[]) {
             } else if (arg == "-d" || arg == "--debug") {
                 debug = true;
                 verbose = true;
-            } else if (arg == "--default") {
+            } else if (arg == "-g" || arg == "--default") {
                 never_templatize = true;
                 if (itemplate.empty())
                     itemplate = "-";
@@ -162,7 +173,7 @@ int main(int argc, char* argv[]) {
                 }
             } else if (arg == "-i" || arg == "--in") {
                 NEXT(in);
-            } else if (arg == "--indent") {
+            } else if (arg == "-n" || arg == "--indent") {
                 std::string indent_size_str;
                 NEXT(indent_size_str);
                 try {
@@ -182,7 +193,7 @@ int main(int argc, char* argv[]) {
                 NEXT(out);
             } else if (arg == "-p" || arg == "--print") {
                 verbose = true;
-            } else if (arg == "--set") {
+            } else if (arg == "-s" || arg == "--set") {
                 if (++i >= argc) {
                     std::cerr << "Missing key-val pair argument for flag set!" << std::endl;
                     return ReturnCode::BAD_ARGS;
@@ -300,7 +311,7 @@ int main(int argc, char* argv[]) {
         std::stringstream ss;
         const auto& prog_outs = program.getOutputs();
 
-        if (out_set) {
+        if (out_set && out != "-") {
             ValueFormat* format2 = determine_format(out, format);
             if (indent_size > 0)
                 format2->setIndentSize(indent_size);

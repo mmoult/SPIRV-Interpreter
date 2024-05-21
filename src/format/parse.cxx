@@ -8,8 +8,9 @@ module;
 #include <cmath>
 #include <concepts> // for std::integral
 #include <cstdint> // for uint32_t and int32_t
-#include <fstream>
+#include <istream>
 #include <limits> // for inf and nan
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -61,7 +62,7 @@ protected:
     unsigned indentSize = 2;
 
     class LineHandler {
-        std::ifstream* file;
+        std::istream* file;
         std::string fromFile;
         const std::string* pLine;
         unsigned idx;
@@ -81,10 +82,8 @@ protected:
             return IdValidity::INVALID;
         }
 
-        using MayChar = std::tuple<char, bool>;
-
     public:
-        LineHandler(const std::string* start_line, unsigned start_idx, std::ifstream* file):
+        LineHandler(const std::string* start_line, unsigned start_idx, std::istream* file):
             file(file),
             pLine(start_line),
             idx(start_idx)
@@ -98,8 +97,8 @@ protected:
 
         /// @brief Returns the next character (with its validity) and moves the string pointer to the next
         /// @return (character, is_valid)
-        MayChar next() {
-            MayChar res = peek();
+        std::optional<char> next() {
+            auto res = peek();
             ++idx;
             return res;
         }
@@ -111,8 +110,8 @@ protected:
         /// @param len the length of string match
         /// @return whether the match was successful
         bool matchId(std::string match) {
-            auto [c, valid] = peek();
-            if (!valid)
+            auto c = peek();
+            if (!c.has_value())
                 return false;
 
             unsigned len = match.length();
@@ -142,7 +141,7 @@ protected:
         /// should not have been modified.
         /// @return the info for variables changed during line handling
         std::tuple<const std::string*, unsigned> update() {
-            return std::tuple(pLine, idx);
+            return {pLine, idx};
         }
 
         void resetToLineStart() {
@@ -166,11 +165,11 @@ protected:
         }
 
         /// @brief fetches (but does not advance beyond) the next character.
-        MayChar peek() {
+        std::optional<char> peek() {
             if (pLine == nullptr) {
                 // fetch a new line
                 if (file == nullptr || !std::getline(*file, fromFile))
-                    return std::tuple(0, false);
+                    return {};
 
                 pLine = &fromFile;
                 idx = 0; // reset point to front
@@ -178,10 +177,10 @@ protected:
 
             const auto& line = *pLine;
             if (!line.empty() && idx < line.length())
-                return std::tuple(line[idx], true);
+                return {line[idx]};
 
             pLine = nullptr; // reset to ask for new line
-            return std::tuple('\n', true);
+            return {'\n'};
         }
     };
 
@@ -248,14 +247,14 @@ protected:
     /// @param handler the line handler used to parse from
     /// @return the number parsed (could be signed, unsigned, or float)
     Value* parseNumber(LineHandler& handler) noexcept(false) {
-        auto [c, valid] = handler.peek();
-        if (!valid)
+        auto c = handler.peek();
+        if (!c.has_value())
             throw std::runtime_error("Missing number!");
 
         // Very first, we may see a sign signifier
         bool sign = true;
-        if (c == '+' || c == '-') {
-            sign = (c == '+');
+        if (*c == '+' || *c == '-') {
+            sign = (*c == '+');
             // character accepted, move on to next
             handler.skip(1);
         }
@@ -443,7 +442,7 @@ public:
 
     /// @brief Parse values from the given file
     /// @param vars the map of pre-existing variables. Also the map new values are saved to
-    void parseFile(ValueMap& vars, std::ifstream& file) noexcept(false) {
+    void parseFile(ValueMap& vars, std::istream& file) noexcept(false) {
         LineHandler handle(nullptr, 0, &file);
         parseFile(vars, handle);
     }

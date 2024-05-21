@@ -7,7 +7,7 @@ An interpreter for SPIR-V shaders/kernels. Outputs the result after running the 
 - Specify inputs and print outputs in YAML or JSON
 - Generate template files for expected inputs
 - Check against expected results
-- Verbose trace of program execution
+- Verbose trace and interactive program execution
 - 8 test examples, and counting
 
 ## Use
