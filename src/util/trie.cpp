@@ -30,11 +30,10 @@ std::tuple<unsigned, bool> Trie::index(char key) const {
 }
 
 void Trie::enumerate(std::string prefix, std::vector<std::string>& options) const {
-    std::string new_prefix = prefix + key;
     if (valued)
-        options.push_back(new_prefix);
+        options.push_back(prefix);
     for (const Trie& kid : children)
-        kid.enumerate(new_prefix, options);
+        kid.enumerate(prefix + kid.key, options);
 }
 
 void Trie::toString(

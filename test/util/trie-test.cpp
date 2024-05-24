@@ -52,7 +52,7 @@ void addValues(Trie& trie, std::vector<unsigned>& order) {
 }
 
 TEST_CASE("insertion_tests", "[trie]") {
-    for (unsigned i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < 4; ++i) {
         Trie trie;
         std::vector<unsigned> order;
         order.reserve(keys.size());
@@ -75,6 +75,18 @@ TEST_CASE("insertion_tests", "[trie]") {
             order.push_back(tearing);
             order.push_back(tearing + 1);
             order.push_back(tearing - 1);
+            break;
+        }
+        case 3: {
+            // Repeated indices in order (insert again should overwrite without error)
+            order.push_back(4);
+            order.push_back(1);
+            order.push_back(11);
+            order.push_back(12);
+            order.push_back(12);
+            order.push_back(5);
+            order.push_back(0);
+            order.push_back(1);
             break;
         }
         default: // all cases should be specified!
@@ -131,4 +143,15 @@ TEST_CASE("next", "[trie]") {
         REQUIRE(t != nullptr);
         CHECK(!t->hasValue());
     }
+}
+
+TEST_CASE("enumerate", "[trie]") {
+    Trie trie;
+    std::vector<unsigned> order{1, 3, 5, 13, 12, 11};
+    addValues(trie, order);
+
+    auto [t, missing] = trie.next("breakpoint ");
+    REQUIRE(t != nullptr);
+    // Enumerate should not repeat prior or the current key
+    CHECK(t->enumerate() == std::vector<std::string>{"add", "clear", "remove"});
 }

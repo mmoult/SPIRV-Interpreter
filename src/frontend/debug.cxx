@@ -4,8 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>  // max
 #include <cassert>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -19,21 +21,19 @@ export module debug;
 import console;
 import data;
 import format.parse;
+import frame;
 import instruction;
 import value.string;
 
 struct BreakPoint {
-    unsigned lineNo;
-    bool ephemeral;
-    unsigned hitCount;
-
-    BreakPoint(unsigned line_no, bool ephemeral = false): lineNo(line_no), ephemeral(ephemeral), hitCount(0) {};
+    unsigned hitCount = 0;
 };
 
 export class Debugger {
     const std::vector<Spv::Instruction>& insts;
     unsigned maxLineDigits;
     ValueFormat& format;
+    static constexpr unsigned BUFFER = 2;
 
     // Command handling:
     Trie rootCommands;
@@ -48,38 +48,47 @@ export class Debugger {
         BREAK_REMOVE,
         DISPLAY,
         HELP,
-        IN,
         NEXT,
-        OUT,
         PROGRAM,
         PROGRAM_ALL,
         PROGRAM_AT,
         QUIT,
         RUN,
+        RETURN,
         STACK,
+        STEP,
     };
 
-    std::vector<BreakPoint> bps;
-    bool stopNext = true;  // Halt on the first invocation (to allow user to set breakpoints)
     bool first = true;     // Only print the intro at first invocation
+    std::map<unsigned, BreakPoint> bps;
+    bool stopNext = true;  // Halt on the first invocation (to allow user to set breakpoints)
+    struct {
+        bool on = false;
+        unsigned frame;
+    } nextCheck;
+    struct {
+        bool on = false;
+        unsigned line;
+    } ephemeral;
 
-    Cmd process(std::string command) const {
-        auto [trie, missing] = rootCommands.next(command);
+    Cmd process(std::string command, Trie& options) const {
+        auto [trie, missing] = options.next(command);
         if (trie == nullptr) {
             std::cout << "Command \"" << command << "\" is not recognized! Use \"help\" to see options.";
             std::cout << std::endl;
             return Cmd::BAD;
         }
         if (!trie->hasValue()) {
-            std::cout << "Ambiguous command \"" << command << missing << "\"";
-            if (!missing.empty())
-                std::cout << " (assumed from \"" << command << "\")";
+            std::cout << "Ambiguous command \"" << command << "\"";
             std::cout << "! Cannot decide between: ";
             bool first_command = true;
+            command += missing;
             for (std::string& opt : trie->enumerate()) {
                 if (first_command)
+                    first_command = false;
+                else
                     std::cout << ", ";
-                std::cout << opt;
+                std::cout << command << opt;
             }
             std::cout << std::endl;
             return Cmd::BAD;
@@ -87,11 +96,21 @@ export class Debugger {
         return static_cast<Cmd>(trie->getValue());
     }
 
-    std::optional<unsigned> from(std::string s) const {
-        int num = std::stoi(s);
-        if (num < 0)
-            std::cout << "Could not parse positive integer from \"" << s << "\"!" << std::endl;
-        return std::optional<unsigned>(static_cast<unsigned>(num));
+    std::optional<unsigned> from(std::string s, bool quiet = false) const {
+        int num;
+        try {
+            num = std::stoi(s);
+        } catch (...) {
+            if (!quiet)
+                std::cout << "Could not parse nonnegative integer from \"" << s << "\"!" << std::endl;
+            return {};
+        }
+        if (num < 0) {
+            if (!quiet)
+                std::cout << "Need a nonnegative integer, but got \"" << num << "\" instead!" << std::endl;
+            return {};
+        }
+        return {static_cast<unsigned>(num)};
     }
 
     /// @brief Calculate the number digits to display the input number
@@ -110,6 +129,28 @@ export class Debugger {
         if (tokens.size() > 1)
             std::cout << "\"" << command << "\" takes no arguments!" << std::endl;
     }
+    void warnExtraArgs(std::string command, unsigned args, unsigned expected) const {
+        if (args > expected) {
+            std::cout << "\"" << command << "\" expects " << expected << " argument";
+            if (expected != 1)
+                std::cout << "s";
+            std::cout << ", but " << args << " argument";
+            if (args != 1)
+                std::cout << "s were";
+            else
+                std::cout << "was";
+            std::cout << " given!";
+        }
+    }
+
+    void breakOnReturn(const std::vector<Frame>& frame_stack) {
+        // Create an ephemeral at the pc of the frame below ours on the stack
+        if (frame_stack.size() > 1) {
+            const Frame& frame = frame_stack[frame_stack.size() - 2];
+            ephemeral.on = true;
+            ephemeral.line = frame.getPC();
+        }
+    }
 
 public:
     Debugger(const std::vector<Spv::Instruction>& insts, ValueFormat& format): insts(insts), format(format) {
@@ -122,15 +163,15 @@ public:
         rootCommands.insert("display", Cmd::DISPLAY);
         rootCommands.insert("exit", Cmd::QUIT);
         rootCommands.insert("help", Cmd::HELP);
-        rootCommands.insert("in", Cmd::IN);
         rootCommands.insert("next", Cmd::NEXT);
-        rootCommands.insert("out", Cmd::OUT);
         rootCommands.insert("program", Cmd::PROGRAM);
         progCommands.insert("all", Cmd::PROGRAM_ALL);
         progCommands.insert("at", Cmd::PROGRAM_AT);
         rootCommands.insert("quit", Cmd::QUIT);
+        rootCommands.insert("return", Cmd::RETURN);
         rootCommands.insert("run", Cmd::RUN);
         rootCommands.insert("stack", Cmd::STACK);
+        rootCommands.insert("step", Cmd::STEP);
         maxLineDigits = numDigits(insts.size());
     }
 
@@ -171,31 +212,42 @@ public:
     }
 
     void printLine(unsigned i_at) const {
-        constexpr unsigned BUFFER = 2;
         std::cout << i_at << std::string(maxLineDigits - numDigits(i_at) + BUFFER, ' ');
         insts[i_at].print();
     }
 
-    bool invoke(unsigned i_at, std::vector<Data>& data) {
+    bool invoke(unsigned i_at, const std::vector<Data>& data, const std::vector<Frame>& frame_stack) {
         bool stop = stopNext;
-        if (stop)
+        if (stop) {
+            if (nextCheck.on) {
+                // If we are at the same frame as before, we have stopped on next successfully
+                // Otherwise, we need to continue until the return back to the previous stack frame.
+                if (nextCheck.frame < frame_stack.size()) {
+                    stop = false;
+                    breakOnReturn(frame_stack);
+                }
+                nextCheck.on = false;
+            }
             stopNext = false;
-        else {
-            for (unsigned i = 0; i < bps.size(); ++i) {
-                auto& bp = bps[i];
-                if (i_at == bp.lineNo) {
+        }
+        // Cannot do an else because flow may need to fall through when stop set to false
+        if (!stop) {
+            // Compare against breakpoints and the ephemeral breakpoint
+            if (bps.contains(i_at)) {
+                auto& bp = bps[i_at];
+                stop = true;
+                bp.hitCount++;
+                // Any stop forgets the ephemeral
+                ephemeral.on = false;
+            } else if (ephemeral.on) {
+                if (i_at == ephemeral.line) {
                     stop = true;
-                    // If this breakpoint, is ephemeral, remove it
-                    if (bp.ephemeral)
-                        bps.erase(bps.begin() + i);
-                    else
-                        bp.hitCount++;
-                    break;
+                    ephemeral.on = false;
                 }
             }
         }
 
-        if (first) {
+        if (first && stop) {
             std::cout << "spirv-run debugger. (enter \"help\" for command options)" << std::endl;
             first = false;
         }
@@ -213,7 +265,7 @@ public:
                     if (!started)
                         continue;
                     // Found the end of the command
-                    tokens.push_back(line.substr(start, i));
+                    tokens.push_back(line.substr(start, i - start));
                     started = false;
                 } else if (!started) {
                     start = i;
@@ -224,25 +276,129 @@ public:
                 tokens.push_back(line.substr(start));
 
             if (tokens.empty())
-                continue; // empty lines should be ignored
+                continue;  // empty lines should be ignored
 
             // Now we run the command through the trie to determine which command was entered
-            Cmd entered = process(tokens[0]);
-
 #define CASE case Cmd::
-            switch (entered) {
-            CASE BAD: // failure code
+            switch (process(tokens[0], rootCommands)) {
+            CASE BAD:
                 continue;  // process will print the error for us. Carry on
-            CASE BREAK:
+            CASE HELP: {
+                // Verify that there are no other tokens
+                // (At a future time, we could implement help targeting specific commands)
+                warnNoArgs("help", tokens);
+                Console console(21);
+                console.print("Choose one of the following options:");
+                console.print("Toggle a breakpoint at the current instruction.", "break");
+                console.print("Set a breakpoint at <line>, where <line> is a nonnegative integer.", "  add <line>");
+                console.print("Remove all breakpoints.", "  clear");
+                console.print("List all breakpoints.", "  list");
+                console.print(
+                    "Remove the breakpoint at <line>, where <line> is a nonnegative integer.",
+                    "  remove <line>"
+                );
+                console.print("Print %<data>, where <data> is a nonnegative integer.", "display <data>");
+                console.print("Print this help message.", "help");
+                console.print("Execute the next instruction in this function, stepping over any calls.", "next");
+                console.print("Print the previous 3 lines, the current line, and the next 3 lines.", "program");
+                console.print(
+                    "Print the previous <x> lines, the current line, and the next <x> lines, where <x> is a "
+                    "nonnegative integer.", "  <x>"
+                );
+                console.print("Print the whole program", "  all");
+                console.print(
+                    "Print <line>, the 3 lines before, and 3 lines after, where <line> is a nonnegative integer",
+                    "  at <line>"
+                );
+                console.print(
+                    "Print <line>, the <x> lines before, and <x> lines after, where <line> and <x> are nonnegative "
+                    "integers.",
+                    "    <x>"
+                );
+                console.print("Quit", "quit / exit");
+                console.print("Execute until the next breakpoint", "run / continue");
+                console.print("Execute until <line>, where <line> is a nonnegative integer.", "  <line>");
+                console.print("Execute until the current function is returned from.", "return");
+                console.print("Step to the next instruction, going into any functions called.", "step");
+                console.print("Print current stack information", "stack");
                 break;
-            CASE BREAK_ADD:
+            }
+            CASE BREAK: {
+                if (tokens.size() == 1) {
+                    // Toggle the breakpoint here
+                    if (bps.contains(i_at))
+                        bps.erase(i_at);
+                    else
+                        bps.emplace(i_at, BreakPoint());
+                    break;
+                }
+                switch (process(tokens[1], breakCommands)) {
+                CASE BAD:
+                    break;
+                CASE BREAK_ADD: {
+                    if (tokens.size() < 3) {
+                        std::cout << "Missing <line> argument for command \"break add\"!" << std::endl;
+                        break;
+                    }
+                    auto found = from(tokens[2]);
+                    if (!found.has_value())
+                        break;  // error already printed
+                    warnExtraArgs("break add", 1, tokens.size() - 2);
+                    unsigned line_no = *found;
+                    if (bps.contains(line_no)) {
+                        std::cout << "There already exists a breakpoint at line " << line_no << "!" << std::endl;
+                        break;
+                    }
+                    bps.emplace(line_no, BreakPoint());
+                    break;
+                }
+                CASE BREAK_CLEAR:
+                    warnExtraArgs("break clear", 0, tokens.size() - 2);
+                    bps.clear();
+                    break;
+                CASE BREAK_LIST: {
+                    warnExtraArgs("break list", 0, tokens.size() - 2);
+                    if (bps.empty()) {
+                        std::cout << "no breakpoints..." << std::endl;
+                        break;
+                    }
+                    const std::string line_header = "line:";
+                    unsigned max_line = 0;
+                    for (auto const& pair : bps)
+                        max_line = std::max(max_line, pair.first);
+                    max_line = std::max(static_cast<unsigned>(line_header.length()), numDigits(max_line)) + BUFFER;
+
+                    std::cout << line_header << std::string(max_line - line_header.length(), ' ');
+                    std::cout << "hits:" << std::endl;
+                    for (auto const& [line_no, bp] : bps) {
+                        unsigned line_len = numDigits(line_no);
+                        std::cout << line_no << std::string(max_line - line_len, ' ') << bp.hitCount << std::endl;
+                    }
+                    break;
+                }
+                CASE BREAK_REMOVE: {
+                    if (tokens.size() < 3) {
+                        std::cout << "Missing <line> argument for command \"break remove\"!" << std::endl;
+                        break;
+                    }
+                    auto found = from(tokens[2]);
+                    if (!found.has_value())
+                        break;  // error already printed
+                    warnExtraArgs("break remove", 1, tokens.size() - 2);
+                    unsigned line_no = *found;
+                    if (!bps.contains(line_no)) {
+                        std::cout << "There is no breakpoint to remove from line " << line_no << "!" << std::endl;
+                        break;
+                    }
+                    bps.erase(line_no);
+                    break;
+                }
+                default:
+                    assert(false);
+                    break;
+                }
                 break;
-            CASE BREAK_CLEAR:
-                break;
-            CASE BREAK_LIST:
-                break;
-            CASE BREAK_REMOVE:
-                break;
+            }
             CASE DISPLAY: {
                 // Need uint arg for the data to display
                 if (tokens.size() < 2) {
@@ -256,79 +412,153 @@ public:
                 if (!may_which.has_value())
                     break;
                 unsigned which = *may_which;
-                if (which >= data.size())
+                if (which >= data.size() || which == 0)
                     std::cout << "Cannot display %" << which << "! Outside of data range." << std::endl;
-                print(which, data);
+                else
+                    print(which, data);
                 break;
             }
-            CASE HELP: {
-                // Verify that there are no other tokens
-                // (At a future time, we could implement help targeting specific commands)
-                warnNoArgs("help", tokens);
-                Console console(21);
-                console.print("Choose one of the following options:");
-                /*
-                console.print("Set a breakpoint at the current instruction.", "break");
-                console.print("Set a breakpoint at <line>, where <line> is a positive integer.", "  add <line>");
-                console.print("Remove all breakpoints.", "  clear");
-                console.print("List all breakpoints.", "  list");
-                console.print("Remove the breakpoint at the current instruction.", "  remove");
-                console.print("Remove the breakpoint at <line>, where <line> is a positive integer.", "    <line>");
-                */
-                console.print("Print %<data>, where <data> is a positive integer.", "display <data>");
-                console.print("Print this help message.", "help");
-                console.print("Step into the execution of the current instruction.", "in");
-                /*
-                console.print("Execute the next instruction.", "next");
-                console.print("Execute until the current function is returned from.", "out");
-                console.print(
-                    "Execute until <fx> functions are returned from, where <fx> is a positive integer",
-                    "  <fx>"
-                );
-                console.print("Print the previous 3 lines, the current line, and the next 3 lines.", "program");
-                console.print(
-                    "Print the previous <x> lines, the current line, and the next <x> lines, where <x> is a"
-                    "positive integer.", "  <x>"
-                );
-                console.print("Print the whole program", "  all");
-                console.print(
-                    "Print <line>, the 3 lines before, and 3 lines after, where <line> is a positive integer",
-                    "  at <line>"
-                );
-                console.print(
-                    "Print <line>, the <x> lines before, and <x> lines after, where <line> and <x> are positive "
-                    "integers.",
-                    "    <x>"
-                );
-                */
-                console.print("Quit", "quit / exit");
-                console.print("Execute until the next breakpoint", "run / continue");
-                /*
-                console.print("Execute until <line>, where <line> is a positive integer.", "  <line>");
-                console.print("Print current stack information", "stack");
-                */
-                break;
-            }
-            CASE IN:
-                warnNoArgs("in", tokens);
+            CASE NEXT:
+                warnNoArgs("next", tokens);
                 stopNext = true;
+                nextCheck.on = true;
+                nextCheck.frame = frame_stack.size();
                 stop = false;
                 break;
-            CASE NEXT:
+            CASE PROGRAM: {
+                unsigned line_print = frame_stack.back().getPC();
+                unsigned surround = 3;
+                bool all = false;
+                unsigned num_tokens = tokens.size();
+                if (num_tokens > 1) {
+                    auto found = from(tokens[1], true);
+                    if (found.has_value())
+                        surround = *found;
+                    else {
+                        switch (process(tokens[1], progCommands)) {
+                        CASE BAD:
+                            continue;
+                        CASE PROGRAM_ALL:
+                            warnExtraArgs("program all", 0, num_tokens - 2);
+                            all = true;
+                            break;
+                        CASE PROGRAM_AT: {
+                            if (num_tokens < 2) {
+                                std::cout << "Missing <line> argument for command \"program at\"!" << std::endl;
+                                break;
+                            } else {
+                                auto lfound = from(tokens[2]);
+                                if (!lfound.has_value())
+                                    break;
+                                line_print = *lfound;
+                                if (num_tokens > 2) {
+                                    auto xfound = from(tokens[3]);
+                                    if (!xfound.has_value())
+                                        break;
+                                    warnExtraArgs("program at", 2, num_tokens - 3);
+                                    surround = *xfound;
+                                }
+                            }
+                            break;
+                        }
+                        default:
+                            assert(false);
+                            break;
+                        }
+                    }
+                }
+
+                unsigned start, end;
+                if (all) {
+                    start = 0;
+                    end = insts.size();
+                } else {
+                    unsigned inst_max = insts.size();
+                    start = std::min(inst_max - 1, line_print);
+                    if (surround > start)
+                        start = 0;
+                    else
+                        start -= surround;
+                    end = std::min(line_print, inst_max);
+                    // To prevent overflow, we cannot add to end arbitrarily. Because of the previous min, we know that
+                    // end <= inst_max
+                    if (unsigned diff = inst_max - end; diff > 0)
+                        end += std::min(diff, surround + 1);
+                }
+                for (unsigned i = start; i < end; ++i) {
+                    bool bp = bps.contains(i);
+                    bool curr = (i == i_at);
+
+                    // Print special line annotations
+                    if (bp)
+                        std::cout << '+';
+                    else if (curr)
+                        std::cout << '>';
+                    else
+                        std::cout << ' ';
+                    if (curr)
+                        std::cout << '>';
+                    else
+                        std::cout << ' ';
+
+                    std::cout << i << std::string(maxLineDigits - numDigits(i) + BUFFER, ' ');
+                    insts[i].print();
+                }
                 break;
-            CASE OUT:
-                break;
-            CASE PROGRAM:
-                break;
-            CASE PROGRAM_ALL:
-                break;
+            }
             CASE QUIT:
                 warnNoArgs("quit", tokens);
                 return true;
-            CASE RUN:
+            CASE RETURN:
+                warnNoArgs("return", tokens);
+                breakOnReturn(frame_stack);
                 stop = false;
                 break;
-            CASE STACK:
+            CASE RUN:
+                if (tokens.size() > 1) {
+                    // Specify a specific line to stop on
+                    auto found = from(tokens[1]);
+                    if (!found.has_value())
+                        break;
+                    warnExtraArgs("run", 1, tokens.size() - 1);
+                    ephemeral.on = true;
+                    ephemeral.line = *found;
+                }
+                stop = false;
+                break;
+            CASE STACK: {
+                warnNoArgs("stack", tokens);
+                const std::string pc_label = "pc:";
+                const std::string return_label = "return:";
+                unsigned pc_max = 0;
+                unsigned return_max = 0;
+                for (const auto& frame : frame_stack) {
+                    pc_max = std::max(pc_max, frame.getPC());
+                    return_max = std::max(return_max, frame.getReturn());
+                }
+                pc_max = std::max(static_cast<unsigned>(pc_label.length()), numDigits(pc_max)) + BUFFER;
+                return_max = std::max(static_cast<unsigned>(return_label.length()), numDigits(return_max)) + BUFFER;
+
+                std::cout << pc_label << std::string(pc_max - pc_label.length(), ' ');
+                std::cout << return_label << std::string(return_max - return_label.length(), ' ');
+                std::cout << "last_label:" << std::endl;
+                for (const auto& frame : frame_stack) {
+                    unsigned pc = frame.getPC();
+                    std::cout << pc << std::string(pc_max - numDigits(pc), ' ');
+                    if (!frame.hasReturn())
+                        std::cout << '-' << std::string(return_max - 1, ' ');
+                    else {
+                        unsigned ret = frame.getReturn();
+                        std::cout << ret << std::string(return_max - numDigits(ret), ' ');
+                    }
+                    std::cout << '%' << frame.getLabel() << std::endl;
+                }
+                break;
+            }
+            CASE STEP:
+                warnNoArgs("step", tokens);
+                stopNext = true;
+                stop = false;
                 break;
             default:
                 assert(false); // no other command should be reachable!

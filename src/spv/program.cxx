@@ -298,7 +298,7 @@ export namespace Spv {
                 if (verbose)
                     debugger.printLine(i_at);
                 if (debug) {
-                    if (debugger.invoke(i_at, data))
+                    if (debugger.invoke(i_at, data, frame_stack))
                         break;
                 }
 

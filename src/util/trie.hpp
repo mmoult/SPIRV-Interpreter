@@ -71,7 +71,7 @@ public:
     /// @return the list
     inline std::vector<std::string> enumerate() const {
         std::vector<std::string> options;
-        enumerate(key, options);
+        enumerate("", options);
         return options;
     }
 

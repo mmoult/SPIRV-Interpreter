@@ -43,7 +43,7 @@ public:
         argCount(0),
         first(true) {}
 
-    unsigned getPC() {
+    unsigned getPC() const {
         return pc;
     }
 
@@ -68,10 +68,10 @@ public:
         this->pc = pc;
     }
 
-    unsigned getReturn() {
+    unsigned getReturn() const {
         return retAt;
     }
-    bool hasReturn() {
+    bool hasReturn() const {
         return retAt != 0;
     }
 
@@ -79,7 +79,7 @@ public:
         lastLabel = curLabel;
         curLabel = label;
     }
-    unsigned getLabel() {
+    unsigned getLabel() const {
         return lastLabel;
     }
 };
