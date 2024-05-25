@@ -224,11 +224,11 @@ private:
     void printKey(std::stringstream& out, const std::string& name) const {
         // Try to print the name without any quotes, but it may be needed
         bool quote_needed = name.empty();
-        for (unsigned i = 0; i < name.length(); ++i) {
-            if (std::isspace(name[i])) {
+        for (unsigned i = 0; i < name.length() && !quote_needed; ++i) {
+            char c = name[i];
+            if ((i == 0 && std::isdigit(c)) ||
+                    !std::isalnum(c))
                 quote_needed = true;
-                break;
-            }
         }
         if (quote_needed)
             out << "\"";

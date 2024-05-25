@@ -30,11 +30,45 @@ const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, un
         for (const auto& request : *queue) {
             if (request.toDecorate == at) {
                 // should be no more than one request
-                return &request.pending; 
+                return &request.pending;
             }
         }
     }
     return nullptr;
+}
+
+void Spv::Instruction::applyVarDeco(Spv::Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
+    if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
+        for (auto location : *decorations) {
+            const Spv::Instruction& deco = queue->insts[location];
+            switch (deco.opcode) {
+            case spv::OpDecorate: { // 71
+                // OpDecorate THIS Field
+                assert(deco.operands[1].type == Spv::Token::Type::CONST);
+                auto field = static_cast<spv::Decoration>(std::get<unsigned>(deco.operands[1].raw));
+                // The SpecId decoration can serve as a name if the name is not present
+                switch (field) {
+                case spv::Decoration::DecorationSpecId:
+                    if (var.getName().empty()) {
+                        unsigned spec_id = std::get<unsigned>(deco.operands[2].raw);
+                        var.setName(std::to_string(spec_id));
+                    }
+                    break;
+                default:
+                    break;
+                }
+                break;
+            }
+            case spv::OpName: { // 5
+                assert(deco.operands[1].type == Spv::Token::Type::STRING);
+                std::string name = std::get<std::string>(deco.operands[1].raw);
+                var.setName(name);
+            }
+            default:
+                break; // other decorations should not occur
+            }
+        }
+    }
 }
 
 /**
@@ -351,6 +385,10 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(new Type(Type::function(ret, params)));
         break;
     }
+    case spv::OpConstantTrue: // 41
+    case spv::OpConstantFalse: // 42
+        data[result_at].redefine(new Primitive(opcode == spv::OpConstantTrue));
+        break;
     case spv::OpConstant: { // 43
         // integer or floating point constant
         Type* ret = getType(0, data);
@@ -372,6 +410,36 @@ bool Spv::Instruction::makeResult(
         }
         auto* val = ret->construct(values);
         data[result_at].redefine(val);
+        break;
+    }
+    case spv::OpSpecConstantTrue: // 48
+    case spv::OpSpecConstantFalse: { // 49
+        // Specialization constants should be constant at compile time. They may have defaults, but their value does not
+        // have to match that. They are constant inputs very similar to OpVariable, so much so that we will treat them
+        // as such.
+        assert(hasResultType);
+        // Note: booleans cannot have non-standard precision
+        Primitive* default_val = new Primitive(opcode == spv::OpSpecConstantTrue);
+        Variable* var = Variable::makeSpecConst(default_val);
+        applyVarDeco(queue, *var, result_at);
+        data[result_at].redefine(var);
+        break;
+    }
+    case spv::OpSpecConstantOp: { // 52
+        // This instruction is essentially an opcode delegator since the const operand[2] must be a valid opcode of a
+        // statically-resolvable opcode
+        // We will get around having to reimplement each instruction by creating a temporary instruction to resolve.
+        assert(operands[2].type == Token::Type::CONST);
+        spv::Op delegate_op = static_cast<spv::Op>(std::get<unsigned>(operands[2].raw));
+        Instruction inst(delegate_op, true, true);
+        // Pass in the necessary operands to the instruction
+        for (unsigned i = 0; i < operands.size(); ++i) {
+            if (i == 2)
+                // Skip operand i == 2, which is the delegated opcode
+                continue;
+            inst.operands.emplace_back(operands[i]);
+        }
+        inst.makeResult(data, location, queue);
         break;
     }
     case spv::OpFunction: { // 54
@@ -411,22 +479,7 @@ bool Spv::Instruction::makeResult(
             if (defaultVal != nullptr)
                 var->setVal(*defaultVal);
         }
-        if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
-            for (auto location : *decorations) {
-                const Instruction& deco = queue->insts[location];
-                switch (deco.opcode) {
-                case spv::OpDecorate: // 71
-                    break; // not currently needed
-                case spv::OpName: { // 5
-                    assert(deco.operands[1].type == Token::Type::STRING);
-                    std::string name = std::get<std::string>(deco.operands[1].raw);
-                    var->setName(name);
-                }
-                default:
-                    break; // other decorations should not occur
-                }
-            }
-        }
+        applyVarDeco(queue, *var, result_at);
         data[result_at].redefine(var);
         break;
     }

@@ -36,7 +36,27 @@ target_sources(spv-interp
     values/type.cpp
 )
 
+# git rev-parse --short HEAD
+
+set(HASH "" CACHE STRING "Repository hash to insert into version info")
+set(GIT_EXECUTABLE "git" CACHE STRING "The path to a git executable, or just git if on path")
+
+# If the hash is set, skip the generation by using git
+if(HASH STREQUAL "")
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+    OUTPUT_VARIABLE HASH
+    RESULT_VARIABLE git_success
+    ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(git_success)
+    message(WARNING "Could not automatically determine version hash. Please set HASH or GIT_EXECUTABLE.")
+  endif()
+endif()
+message(STATUS "found hash: ${HASH}")
+
 add_executable(spv-run main.cpp)
 set_target_properties(spv-run PROPERTIES OUTPUT_NAME "spirv-run")
+target_compile_options(spv-run PUBLIC "-DHASH=${HASH}")
 target_link_libraries(spv-run spv-interp)
 install(TARGETS spv-run)

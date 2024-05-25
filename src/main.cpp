@@ -211,6 +211,12 @@ int main(int argc, char* argv[]) {
                 NEXT(itemplate);
             } else if (arg == "-v" || arg == "--version") {
                 std::cout << "SPIRV-Interpreter version " << VERSION << std::endl;
+                std::cout << "https://github.com/mmoult/SPIRV-Interpreter" << std::endl;
+#define STRINGIZE(x) #x
+#define STRINGIZE_VALUE_OF(x) STRINGIZE(x)
+                std::cout << "Commit hash: " << STRINGIZE_VALUE_OF(HASH) << std::endl;
+#undef STRINGIZE_VALUE_OF
+#undef STRINGIZE
                 return ReturnCode::INFO;
             }
 #undef NEXT
@@ -252,10 +258,21 @@ int main(int argc, char* argv[]) {
     ifs.read(buffer, length);
     ifs.close();
 
+    // We must load the input file, if any, very first. This is because specialization constants must know their input
+    // on the program parse. Indeed, if the size of input variables is dependent on specialization constants (which it
+    // might be), then it is vital the correct input is used before we generate the template.
+    // Of course, even if there are specialization constants, they should have some default value which will be used if
+    // the user doesn't provide something to override it.
+    if (!in.empty()) {
+        auto res = load_file(inputs, in, format);
+        if (res != ReturnCode::OK)
+            return res;
+    }
+
     // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
     Spv::Program program;
     try {
-        program.parse(std::bit_cast<uint8_t*>(buffer), length);
+        program.parse(std::bit_cast<uint8_t*>(buffer), length, inputs);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
@@ -282,12 +299,6 @@ int main(int argc, char* argv[]) {
             templateFile.close();
         }
         return ReturnCode::INFO;
-    }
-
-    if (!in.empty()) {
-        auto res = load_file(inputs, in, format);
-        if (res != ReturnCode::OK)
-            return res;
     }
 
     // Verify that the inputs loaded match what the program expects

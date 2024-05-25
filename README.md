@@ -8,7 +8,7 @@ An interpreter for SPIR-V shaders/kernels. Outputs the result after running the 
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 8 test examples, and counting
+- 10 test examples, and counting
 
 ## Use
 This project aims to support the full

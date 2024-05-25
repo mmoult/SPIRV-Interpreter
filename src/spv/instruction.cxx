@@ -108,9 +108,13 @@ public:
     /// @param data list of data to access for determining the storage class of each variable
     /// @param ins a list of ref indices in data pointing to in variables
     /// @param outs a list of ref indices in data pointing to out variables
-    void ioGen(std::vector<Data>& data, std::vector<unsigned>& ins, std::vector<unsigned>& outs) const noexcept(false) {
-        assert(opcode == spv::OpVariable);
-
+    /// @param provided a map of input variables. Needed for spec constants
+    void ioGen(
+        std::vector<Data>& data,
+        std::vector<unsigned>& ins,
+        std::vector<unsigned>& outs,
+        ValueMap& provided
+    ) const noexcept(false) {
         const unsigned len = data.size();
         Variable* var = getVariable(1, data);
         unsigned id = std::get<unsigned>(operands[1].raw);
@@ -118,9 +122,16 @@ public:
 
         using SC = spv::StorageClass;
         switch (var->getStorageClass()) {
+        case SC::StorageClassPushConstant:
+            if (var->isSpecConst()) {
+                // Try to find this's value in the map. If not present, we keep the original value.
+                std::string name = var->getName();
+                if (provided.contains(name))
+                    var->setVal(*provided[name]);
+            }
+            [[fallthrough]];
         case SC::StorageClassUniformConstant:
         case SC::StorageClassInput:
-        case SC::StorageClassPushConstant:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
@@ -162,7 +173,13 @@ public:
         DecoQueue(std::vector<Instruction>& insts): insts(insts) {}
     };
 
-    bool queueDecoration(std::vector<Data>& data, unsigned location, DecoQueue& queue) const {
+    /// @brief The decoration equivalent of makeResult. Saves decoration requests into the queue
+    /// @param data_size for checking the reference bounds
+    /// @param location the index of this instruction within the program. Used as a back reference since a true pointer
+    ///                 (such as using `this`) wouldn't work within a vector container.
+    /// @param queue the queue to save into
+    /// @return whether this is a decoration instruction
+    bool queueDecoration(unsigned data_size, unsigned location, DecoQueue& queue) const {
         // If instruction is a decoration, queue it
         switch (opcode) {
         default:
@@ -171,7 +188,7 @@ public:
         case spv::OpMemberName: // 6
         case spv::OpDecorate: // 71
         case spv::OpMemberDecorate: // 72
-            unsigned to_decor = checkRef(0, data.size());
+            unsigned to_decor = checkRef(0, data_size);
             // Search through the queue to see if the ref already has a request
             unsigned i = 0;
             for (; i < queue.size(); ++i) {
@@ -187,6 +204,9 @@ public:
         }
         return true;
     }
+private:
+    void applyVarDeco(DecoQueue* queue, Variable& var, unsigned result_at) const;
+public:
 
     /// @brief Create the instruction result from the operands.
     /// This is first called before execution (for static instructions) but is also a fallback during

@@ -28,7 +28,16 @@ export class Variable {
     std::string name;
     std::map<uint32_t, uint32_t> decorations;
 
-    Variable(Value* value, spv::StorageClass storage_class): val(value), storage(storage_class) {}
+    // Whether this variable is a spec constant, which is treated as a value and a variable
+    bool specConst;
+
+    /// @brief Construct a new variable directly (instead of through makeVariable)
+    /// @param value saved (not copied) as the variable's value. Must be on the heap!
+    /// @param storage_class the category which defines this variable's storage/use
+    Variable(Value* value, spv::StorageClass storage_class, bool spec_const):
+        val(value),
+        storage(storage_class),
+        specConst(spec_const) {}
 
 public:
     Variable(const Variable&) = delete;
@@ -46,7 +55,12 @@ public:
         if (t.getBase() != DataType::POINTER)
             throw std::invalid_argument("Cannot initialize variable with non-pointer type!");
         auto* val = t.getPointedTo().construct();
-        return new Variable(val, storage);
+        return new Variable(val, storage, false);
+    }
+
+    /// @param value saved (not copied) as the variable's value. Must be on the heap!
+    [[nodiscard]] static Variable* makeSpecConst(Value* value) {
+        return new Variable(value, spv::StorageClass::StorageClassPushConstant, true);
     }
 
     void decorate(uint32_t deco_type, uint32_t deco_value) {
@@ -54,11 +68,15 @@ public:
         decorations[deco_type] = deco_value;
     }
 
-    spv::StorageClass getStorageClass() {
+    spv::StorageClass getStorageClass() const {
         return storage;
     }
 
-    void setName(std::string& new_name) {
+    bool isSpecConst() const {
+        return specConst;
+    }
+
+    void setName(std::string new_name) {
         name = new_name;
     }
     const std::string& getName() const {
@@ -212,10 +230,32 @@ public:
     };
 
     GET_X(TYPE, Type)
-    GET_X(VALUE, Value)
     GET_X(VARIABLE, Variable)
     GET_X(FUNCTION, Function)
 #undef GET_X
+
+    // Fetching of Values must be able to fetch spec constants, which are saved as program inputs but also need to be
+    // usable like regular values.
+    Value* getValue() {
+        if (type == DType::VALUE)
+            return static_cast<Value*>(raw);
+        if (type == DType::VARIABLE) {
+            auto var = static_cast<Variable*>(raw);
+            if (var->isSpecConst())
+                return var->getVal();
+        }
+        return nullptr;
+    }
+    const Value* getValue() const {
+        if (type == DType::VALUE)
+            return static_cast<const Value*>(raw);
+        if (type == DType::VARIABLE) {
+            auto var = static_cast<Variable*>(raw);
+            if (var->isSpecConst())
+                return var->getVal();
+        }
+        return nullptr;
+    }
 
     // Convenience function to not need to define the Data for each use
     template<typename T>

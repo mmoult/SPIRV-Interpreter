@@ -142,6 +142,11 @@ public:
         return subSize;
     }
 
+    inline unsigned getPrecision() const {
+        assert(base == DataType::FLOAT || base == DataType::UINT || base == DataType::INT);
+        return subSize;
+    }
+
     inline const std::vector<const Type*>& getFields() const {
         assert(base == DataType::STRUCT);
         return subList;

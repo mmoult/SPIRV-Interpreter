@@ -31,6 +31,8 @@ export namespace Spv {
 
         // An list of disparate data entries, where length == bound. Each entry can be:
         std::vector<Data> data;
+        // Note: At some future time, we may associate one program with multiple data vectors. Therefore, the program
+        // may keep ids, but never data objects directly!
         std::vector<unsigned> ins;
         std::vector<unsigned> outs;
 
@@ -89,6 +91,19 @@ export namespace Spv {
             return ret;
         }
 
+        bool isIOGenCode(uint16_t opcode) const {
+            switch (opcode) {
+            case spv::OpSpecConstantTrue:
+            case spv::OpSpecConstantFalse:
+            case spv::OpSpecConstant:
+            case spv::OpSpecConstantComposite:
+            case spv::OpVariable:
+                return true;
+            default:
+                return false;
+            }
+        }
+
     public:
         Program(): buffer(nullptr), length(0), endian(false), idx(0) {}
 
@@ -101,7 +116,7 @@ export namespace Spv {
         Program(const Program& other) = delete;
         Program& operator=(const Program& other) = delete;
 
-        void parse(uint8_t* buffer, int length) noexcept(false) {
+        void parse(uint8_t* buffer, int length, ValueMap& provided) noexcept(false) {
             this->buffer = buffer;
             this->length = length;
 
@@ -158,10 +173,10 @@ export namespace Spv {
 
                     // Process the instruction as necessary
                     // If it has a static result, let it execute now on the data vector
-                    if (!inst.queueDecoration(data, location, decorations)) {
+                    if (!inst.queueDecoration(data.size(), location, decorations)) {
                         inst.makeResult(data, location, &decorations);
-                        if (opcode == spv::OpVariable && static_ctn)
-                            inst.ioGen(data, ins, outs);
+                        if (isIOGenCode(opcode) && static_ctn)
+                            inst.ioGen(data, ins, outs, provided);
                     }
                 }
             }
@@ -187,7 +202,11 @@ export namespace Spv {
                     auto var = inputs[i];
                     if (var->getName() == name) {
                         found = true;
-                        var->setVal(*val);
+                        // If this variable is a specialization constant, we do NOT want to set it now. It must be
+                        // clear that the spec const was set initially and is not set again (important in case we have
+                        // multiple data maps per program).
+                        if (!var->isSpecConst())
+                            var->setVal(*val);
                         // Remove the interface from the check list
                         inputs.erase(inputs.begin() + i);
                         --i;

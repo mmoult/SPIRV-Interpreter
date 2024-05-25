@@ -93,6 +93,8 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpTypeBool: // 20
     case spv::OpConstantTrue: // 41
     case spv::OpConstantFalse: // 42
+    case spv::OpSpecConstantTrue: // 48
+    case spv::OpSpecConstantFalse: // 49
     case spv::OpFunctionParameter: // 55
     case spv::OpFunctionEnd: // 56
     case spv::OpLabel: // 248
@@ -129,7 +131,9 @@ Spv::Instruction* Spv::Instruction::readOp(
         break;
     case spv::OpExtInst: // 12
         to_load.push_back(Type::REF);
-        to_load.push_back(Type::UINT);
+        [[fallthrough]];
+    case spv::OpSpecConstantOp: // 52
+        to_load.push_back(Type::CONST);
         optional.push_back(Type::REF);
         repeating = true;
         break;
