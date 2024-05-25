@@ -163,6 +163,7 @@ Spv::Instruction* Spv::Instruction::readOp(
         break;
     case spv::OpTypeFloat: // 22
     case spv::OpConstant: // 43
+    case spv::OpSpecConstant: // 50
         to_load.push_back(Type::UINT);
         break;
     case spv::OpTypeVector: // 23

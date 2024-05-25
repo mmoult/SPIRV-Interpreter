@@ -148,7 +148,7 @@ export class Debugger {
         if (frame_stack.size() > 1) {
             const Frame& frame = frame_stack[frame_stack.size() - 2];
             ephemeral.on = true;
-            ephemeral.line = frame.getPC();
+            ephemeral.line = frame.getPC() + 1;
         }
     }
 
@@ -195,8 +195,10 @@ public:
             val = vgot->asValue(to_delete);
         else if (const Function* fgot = data[which].getFunction(); fgot != nullptr)
             val = fgot->asValue(to_delete);
-        else
+        else {
             val = &empty;
+            deleteAfter = false;
+        }
         vars[result_name.str()] = val;
 
         // Print the result
@@ -542,7 +544,9 @@ public:
                 std::cout << pc_label << std::string(pc_max - pc_label.length(), ' ');
                 std::cout << return_label << std::string(return_max - return_label.length(), ' ');
                 std::cout << "last_label:" << std::endl;
-                for (const auto& frame : frame_stack) {
+                // Print stack frames backwards so the current frame is on top and previous frames are below it
+                for (unsigned i = frame_stack.size(); i-- > 0;) {
+                    const auto& frame = frame_stack[i];
                     unsigned pc = frame.getPC();
                     std::cout << pc << std::string(pc_max - numDigits(pc), ' ');
                     if (!frame.hasReturn())

@@ -38,37 +38,26 @@ const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, un
 }
 
 void Spv::Instruction::applyVarDeco(Spv::Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
+    bool set_name = false;
     if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
         for (auto location : *decorations) {
             const Spv::Instruction& deco = queue->insts[location];
             switch (deco.opcode) {
-            case spv::OpDecorate: { // 71
-                // OpDecorate THIS Field
-                assert(deco.operands[1].type == Spv::Token::Type::CONST);
-                auto field = static_cast<spv::Decoration>(std::get<unsigned>(deco.operands[1].raw));
-                // The SpecId decoration can serve as a name if the name is not present
-                switch (field) {
-                case spv::Decoration::DecorationSpecId:
-                    if (var.getName().empty()) {
-                        unsigned spec_id = std::get<unsigned>(deco.operands[2].raw);
-                        var.setName(std::to_string(spec_id));
-                    }
-                    break;
-                default:
-                    break;
-                }
+            case spv::OpDecorate: // 71
                 break;
-            }
             case spv::OpName: { // 5
                 assert(deco.operands[1].type == Spv::Token::Type::STRING);
                 std::string name = std::get<std::string>(deco.operands[1].raw);
                 var.setName(name);
+                set_name = true;
             }
             default:
                 break; // other decorations should not occur
             }
         }
     }
+    if (!set_name)
+        var.setName(std::to_string(result_at));
 }
 
 /**
@@ -421,6 +410,16 @@ bool Spv::Instruction::makeResult(
         // Note: booleans cannot have non-standard precision
         Primitive* default_val = new Primitive(opcode == spv::OpSpecConstantTrue);
         Variable* var = Variable::makeSpecConst(default_val);
+        applyVarDeco(queue, *var, result_at);
+        data[result_at].redefine(var);
+        break;
+    }
+    case spv::OpSpecConstant: { // 50
+        Type* ret = getType(0, data);
+        assert(operands[2].type == Token::Type::UINT);
+        Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
+        prim->cast(*ret);
+        Variable* var = Variable::makeSpecConst(prim);
         applyVarDeco(queue, *var, result_at);
         data[result_at].redefine(var);
         break;
