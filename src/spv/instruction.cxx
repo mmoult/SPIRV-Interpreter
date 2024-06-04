@@ -66,6 +66,13 @@ class Instruction {
                 throw std::runtime_error("Pointer head is neither a variable or a value!");
             head = head_var->getVal();
         }
+        // In some cases (especially common with HLSL), the head can itself be a pointer. If so, dereference that
+        // pointer to get a simple head value:
+        if (head != nullptr && head->getType().getBase() == DataType::POINTER) {
+            Pointer& pointer = *static_cast<Pointer*>(head);
+            head = getHeadValue(pointer, data);
+            return pointer.dereference(*head);
+        }
         return head;
     }
 

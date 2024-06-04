@@ -93,6 +93,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpTypeBool: // 20
     case spv::OpConstantTrue: // 41
     case spv::OpConstantFalse: // 42
+    case spv::OpConstantNull: // 46
     case spv::OpSpecConstantTrue: // 48
     case spv::OpSpecConstantFalse: // 49
     case spv::OpFunctionParameter: // 55

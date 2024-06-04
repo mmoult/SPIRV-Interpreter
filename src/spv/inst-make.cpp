@@ -401,6 +401,12 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(val);
         break;
     }
+    case spv::OpConstantNull: { // 46
+        Type* ret = getType(0, data);
+        auto* val = ret->construct();
+        data[result_at].redefine(val);
+        break;
+    }
     case spv::OpSpecConstantTrue: // 48
     case spv::OpSpecConstantFalse: { // 49
         // Specialization constants should be constant at compile time. They may have defaults, but their value does not
@@ -525,7 +531,7 @@ bool Spv::Instruction::makeResult(
                 continue;
             }
             std::stringstream error;
-            error << "VectorShuffle index " << (i - 4) << " is beyond the bounds of source arrays!"; 
+            error << "VectorShuffle index " << (i - 4) << " is beyond the bounds of source arrays!";
             throw std::runtime_error(error.str());
         }
         Type* retType = getType(0, data);
