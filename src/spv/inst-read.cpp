@@ -12,6 +12,7 @@ module;
 #include <string>
 #include <vector>
 
+#define SPV_ENABLE_UTILITY_CODE 1
 #include "../external/spirv.hpp"
 module instruction;
 import frame;
@@ -85,7 +86,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     default: {
         // Unsupported op
         std::stringstream err;
-        err << "Cannot parse unsupported SPIR-V instruction (" << printOpcode(op) << ")!";
+        err << "Cannot parse unsupported SPIR-V instruction (" << spv::OpToString(op) << ")!";
         throw std::invalid_argument(err.str());
     }
     case spv::OpNop: // 1
@@ -199,6 +200,7 @@ Spv::Instruction* Spv::Instruction::readOp(
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeRuntimeArray: // 29
+    case spv::OpTranspose: // 84
     case spv::OpConvertSToF: // 111
     case spv::OpFNegate: // 127
     case spv::OpIsNan: // 156
@@ -306,7 +308,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     auto check_limit = [&](const std::string& parse_what) {
         if (i >= words.size()) {
             std::stringstream err;
-            err << "Missing words while parsing " << parse_what << "instruction " << printOpcode(op) << "!";
+            err << "Missing words while parsing " << parse_what << "instruction " << spv::OpToString(op) << "!";
             throw std::length_error(err.str());
         }
     };
@@ -345,7 +347,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     // Verify that there are no extra words
     if (i < words.size()) {
         std::stringstream err;
-        err << "Extra words while parsing instruction " << printOpcode(op) << "!";
+        err << "Extra words while parsing instruction " << spv::OpToString(op) << "!";
         throw std::length_error(err.str());
     }
 

@@ -1,0 +1,71 @@
+--- spirv-orig.hpp	2024-06-06 21:03:17.649647416 -0500
++++ spirv.hpp	2024-06-06 21:06:03.721765406 -0500
+@@ -1,19 +1,24 @@
++/* © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
++ */
+ // Copyright (c) 2014-2024 The Khronos Group Inc.
+-// 
++//
+ // Permission is hereby granted, free of charge, to any person obtaining a copy
+ // of this software and/or associated documentation files (the "Materials"),
+ // to deal in the Materials without restriction, including without limitation
+ // the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ // and/or sell copies of the Materials, and to permit persons to whom the
+ // Materials are furnished to do so, subject to the following conditions:
+-// 
++//
+ // The above copyright notice and this permission notice shall be included in
+ // all copies or substantial portions of the Materials.
+-// 
++//
+ // MODIFICATIONS TO THIS FILE MAY MEAN IT NO LONGER ACCURATELY REFLECTS KHRONOS
+ // STANDARDS. THE UNMODIFIED, NORMATIVE VERSIONS OF KHRONOS SPECIFICATIONS AND
+-// HEADER INFORMATION ARE LOCATED AT https://www.khronos.org/registry/ 
+-// 
++// HEADER INFORMATION ARE LOCATED AT https://www.khronos.org/registry/
++//
+ // THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+ // OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+@@ -27,7 +32,7 @@
+ 
+ // Enumeration tokens for SPIR-V, in various styles:
+ //   C, C++, C++11, JSON, Lua, Python, C#, D, Beef
+-// 
++//
+ // - C will have tokens with a "Spv" prefix, e.g.: SpvSourceLanguageGLSL
+ // - C++ will have tokens in the "spv" name space, e.g.: spv::SourceLanguageGLSL
+ // - C++11 will use enum classes in the spv namespace, e.g.: spv::SourceLanguage::GLSL
+@@ -38,7 +43,7 @@
+ // - D will have tokens under the "spv" module, e.g: spv.SourceLanguage.GLSL
+ // - Beef will use enum classes in the Specification class located in the "Spv" namespace,
+ //     e.g.: Spv.Specification.SourceLanguage.GLSL
+-// 
++//
+ // Some tokens act like mask values, which can be OR'd together,
+ // while others are mutually exclusive.  The mask-like ones have
+ // "Mask" in their name, and a parallel enum that has the shift
+@@ -2161,10 +2166,10 @@
+ #ifndef __cplusplus
+ #include <stdbool.h>
+ #endif
+-inline void HasResultAndType(Op opcode, bool *hasResult, bool *hasResultType) {
++inline bool HasResultAndType(Op opcode, bool *hasResult, bool *hasResultType) {
+     *hasResult = *hasResultType = false;
+     switch (opcode) {
+-    default: /* unknown opcode */ break;
++    default: /* unknown opcode */ return false;
+     case OpNop: *hasResult = false; *hasResultType = false; break;
+     case OpUndef: *hasResult = true; *hasResultType = true; break;
+     case OpSourceContinued: *hasResult = false; *hasResultType = false; break;
+@@ -2892,6 +2897,7 @@
+     case OpMaskedGatherINTEL: *hasResult = true; *hasResultType = true; break;
+     case OpMaskedScatterINTEL: *hasResult = false; *hasResultType = false; break;
+     }
++    return true;
+ }
+ inline const char* SourceLanguageToString(SourceLanguage value) {
+     switch (value) {

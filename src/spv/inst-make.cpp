@@ -14,6 +14,8 @@ module;
 #include <variant>
 #include <vector>
 
+#include "../external/GLSL.std.450.h"
+#define SPV_ENABLE_UTILITY_CODE 1
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
@@ -245,7 +247,7 @@ bool Spv::Instruction::makeResult(
     switch (opcode) {
     default: {
         std::stringstream err;
-        err << "Cannot make result for unsupported instruction " << printOpcode(opcode) << "!";
+        err << "Cannot make result for unsupported instruction " << spv::OpToString(opcode) << "!";
         throw std::runtime_error(err.str());
     }
     case spv::OpExtInstImport: { // 11
@@ -560,6 +562,44 @@ bool Spv::Instruction::makeResult(
             // Repeat the process for all indices
         }
         to_ret->copyFrom(*composite);
+        data[result_at].redefine(to_ret);
+        break;
+    }
+    case spv::OpTranspose: { // 84
+        Type* res_type = getType(0, data);
+        Value* to_ret = res_type->construct();
+        const Value* input = getValue(2, data);
+
+        auto verify_matrix_type = [](const Value* val) {
+            const Type& ty = val->getType();
+            if (ty.getBase() != DataType::ARRAY || ty.getElement().getBase() != DataType::ARRAY) {
+                std::stringstream error;
+                error << "Cannot compute transpose of non-matrix type!";
+                throw std::runtime_error(error.str());
+            }
+        };
+        verify_matrix_type(to_ret);
+        verify_matrix_type(input);
+        const Array& inp_arr = *static_cast<const Array*>(input);
+        Array& ret_arr = *static_cast<Array*>(to_ret);
+
+        unsigned inp_size = inp_arr.getSize();
+        unsigned ret_size = ret_arr.getSize();
+        for (unsigned i = 0; i < ret_size; ++i) {
+            Array& inside = *static_cast<Array*>(ret_arr[i]);
+            unsigned j_size = inside.getSize();
+            for (unsigned j = 0; j < j_size; ++j) {
+                const Array& from_inside = *static_cast<const Array*>(inp_arr[j]);
+                if (unsigned from_in_sz = from_inside.getSize(); j_size != inp_size || from_in_sz != ret_size) {
+                    std::stringstream error;
+                    error << "Cannot compute transpose of matrix " << from_in_sz << "x" << inp_size;
+                    error << " to matrix " << j_size << "x" << ret_size << "!";
+                    throw std::runtime_error(error.str());
+                }
+                inside[j]->copyFrom(*from_inside[i]);
+            }
+        }
+
         data[result_at].redefine(to_ret);
         break;
     }
@@ -909,7 +949,7 @@ bool Spv::Instruction::makeResultGlsl(
         err << "Unknown GLSL opcode: " << ext_opcode;
         throw std::runtime_error(err.str());
     }
-    case 69: { // Normalize
+    case GLSLstd450Normalize: { // 69
         Value* vec_val = getValue(4, data);
         const Type& vec_type = vec_val->getType();
         if (vec_type.getBase() != DataType::ARRAY)
