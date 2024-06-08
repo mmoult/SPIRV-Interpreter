@@ -289,7 +289,7 @@ private:
             const auto& agg = static_cast<const Aggregate&>(value);
             // If any subelement is nested, print each on its own line
             unsigned agg_size = agg.getSize();
-            bool each_line = agg_size > inline_max || agg_size == 0;
+            bool each_line = agg_size > inline_max || (agg_size == 0 && templatize && !is_struct);
             if (!each_line) {
                 for (const auto& element: agg) {
                     if (isNested(*element)) {
@@ -297,7 +297,7 @@ private:
                         break;
                     }
                 }
-            } else if (templatize && !is_struct && agg_size == 0) {
+            } else if (agg_size == 0) {
                 // This is a runtime array: we want to provide a dummy element for the template
                 const Type& e_type = agg.getType().getElement();
                 Value* dummy = e_type.construct();

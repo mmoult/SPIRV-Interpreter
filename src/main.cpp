@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
         std::stringstream ss;
         const auto& prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
-        if (unsigned indent_size = indent_arg.get() > 0)
+        if (unsigned indent_size = indent_arg.get(); indent_size > 0)
             format2->setIndentSize(indent_size);
         format2->setTemplate(!generate.enabled);
         format2->printFile(ss, prog_ins);
@@ -309,7 +309,7 @@ int main(int argc, char* argv[]) {
         std::string out = out_arg.getValue();
         if (out_set && out != "-") {
             ValueFormat* format2 = determine_format(out, format);
-            if (unsigned indent_size = indent_arg.get() > 0)
+            if (unsigned indent_size = indent_arg.get(); indent_size > 0)
                 format2->setIndentSize(indent_size);
             format2->printFile(ss, prog_outs);
 
