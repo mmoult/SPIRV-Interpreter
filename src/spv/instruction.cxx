@@ -15,10 +15,10 @@ module;
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
-export module instruction;
-import data;
-import frame;
-import token;
+export module spv.instruction;
+import spv.data;
+import spv.frame;
+import spv.token;
 import value.pointer;
 
 export namespace Spv {

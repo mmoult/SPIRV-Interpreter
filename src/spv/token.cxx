@@ -9,7 +9,7 @@ module;
 #include <iostream>
 #include <string>
 #include <variant>
-export module token;
+export module spv.token;
 
 export namespace Spv {
     struct Token {

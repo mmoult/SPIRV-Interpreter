@@ -17,12 +17,12 @@ module;
 #include "../util/trie.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
-export module debug;
-import console;
-import data;
+export module front.debug;
 import format.parse;
-import frame;
-import instruction;
+import front.console;
+import spv.data;
+import spv.frame;
+import spv.instruction;
 import value.string;
 
 struct BreakPoint {

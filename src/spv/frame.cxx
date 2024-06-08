@@ -8,7 +8,7 @@ module;
 #include <vector>
 
 #include "../values/value.hpp"
-export module frame;
+export module spv.frame;
 
 export class Frame {
     unsigned pc;

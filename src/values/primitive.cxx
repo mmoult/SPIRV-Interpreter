@@ -12,7 +12,7 @@ module;
 #include "type.hpp"
 #include "value.hpp"
 export module value.primitive;
-import compare;
+import util.compare;
 
 export struct Primitive : public Value {
 

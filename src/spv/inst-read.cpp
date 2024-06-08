@@ -14,9 +14,9 @@ module;
 
 #define SPV_ENABLE_UTILITY_CODE 1
 #include "../external/spirv.hpp"
-module instruction;
-import frame;
-import token;
+module spv.instruction;
+import spv.frame;
+import spv.token;
 
 bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {
     // UTF-8 encoding with four codepoints per word, 0 terminated

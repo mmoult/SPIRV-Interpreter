@@ -17,7 +17,7 @@ module;
 #include <sstream>
 #include <string>
 
-export module console;
+export module front.console;
 
 export class Console {
     unsigned width;

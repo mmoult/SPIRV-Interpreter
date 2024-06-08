@@ -7,17 +7,17 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <optional>
 #include <string>
 
 #include "values/value.hpp"
-import console;
 import format.json;
 import format.parse;
 import format.yaml;
-import program;
+import front.argparse;
+import front.console;
+import spv.program;
 
-constexpr auto VERSION = "0.4.0";
+constexpr auto VERSION = "0.5.0";
 
 enum ReturnCode : int {
     OK = 0,
@@ -74,180 +74,165 @@ ReturnCode load_file(ValueMap& values, std::string& file_name, ValueFormat* pref
 }
 
 int main(int argc, char* argv[]) {
-    std::string itemplate, in, out, check;
-    ValueFormat* format = &yaml;
-    bool verbose = false;
-    bool debug = false;
-    ValueMap inputs;
-    std::optional<std::string> spv;
-    unsigned indent_size = 0;
-    bool never_templatize = false;
+    ArgParse::Parser parser;
 
-    bool args_only = false;
-    // Remember to skip argv[0] which is the path to the executable
-    for (int i = 1; i < argc; ++i) {
-        std::string arg(argv[i]);
-        if (arg == "--") {
-            args_only = true;
-            continue;
+    ArgParse::StringOption check("FILE");
+    parser.addOption(&check, "check", "Check the output against the specified file. Returns 0 if equal.", "c");
+    ArgParse::Flag debug;
+    parser.addOption(&debug, "debug", "Launch an interactive execution. Enables --print implicitly.", "d");
+    ArgParse::Flag generate;
+    parser.addOption(
+        &generate,
+        "default",
+        "Generate default values for the template file instead of <type> stubs. Enables --template implicitly.",
+        "g"
+    );
+    ArgParse::StringOption format_arg("FORMAT", "yaml");
+    parser.addOption(
+        &format_arg,
+        "format",
+        "Specify a default value format from {\"yaml\", \"json\"}. The interpreter will try to assume desired format "
+        "from the extension of the file to read/write, but this argument is still useful for --set pairs, stdout, or "
+        "if the extension is not recognized. Defaults to \"yaml\".",
+        "f"
+    );
+    ArgParse::Flag help;
+    parser.addOption(&help, "help", "Print this help and exit.", "h");
+    ArgParse::StringOption in_arg("FILE");
+    parser.addOption(
+        &in_arg,
+        "in",
+        "Specify a file to fetch input from. Alternatively, input may be specified in key-value pairs with --set.",
+        "i"
+    );
+    class IndentOption : public ArgParse::Option {
+        unsigned value = 2;
+
+    public:
+        virtual unsigned getNumArgs() override {
+            return 1;
         }
 
-        if (!args_only) { // check for flags
-            bool found = true;
-
-            // Help first, then alphabetic
-            if (arg == "-h" || arg == "--help") {
-                Console console(24);
-                console.print("spirv-run - Interpret SPIR-V shaders");
-                console.print("");
-                console.print("Usage: spirv-run [options] SPV");
-                console.print("where 'SPV' is a path to a spv file, which must have an OpEntry instruction.");
-                console.print("");
-                console.print(
-                    "Options may be given in any order or not at all. For all options which accept FILE as an argument,"
-                    " \"-\" may be given to use stdin or stdout instead."
-                );
-                console.print("The list of options is given below:");
-                console.print(
-                    "Check the output against the specified file. Returns 0 if equal.",
-                    "-c / --check FILE"
-                );
-                console.print("Launch an interactive execution. Enables --print implicitly.", "-d / --debug");
-                console.print(
-                    "Generate default values for the template file instead of <type> stubs. Enables --template "
-                    "implicitly.",
-                    "-g / --default"
-                );
-                console.print(
-                    "Specify a default value format {\"yaml\", \"json\"}. The interpreter will try to assume desired "
-                    "format from the extension of the file to read/write, but this argument is still useful for --set "
-                    "pairs, stdout, or if the extension is not recognized. Defaults to \"yaml\".",
-                    "-f / --format"
-                );
-                console.print("Print this help and exit.", "-h / --help");
-                console.print(
-                    "Specify a file to fetch input from. Alternatively, input may be specified in key-value pairs with "
-                    "--set.",
-                    "-i / --in FILE"
-                );
-                console.print("Specify the size of each indent (in spaces) for outputs.", "-n / --indent SIZE");
-                console.print("Specify a file to output to. By default, output prints to stdout.", "-o / --out FILE");
-                console.print("Enable vebose printing.", "-p / --print");
-                console.print(
-                    "Define key-value pair in the default format. May be given more than once.",
-                    "-s / --set KEY_VAL"
-                );
-                console.print(
-                    "Creates a template input file with stubs for all needed inputs. If --default is set, the default "
-                    "values will be printed instead of <type> stubs.",
-                    "-t / --template FILE"
-                );
-                console.print("Print version info and exit.", "-v / --version");
-                return ReturnCode::INFO;
+        virtual bool handle(std::string arg) override {
+            try {
+                int parsed = std::stoi(arg, nullptr);
+                if (parsed <= 0) {
+                    std::cerr << "The number of spaces per indent must be > 0, but " << parsed << " was found!";
+                    return false;
+                }
+                value = static_cast<unsigned>(parsed);
+            } catch (const std::exception& ex) {
+                std::cerr << "Could not parse argument for --indent! The number of spaces per indent must be an "
+                                "integer. Found string: \"";
+                std::cerr << arg << "\"";
+                return false;
             }
+            return true;
+        }
 
-#define NEXT(SAVE) \
-    if (++i < argc) \
-        SAVE = std::string(argv[i]); \
-    else { \
-        std::cerr << "Missing argument for flag " << arg << "!" << std::endl; \
-        return ReturnCode::BAD_ARGS; \
+        virtual std::string getArgNames() override {
+            return "SIZE";
+        }
+
+        unsigned get() const {
+            return value;
+        }
+    } indent_arg;
+    parser.addOption(
+        &indent_arg,
+        "indent",
+        "Specify the size of each indent (in spaces) for outputs. Defaults to 2",
+        "n"
+    );
+    ArgParse::StringOption out_arg("FILE", "-");
+    parser.addOption(
+        &out_arg,
+        "out",
+        "Specify a file to output to. By default, output prints to stdout.",
+        "o"
+    );
+    ArgParse::Flag verbose;
+    parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
+    ArgParse::StringOption set_arg("KEY_VAL");
+    parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
+    ArgParse::StringOption template_arg("FILE");
+    parser.addOption(
+        &template_arg,
+        "template",
+        "Creates a template input file with stubs for all needed inputs. If --default is set, the default values will "
+        "be printed instead of <type> stubs.",
+        "t"
+    );
+    ArgParse::Flag version;
+    parser.addOption(&version, "version", "Print version info and exit.", "v");
+    ArgParse::StringOption spv_arg("FILE");
+    parser.addPositional(
+        &spv_arg,
+        "spv input",
+        false
+    );
+
+    if (!parser.parse(argc, argv))
+        return ReturnCode::BAD_ARGS;
+
+    // Perform actions which don't require positional arguments (such as help and version):
+    if (help.enabled) {
+        std::vector<std::string> help_intro{
+            "spirv-run - Interpret SPIR-V shaders",
+            "",
+            "Usage: spirv-run [options] SPV",
+            "where 'SPV' is a path to a spv file, which must have an OpEntry instruction.",
+            "",
+            "Options may be given in any order or not at all. For all options which accept FILE as an argument,"
+            " \"-\" may be given to use stdin or stdout instead. The list of options is given below:",
+        };
+        parser.printHelp(24, help_intro);
+        return ReturnCode::INFO;
     }
-
-            else if (arg == "-c" || arg == "--check") {
-                NEXT(check);
-            } else if (arg == "-d" || arg == "--debug") {
-                debug = true;
-                verbose = true;
-            } else if (arg == "-g" || arg == "--default") {
-                never_templatize = true;
-                if (itemplate.empty())
-                    itemplate = "-";
-            } else if (arg == "-f" || arg == "--format") {
-                std::string s_format;
-                NEXT(s_format);
-                format = determine_format(s_format, nullptr, true);
-                if (format == nullptr) {
-                    std::cerr << "Unrecognized file format: " << s_format << std::endl;
-                    return ReturnCode::BAD_ARGS;
-                }
-            } else if (arg == "-i" || arg == "--in") {
-                NEXT(in);
-            } else if (arg == "-n" || arg == "--indent") {
-                std::string indent_size_str;
-                NEXT(indent_size_str);
-                try {
-                    int parsed = std::stoi(indent_size_str, nullptr);
-                    if (parsed <= 0) {
-                        std::cerr << "The number of spaces per indent must be > 0, but " << parsed << " was found!";
-                        return ReturnCode::BAD_ARGS;
-                    }
-                    indent_size = static_cast<unsigned>(parsed);
-                } catch (const std::exception& ex) {
-                    std::cerr << "Could not parse argument for --indent! The number of spaces per indent must be an "
-                                 "integer. Found string: \"";
-                    std::cerr << indent_size_str << "\"";
-                    return ReturnCode::BAD_ARGS;
-                }
-            } else if (arg == "-o" || arg == "--out") {
-                NEXT(out);
-            } else if (arg == "-p" || arg == "--print") {
-                verbose = true;
-            } else if (arg == "-s" || arg == "--set") {
-                if (++i >= argc) {
-                    std::cerr << "Missing key-val pair argument for flag set!" << std::endl;
-                    return ReturnCode::BAD_ARGS;
-                }
-
-                // Parse the value and save in the key
-                std::string set = argv[i];
-                try {
-                    format->parseVariable(inputs, set);
-                } catch (const std::exception& e) {
-                    std::cerr << e.what() << std::endl;
-                    return ReturnCode::BAD_PARSE;
-                }
-            } else if (arg == "-t" || arg == "--template") {
-                NEXT(itemplate);
-            } else if (arg == "-v" || arg == "--version") {
-                std::cout << "SPIRV-Interpreter version " << VERSION << std::endl;
-                std::cout << "https://github.com/mmoult/SPIRV-Interpreter" << std::endl;
+        if (version.enabled) {
+        std::cout << "SPIRV-Interpreter version " << VERSION << std::endl;
+        std::cout << "https://github.com/mmoult/SPIRV-Interpreter" << std::endl;
 #define STRINGIZE(x) #x
 #define STRINGIZE_VALUE_OF(x) STRINGIZE(x)
-                std::cout << "Commit hash: " << STRINGIZE_VALUE_OF(HASH) << std::endl;
+        std::cout << "Commit hash: " << STRINGIZE_VALUE_OF(HASH) << std::endl;
 #undef STRINGIZE_VALUE_OF
 #undef STRINGIZE
-                return ReturnCode::INFO;
-            }
-#undef NEXT
-            else
-                found = false;
-
-            if (found)
-                continue;
-        }
-
-        // If we are here, there were no matches on flags, so this must be a positional arg
-        if (spv.has_value()) {
-            // There may only be one
-            std::cerr << "Multiple spv inputs given! Second input is " << arg << "." << std::endl;
-            return ReturnCode::BAD_ARGS;
-        } else {
-            spv = std::optional(arg);
-        }
+        return ReturnCode::INFO;
     }
 
-    if (!spv.has_value()) {
-        std::cerr << "Missing spv input!" << std::endl;
+    // Verify that our positional argument was filled
+    if (!spv_arg.isPresent()) {
+        std::cerr << "Missing positional argument: spv input" << std::endl;
         return ReturnCode::BAD_ARGS;
     }
 
+    // Peform the rest of the option actions
+    if (debug.enabled)
+        verbose.enabled = true;
+    if (generate.enabled && template_arg.getValue().empty())
+        template_arg.setValue("-");
+
+    ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
+    assert(format != nullptr);
+
+    ValueMap inputs;
+    if (set_arg.isPresent()) {
+        // Parse the value and save in the key
+        try {
+            format->parseVariable(inputs, set_arg.getValue());
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << std::endl;
+            return ReturnCode::BAD_PARSE;
+        }
+    }
+
     // Load the SPIR-V input file:
-    std::ifstream ifs(spv.value(), std::ios::binary);
+    std::ifstream ifs(spv_arg.getValue(), std::ios::binary);
     if (!ifs.is_open()) {
-        std::cerr << "Could not open source file \"" << spv.value() << "\"!" << std::endl;
+        std::cerr << "Could not open source file \"" << spv_arg.getValue() << "\"!" << std::endl;
         return ReturnCode::BAD_FILE;
     }
+
     // get its size:
     ifs.seekg(0, ifs.end);
     int length = ifs.tellg();
@@ -263,8 +248,8 @@ int main(int argc, char* argv[]) {
     // might be), then it is vital the correct input is used before we generate the template.
     // Of course, even if there are specialization constants, they should have some default value which will be used if
     // the user doesn't provide something to override it.
-    if (!in.empty()) {
-        auto res = load_file(inputs, in, format);
+    if (in_arg.isPresent()) {
+        auto res = load_file(inputs, in_arg.getValue(), format);
         if (res != ReturnCode::OK)
             return res;
     }
@@ -279,17 +264,16 @@ int main(int argc, char* argv[]) {
     }
     delete[] buffer; // delete source now that it has been replaced with program
 
-    if (!itemplate.empty()) {
+    if (template_arg.isPresent()) {
+        std::string itemplate = template_arg.getValue();
         // Print out needed variables to file specified
         std::stringstream ss;
         const auto& prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
-        if (indent_size > 0)
+        if (unsigned indent_size = indent_arg.get() > 0)
             format2->setIndentSize(indent_size);
-        if (!never_templatize)
-            format2->setTemplate(true);
+        format2->setTemplate(!generate.enabled);
         format2->printFile(ss, prog_ins);
-        format2->setTemplate(false);
 
         if (itemplate == "-") {
             std::cout << ss.str() << std::endl;
@@ -311,20 +295,21 @@ int main(int argc, char* argv[]) {
 
     // Run the program
     try {
-        program.execute(verbose, debug, *format);
+        program.execute(verbose.enabled, debug.enabled, *format);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::FAILED_EXE;
     }
 
     // Output the result (If file output is not set, only print to stdout if checking isn't enabled)
-    if (bool out_set = !out.empty(); check.empty() || out_set) {
+    if (bool out_set = out_arg.isPresent(); !check.isPresent() || out_set) {
         std::stringstream ss;
         const auto& prog_outs = program.getOutputs();
 
+        std::string out = out_arg.getValue();
         if (out_set && out != "-") {
             ValueFormat* format2 = determine_format(out, format);
-            if (indent_size > 0)
+            if (unsigned indent_size = indent_arg.get() > 0)
                 format2->setIndentSize(indent_size);
             format2->printFile(ss, prog_outs);
 
@@ -334,16 +319,16 @@ int main(int argc, char* argv[]) {
         } else {
             format->printFile(ss, prog_outs);
 
-            if (verbose)
+            if (verbose.enabled)
                 std::cout << "\nResults=" << std::endl;
             // The file print should end with a newline, so omit that here but still flush
             std::cout << ss.str() << std::flush;
         }
     }
 
-    if (!check.empty()) {
+    if (check.isPresent()) {
         ValueMap check_map;
-        load_file(check_map, check, format);
+        load_file(check_map, check.getValue(), format);
         auto [ok, total_tests] = program.checkOutputs(check_map);
         if (!ok) {
             std::cerr << "Output did NOT match!" << std::endl;

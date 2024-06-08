@@ -13,7 +13,7 @@ module;
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
-export module data;
+export module spv.data;
 import value.aggregate;
 import value.primitive;
 import value.string;

@@ -10,7 +10,7 @@ module;
 #include <string>
 #include <tuple>
 
-export module compare;
+export module util.compare;
 
 std::string to_signed_string(float x) {
     std::stringstream f;

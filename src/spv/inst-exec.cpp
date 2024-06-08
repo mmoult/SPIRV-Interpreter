@@ -17,10 +17,10 @@ module;
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
-module instruction;
-import data;
-import frame;
-import token;
+module spv.instruction;
+import spv.data;
+import spv.frame;
+import spv.token;
 import value.primitive;
 
 void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
