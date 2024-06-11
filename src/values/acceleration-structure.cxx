@@ -6,7 +6,7 @@
 module;
 #include <array>
 #include <memory>
-#include <queue>
+#include <stack>
 #include <string>
 #include <tuple>
 
@@ -44,6 +44,7 @@ private:
         virtual NodeType type() = 0;
     };
 
+    const unsigned id;  // identifier
     const bool isTLAS;  // true: TLAS, false: BLAS
     const unsigned splitValue;  // What kind of BVH? A BVH2 (binary BVH)? etc.
     // unsigned transformationMatrix;  // TODO: need to make it an actual matrix. Is it needed?
@@ -55,13 +56,15 @@ public:
     /// @param nodeCounts 
     /// @param allAccelerationStructures 
     /// @param numAccelerationStructures
-    AccelerationStructure(const Struct& structureInfo,
+    AccelerationStructure(const unsigned id,
+            const Struct& structureInfo,
             const Struct& nodeCounts,
-            std::vector<std::unique_ptr<AccelerationStructure>>& allAccelerationStructures,
+            std::vector<std::shared_ptr<AccelerationStructure>>& allAccelerationStructures,
             const unsigned numAccelerationStructures)
-        : isTLAS(static_cast<const Primitive&>(*(structureInfo[0])).data.b32),
+        : id(id),
+          isTLAS(static_cast<const Primitive&>(*(structureInfo[0])).data.b32),
           splitValue(static_cast<const Primitive&>(*(structureInfo[1])).data.u32) {
-        
+
         // TODO: Keep track of an object-to-world matrix? Maybe just transform the ray instead (what data do I account for)?
         // transformationMatrix = static_cast<const Primitive&>(*(structureInfo[2])).data.u32; // TODO: figure out
 
@@ -122,7 +125,7 @@ public:
             // Get respective acceleration structure
             unsigned accelerationStructureIndex = static_cast<const Primitive&>(*(instanceInfo[1])).data.u32;
             unsigned index = numAccelerationStructures - 1 - accelerationStructureIndex;
-            std::unique_ptr<AccelerationStructure>& as = allAccelerationStructures[index];
+            std::shared_ptr<AccelerationStructure>& as = allAccelerationStructures[index];
         
             nodes.push_back(std::make_unique<InstanceNode>(transformationMatrix, as));
         }
@@ -175,8 +178,6 @@ public:
         for (const auto& n : nodes) {
             assert(n == nullptr);
         }
-
-        std::cout << toString() << std::endl; // TODO: print it out to verify correct tree
     };
 
     ~AccelerationStructure() {};
@@ -203,9 +204,127 @@ public:
         throw std::runtime_error("traceRay() in AccelerationStructure in acceleration-structure.cxx not implemented!");
     }
 
-    // TODO
-    std::string toString() {
-        throw std::runtime_error("toString() in AccelerationStructure in acceleration-structure.cxx not implemented!");
+private:
+    std::string tabbedString(unsigned numTabs, std::string message) {
+        std::stringstream result("");
+
+        for (unsigned i = 0; i < numTabs; ++i)
+            result << "\t";
+        result << message;
+
+        return result.str();
+    }
+
+public:
+    std::string toString(unsigned tabLevel = 0) {
+        std::stringstream result("");
+
+        result << tabbedString(tabLevel, "+ accelerationStructure") << id << std::endl;
+        result << tabbedString(tabLevel + 1, "* isTLAS") << " = " << (isTLAS ? "true" : "false") << std::endl;
+        result << tabbedString(tabLevel + 1, "* splitValue") << " = " << splitValue << std::endl;
+
+        using NodeRef = std::unique_ptr<Node>*;  // Raw pointer to smart pointers
+
+        std::stack<NodeRef> frontier;
+        frontier.push(&root);
+
+        // Variables for box node case
+        bool applyExtraTab = false;
+        std::stack<unsigned> remainingToExtraTab;
+
+        while (!frontier.empty()) {
+
+            // Extra tab logic only executes if entered box node previously
+            if (applyExtraTab && !remainingToExtraTab.empty()) {
+                unsigned& top = remainingToExtraTab.top();
+                if (top > 0) {
+                    --top;
+                } else if (top == 0) {
+                    --tabLevel;
+                    remainingToExtraTab.pop();
+                    if (remainingToExtraTab.empty()) {
+                        applyExtraTab = false;
+                    }
+                }
+            }
+
+            std::unique_ptr<Node>& currNodeRef = *(frontier.top());
+            frontier.pop();
+
+            Node* currNode = currNodeRef.release();  // Take ownership
+
+            switch (currNode->type()) {
+            default: {
+                std::stringstream err;
+                err << "Found unknown node type (" << static_cast<int>(currNode->type())
+                    << ") in \"toString()\" method of class "
+                       "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
+                throw std::runtime_error(err.str());
+            }
+            case NodeType::Box: {
+                BoxNode* boxNode = static_cast<BoxNode*>(currNode);
+                for (auto& child : boxNode->children) {
+                    frontier.push(&child);
+                }
+                
+                if (boxNode->children.size() > 0) {
+                    applyExtraTab = true;
+                    remainingToExtraTab.push(boxNode->children.size());
+                }
+
+                result << tabbedString(tabLevel + 1, "> boxNode") << std::endl;
+                result << tabbedString(tabLevel + 2, "* bounds") << " = [ ";
+                for (const auto& value : boxNode->bounds) {
+                    result << value << ", ";
+                }
+                result << "]" << std::endl;
+
+                ++tabLevel;
+                break;
+            }
+            case NodeType::Instance: {
+                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
+                result << tabbedString(tabLevel + 1, "> instanceNode") << std::endl;
+                result << tabbedString(tabLevel + 2, "* transformationMatrix") << " = [" << std::endl;
+                for (unsigned row = 0; row < instanceNode->transformationMatrix.size(); ++row) {
+                    result << tabbedString(tabLevel + 3, "[ ");
+                    for (unsigned col = 0; col < instanceNode->transformationMatrix[row].size(); ++col) {
+                        result << instanceNode->transformationMatrix[row][col] << ", ";
+                    }
+                    result << "]" << std::endl;
+                }
+                result << tabbedString(tabLevel + 2, "]") << std::endl;
+
+                result << instanceNode->accelerationStructure->toString(tabLevel + 2) << std::endl;
+
+                break;
+            }
+            case NodeType::Primitive: {
+                PrimitiveNode* primitiveNode = static_cast<PrimitiveNode*>(currNode);
+                result << tabbedString(tabLevel + 1, "> primitiveNode") << std::endl;
+                result << tabbedString(tabLevel + 2, "* vertices") << " = [" << std::endl;
+                for (unsigned row = 0; row < primitiveNode->vertices.size(); ++row) {
+                    result << tabbedString(tabLevel + 3, "[ ");
+                    for (unsigned col = 0; col < primitiveNode->vertices[row].size(); ++col) {
+                        result << primitiveNode->vertices[row][col] << ", ";
+                    }
+                    result << "]" << std::endl;
+                }
+                result << tabbedString(tabLevel + 2, "]") << std::endl;
+                result << tabbedString(tabLevel + 2, "* indices") << " = [ ";
+                for (const auto& value : primitiveNode->indices) {
+                    result << value << ", ";
+                }
+                result << "]" << std::endl;
+
+                break;
+            }
+            }
+
+            currNodeRef = std::unique_ptr<Node>(currNode);  // Give back ownership
+        }
+
+        return result.str();
     }
 
 private:
@@ -238,12 +357,12 @@ private:
     public:
         // TODO: some fields involving shaders, transformations, etc.
         std::array<std::array<float, 4>, 3> transformationMatrix;  // 3 x 4 matrix
-        std::unique_ptr<AccelerationStructure> accelerationStructure;
+        std::shared_ptr<AccelerationStructure> accelerationStructure;
 
         InstanceNode(std::array<std::array<float, 4>, 3> transformationMatrix,
-                std::unique_ptr<AccelerationStructure>& accelerationStructure)
+                std::shared_ptr<AccelerationStructure>& accelerationStructure)
             : transformationMatrix(transformationMatrix) {
-            this->accelerationStructure = std::move(accelerationStructure);
+            this->accelerationStructure = accelerationStructure;
         };
 
         ~InstanceNode() {}; // TODO
@@ -272,7 +391,7 @@ private:
 
 export class AccelerationStructureManager : public Value {
 private:
-    std::unique_ptr<AccelerationStructure> root = nullptr; // Start of all acceleration structures
+    std::shared_ptr<AccelerationStructure> root = nullptr; // Start of all acceleration structures TODO: make unique?
     Struct* structureInfo = nullptr;
 
 public:
@@ -326,8 +445,8 @@ public:
         {
             // TODO: Build tree bottom-up
 
-            // Temporarily holds ownership and will pass it once it's parent node is created
-            std::vector<std::unique_ptr<AccelerationStructure>> accelerationStructures;
+            // Note: different instance nodes can point to the same acceleration structure
+            std::vector<std::shared_ptr<AccelerationStructure>> accelerationStructures;
 
             const Struct& structureInfoRef = *structureInfo;
             unsigned rootIndex = static_cast<const Primitive&>(*(structureInfoRef[0])).data.u32;
@@ -339,6 +458,7 @@ public:
             for (int i = numAccelerationStructures - 1; i >= 0; --i) {
                 accelerationStructures.push_back(
                     std::make_unique<AccelerationStructure>(
+                        i,
                         static_cast<const Struct&>(*(structureInfoRef[i + offset])), 
                         static_cast<const Struct&>(*(accelerationStructuresInfo[i])), 
                         accelerationStructures,
@@ -347,24 +467,12 @@ public:
                 );
             }
 
-            // Check for an expected outcome
-            assert(accelerationStructures.size() == numAccelerationStructures);
-            for (unsigned i = 0; i < accelerationStructures.size(); ++i) {
-                const auto& as = accelerationStructures[i];
-                if (i == (numAccelerationStructures - 1) - rootIndex) {
-                    assert(as != nullptr);
-                } else {
-                    assert(as == nullptr);
-                }
-            }
-
             // Set the root acceleration structure 
             root = std::move(accelerationStructures[(numAccelerationStructures - 1) - rootIndex]);
+            assert(accelerationStructures[(numAccelerationStructures - 1) - rootIndex] == nullptr);
 
-            // All acceleration structure unique pointers should be null by this point
-            for (const auto& as : accelerationStructures) {
-                assert(as == nullptr);
-            }
+            std::cout << "Printing acceleration structures based on tree construction:" << std::endl;
+            std::cout << root->toString() << std::endl; // TODO: print it out to verify correct tree
         }
     }
 
