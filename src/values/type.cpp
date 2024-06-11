@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "value.hpp"
+import value.accelerationStructure;
 import value.aggregate;
 import value.primitive;
 import value.string;
@@ -56,6 +57,9 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     }
     case DataType::STRING:
         return new String("");
+    case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
+        return new AccelerationStructureManager(*this);
+    }
     // TODO support other types
     }
 }
@@ -208,6 +212,7 @@ Value* Type::asValue(std::vector<Type*>& to_delete) const {
     SIMPLE(VOID, void);
     SIMPLE(FUNCTION, function);
     SIMPLE(POINTER, pointer);
+    SIMPLE(RAY_TRACING_ACCELERATION_STRUCTURE, accelerationStructure);
     }
 #undef SIMPLE
 }

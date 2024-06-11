@@ -142,10 +142,12 @@ public:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
+        case SC::StorageClassStorageBuffer:  // TODO: does this belong here?
             ins.push_back(id);
             outs.push_back(id);
             break;
         case SC::StorageClassOutput:
+        // case SC::StorageClassRayPayloadKHR:  // TODO: does this belong here?
             outs.push_back(id);
             break;
         default:

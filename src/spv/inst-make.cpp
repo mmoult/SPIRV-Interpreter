@@ -925,6 +925,12 @@ bool Spv::Instruction::makeResult(
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
+    case spv::OpTypeAccelerationStructureKHR: // 5341
+        // Will define the type in class "AccelerationStructureManager" in "acceleration-structure.cxx" in "copyFrom()"
+        // method. Passing in empty vectors instead.
+        data[result_at].redefine(
+                new Type(Type::accelerationStructure(std::vector<const Type*> {}, std::vector<std::string> {})));
+        break;
     }
 #undef TYPICAL_E_BIN_OP
 #undef INT_E_BIN_OP

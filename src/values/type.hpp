@@ -24,6 +24,7 @@ enum DataType : unsigned {
     VOID = 7,
     FUNCTION = 8,
     POINTER = 9,
+    RAY_TRACING_ACCELERATION_STRUCTURE = 10
 };
 
 // necessary forward reference
@@ -43,8 +44,8 @@ class Type {
         subSize(sub_size),
         subElement(sub_element) {}
 
-    inline Type(std::vector<const Type*> sub_list, std::vector<std::string> name_list):
-        base(DataType::STRUCT),
+    inline Type(DataType base, std::vector<const Type*> sub_list, std::vector<std::string> name_list):
+        base(base),
         subSize(0),
         subElement(nullptr),
         subList(sub_list.begin(), sub_list.end()),
@@ -88,7 +89,7 @@ public:
     static inline Type structure(std::vector<const Type*> sub_list) {
         std::vector<std::string> names(sub_list.size());
         std::fill(names.begin(), names.end(), "");
-        return Type(sub_list, names);
+        return Type(DataType::STRUCT, sub_list, names);
     }
     /// @brief Construct a structure type
     /// @param sub_list a list of non-null types. Each Type must outlive the struct created here. Ownership is not
@@ -98,7 +99,7 @@ public:
     ///                  length as sub_list
     static inline Type structure(std::vector<const Type*> sub_list, std::vector<std::string> name_list) {
         assert(sub_list.size() == name_list.size());
-        return Type(sub_list, name_list);
+        return Type(DataType::STRUCT, sub_list, name_list);
     }
 
     static inline Type function(const Type* return_, std::vector<Type*>& subList) {
@@ -115,6 +116,11 @@ public:
 
     static inline Type string() {
         return Type(DataType::STRING, 0, nullptr);
+    }
+
+    static inline Type accelerationStructure(std::vector<const Type*> sub_list, std::vector<std::string> name_list) {
+        assert(sub_list.size() == name_list.size());
+        return Type(DataType::RAY_TRACING_ACCELERATION_STRUCTURE, sub_list, name_list);
     }
 
     // Other methods:
@@ -148,11 +154,11 @@ public:
     }
 
     inline const std::vector<const Type*>& getFields() const {
-        assert(base == DataType::STRUCT);
+        assert(base == DataType::STRUCT || base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
         return subList;
     }
     inline const std::vector<std::string>& getNames() const {
-        assert(base == DataType::STRUCT);
+        assert(base == DataType::STRUCT || base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
         return nameList;
     }
 
@@ -166,7 +172,7 @@ public:
     }
 
     inline void nameMember(unsigned i, std::string name) noexcept(false) {
-        assert(base == DataType::STRUCT);
+        assert(base == DataType::STRUCT || base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
         if (i >= nameList.size())
             throw std::invalid_argument("Cannot name member at index beyond existing!");
         nameList[i] = name;

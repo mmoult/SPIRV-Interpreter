@@ -4,12 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 #define SPV_ENABLE_UTILITY_CODE 1
@@ -104,6 +106,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpReturn: // 253
     case spv::OpNoLine: // 317
     case spv::OpTerminateInvocation: // 4416
+    case spv::OpTypeAccelerationStructureKHR: // 5341
         // no operands to handle (besides result and type, if present)
         break;
     case spv::OpSource: // 3
@@ -124,6 +127,7 @@ Spv::Instruction* Spv::Instruction::readOp(
     case spv::OpString: // 7
     case spv::OpExtInstImport: // 11
     case spv::OpModuleProcessed: // 330
+    case spv::OpExtension: // 10 TODO: need to still handle this outside of "inst-read.cpp"
         to_load.push_back(Type::STRING);
         break;
     case spv::OpLine: // 8
@@ -299,6 +303,10 @@ Spv::Instruction* Spv::Instruction::readOp(
         optional.push_back(Type::UINT);
         optional.push_back(Type::UINT);
         break;
+    case spv::OpTraceRayKHR: // 4445 TODO
+        for (int i = 0; i < 11; ++i)
+            to_load.push_back(Type::REF);
+        break;
     }
 
     Spv::Instruction& inst = insts.emplace_back(op, has_result, has_type);
@@ -327,6 +335,30 @@ Spv::Instruction* Spv::Instruction::readOp(
     for (const auto& type : to_load) {
         check_limit("");
         handle_type(type, inst.operands, words, i);
+    }
+
+    // If it was an extension, make sure it's supported
+    // TODO: should differentiate "extensions" and "extended instructions"?
+    if (op == spv::OpExtension) {
+        auto& operands = inst.operands;
+        assert(operands[0].type == Token::Type::STRING);
+        std::string ext_name = std::get<std::string>(operands[0].raw);
+
+        // TODO: maybe change to "unordered_set" if there's a lot of supported extensions
+        // TODO: move into "Spv::Instruction" class?
+        // Contains only implemented extensions.
+        const std::vector<std::string> supported_ext {
+            "SPV_KHR_ray_tracing",
+        };
+
+        auto it = std::find(supported_ext.begin(), supported_ext.end(), ext_name);
+        if (it != supported_ext.end()) {
+            // TODO: do something if the extension is supported
+        } else {
+            std::stringstream err;
+            err << "Unsupported extension: " << ext_name;
+            throw std::runtime_error(err.str());
+        }
     }
 
     if (!optional.empty()) {
