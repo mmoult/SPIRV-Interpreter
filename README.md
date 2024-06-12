@@ -1,6 +1,10 @@
 # SPIRV-Interpreter
 
-An interpreter for SPIR-V shaders/kernels. Outputs the result after running the program on the given inputs.
+An interpreter for SPIR-V shaders/kernels, which aims to support the full
+[SPIR-V specification](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html). Outputs results of running the
+program for given inputs.
+
+Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
 
 ## Features
 - Support for vertex, fragment, compute, hull, ... shaders
@@ -10,19 +14,30 @@ An interpreter for SPIR-V shaders/kernels. Outputs the result after running the 
 - Verbose trace and interactive program execution
 - 12 test examples, and counting
 
-## Use
-This project aims to support the full
-[SPIR-V specification](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html). It generally expects
-syntactically-correct SPIR-V files. It is not, nor does it intend to be, a SPIR-V validator. If that is what you need,
-use `spirv-val` in [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). If the input SPIR-V file is syntactically
-incorrect, the behavior of interpretation is undefined. This should not be a problem since most SPIR-V is
-auto-generated.
+## Limitations
 
+### Validation
+For the sake of runtime speed and code clarity, the interpreter expects syntactically correct SPIR-V inputs. It is not,
+nor does it intend to be, a SPIR-V validator. If that is what you need, use `spirv-val` in
+[SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). If the input SPIR-V file is invalid, the behavior of the
+interpretation is undefined. This should not be a problem since most SPIR-V is auto-generated.
+
+### Recursion
 Static recursion is not *technically* forbidden by the SPIR-V spec, but it is forbidden by Vulkan (see
-`VUID-StandaloneSpirv-None-04634`). For the sake of simplicity and efficiency, the interpreter does not guarantee
-correct execution of programs with recursion.
+`VUID-StandaloneSpirv-None-04634`). For the time being, the interpreter does not guarantee correct execution of programs
+with recursion (although support is planned for the future).
 
-Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
+### Image Processing
+The SPIR-V specification does not explicitly define how some image operations should be done. This presents some
+challenges to the interpreter which aims to be a correct reference.
+
+Many vendors use anisotropic filtering, but these algorithms have not been open sourced. The interpreter plans to use
+trilinear interpolation instead- which should be easy to deconstruct and/or extend as needed.
+
+### Ray Tracing
+Similarly to image processing, the SPIR-V specification does not define all characteristics of ray tracing functions and
+structures. A best guess approximation is used for the interpreter, which should rely on information common to all
+implementations. Ray tracing support is still in development.
 
 ## Building
 The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16 or `g++`
