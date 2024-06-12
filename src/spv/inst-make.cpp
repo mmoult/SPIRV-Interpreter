@@ -932,9 +932,6 @@ bool Spv::Instruction::makeResult(
                 new Type(Type::accelerationStructure(std::vector<const Type*> {}, std::vector<std::string> {})));
         break;
     }
-#undef TYPICAL_E_BIN_OP
-#undef INT_E_BIN_OP
-#undef TYPICAL_E_UNARY_OP
 
     return true;
 }
@@ -944,6 +941,7 @@ bool Spv::Instruction::makeResultGlsl(
     unsigned location,
     unsigned result_at
 ) const noexcept(false) {
+    unsigned data_len = data.size();
     // https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.pdf
     // extension opcode at operand[3]
     unsigned ext_opcode = std::get<unsigned>(operands[3].raw);
@@ -955,6 +953,39 @@ bool Spv::Instruction::makeResultGlsl(
         err << "Unknown GLSL opcode: " << ext_opcode;
         throw std::runtime_error(err.str());
     }
+    case GLSLstd450Round: // 1
+        TYPICAL_E_UNARY_OP(FLOAT, std::round(a->data.fp32));
+    case GLSLstd450RoundEven: { // 2
+        OpSrc src{DataType::FLOAT, checkRef(2, data_len), 0};
+        OpDst dst{checkRef(0, data_len), result_at};
+        element_unary_op(src, dst, data, [](const Primitive* a) {
+            auto whole = a->data.fp32;
+            auto frac = std::abs(std::modf(whole, &whole));
+            bool to_trunc;
+            if (frac < 0.5)
+                to_trunc = true;
+            else if (frac > 0.5)
+                to_trunc = false;
+            else // Round to nearest even number
+                to_trunc = (static_cast<int>(whole) % 2) == 0;
+
+            if (to_trunc)
+                return whole;
+            else
+                return whole + ((whole >= 0)? 1.0f : -1.0f);
+        });
+        break;
+    }
+    case GLSLstd450Trunc: // 3
+        TYPICAL_E_UNARY_OP(FLOAT, std::trunc(a->data.fp32));
+    case GLSLstd450FAbs: // 4
+        TYPICAL_E_UNARY_OP(FLOAT, std::abs(a->data.fp32));
+    case GLSLstd450Floor: // 8
+        TYPICAL_E_UNARY_OP(FLOAT, std::floor(a->data.fp32));
+    case GLSLstd450Ceil: // 9
+        TYPICAL_E_UNARY_OP(FLOAT, std::ceil(a->data.fp32));
+    case GLSLstd450Sqrt: // 31
+        TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.fp32));
     case GLSLstd450Normalize: { // 69
         Value* vec_val = getValue(4, data);
         const Type& vec_type = vec_val->getType();
@@ -978,7 +1009,10 @@ bool Spv::Instruction::makeResultGlsl(
         pfloats.reserve(size);
         for (unsigned i = 0; i < size; ++i) {
             const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
-            Primitive& created = floats.emplace_back(static_cast<float>(vec_e.data.fp32 / vsize));
+            auto component = vec_e.data.fp32;
+            if (vsize != 0)
+                component /= vsize;
+            Primitive& created = floats.emplace_back(static_cast<float>(component));
             pfloats.push_back(&floats[i]);
         }
 
@@ -990,3 +1024,6 @@ bool Spv::Instruction::makeResultGlsl(
     }
     return made;
 }
+#undef TYPICAL_E_BIN_OP
+#undef INT_E_BIN_OP
+#undef TYPICAL_E_UNARY_OP
