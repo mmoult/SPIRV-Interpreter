@@ -51,7 +51,7 @@ private:
     }
 
     std::tuple<std::string, Value*> parseVariable(LineHandler& handler, unsigned min_indent, bool end_check = true) {
-        std::string key = parseName(handler);
+        std::string key = parseString(handler);
         auto cc = skipWhitespace(handler, true);
         if (cc.value_or(0) != ':') {
             std::stringstream err;
@@ -160,10 +160,13 @@ private:
         return constructStructFrom(names, elements);
     }
 
-    std::string parseName(LineHandler& handler) const {
-        std::stringstream name;
+    std::string parseString(LineHandler& handler) const {
+        // Strings may use '' for literal strings or "" for escape sequences. If a string utilizes quotes, the quotes
+        // must cover the entire string, i.e. the first and last character in the string must be the quotes.
+        std::stringstream value;
         // 0 = none, 1 = ", 2 = '
         unsigned in_str = 0;
+        bool first = true;
         bool escape = false;
         while (true) {
             auto cc = handler.peek();
@@ -175,33 +178,35 @@ private:
                 if (in_str == 1) {
                     if (c == '\\') {
                         escape = !escape;
-                        if (escape) {
-                            handler.skip(1);
-                            continue;
-                        }
+                        if (escape)
+                            goto next;
                     } else if (c == '"' && !escape) {
-                        in_str = 0;
-                        handler.skip(1);
-                        continue;
+                        handler.skip();
+                        break;
                     }
+                    escape = false;
                 } else if (in_str == 2 && c == '\'') {
-                    in_str = 0;
-                    handler.skip(1);
-                    continue;
+                    handler.skip();
+                    break;
                 }
-                name << c;
-            } else if (c == '"')
-                in_str = 1;
-            else if (c == '\'')
-                in_str = 2;
-            else if (std::isspace(c) || c == '#' || c == ':') // start of comment is effectively newline
+                value << c;
+            } else if (c == '\n' || c == '#' || c == ':')  // start of comment is effectively newline
                 break;
-            else
-                name << c;
+            else {
+                if (first) {
+                    first = false;
+                    if (c == '"' || c == '\'') {
+                        in_str = (c == '"')? 1 : 2;
+                        goto next;
+                    }
+                }
+                value << c;
+            }
 
+        next:
             handler.skip();
         }
-        return name.str();
+        return value.str();
     }
 
     void verifyBlank(LineHandler& handler, bool breakAtNewline) {
@@ -223,18 +228,53 @@ private:
 
     void printKey(std::stringstream& out, const std::string& name) const {
         // Try to print the name without any quotes, but it may be needed
-        bool quote_needed = name.empty();
-        for (unsigned i = 0; i < name.length() && !quote_needed; ++i) {
+        enum QuoteNeed {
+            NONE = 0,
+            SINGLE = 1,  // literal, no escaping
+            DOUBLE = 2,  // escaping with backslash
+        };
+        QuoteNeed need = name.empty() ? SINGLE : NONE;
+        for (unsigned i = 0; i < name.length(); ++i) {
             char c = name[i];
-            if ((i == 0 && std::isdigit(c)) ||
-                    !std::isalnum(c))
-                quote_needed = true;
+            if (i == 0 && std::isdigit(c) && need < SINGLE)
+                need = SINGLE;
+            else if ((
+                c == ':' || c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == '&' || c == '*' ||
+                c == '#' || c == '?' || c == '|' || c == '-' || c == '<' || c == '>' || c == '=' || c == '!' ||
+                c == '%' || c == '@' || c == '\\'
+            ) && need < SINGLE)
+                need = SINGLE;
+            else if ((c == '\n' || c == '\t' || c == '\'') && need < DOUBLE)
+                need = DOUBLE;
         }
-        if (quote_needed)
-            out << "\"";
-        out << name;
-        if (quote_needed)
-            out << "\"";
+
+        switch (need) {
+        case NONE:
+            out << name;
+            break;
+        case SINGLE:
+            out << "'" << name << "'";
+            break;
+        case DOUBLE:
+            out << '"';
+            for (unsigned i = 0; i < name.length(); ++i) {
+                char c = name[i];
+                if (c == '\t')
+                    out << "\\t";
+                else if (c == '\n')
+                    out << "\\n";
+                else if (c == '\'')
+                    out << "\\'";
+                else if (c == '\"')
+                    out << "\\\"";
+                else if (c == '\\')
+                    out << "\\\\";
+                else
+                    out << c;
+            }
+            out << '"';
+            break;
+        }
     }
 
     void printKeyValue(std::stringstream& out, const std::string& key, const Value& value, unsigned indents) const {

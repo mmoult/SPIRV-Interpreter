@@ -66,7 +66,8 @@ for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True):
                     fails += 1
                     print("X", os.path.relpath(os.path.join(root, program), launch_dir), end=' ')
                     if len(iopairs) > 1:
-                        print("#", num, sep='')
+                        print("#", num, sep='', end='')
+                    print()
                 continue
 
 # Print results

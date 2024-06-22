@@ -6,6 +6,7 @@
 module;
 #include <cassert>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -38,34 +39,39 @@ struct Flag : public Option {
     }
 };
 
-class StringOption : public Option {
-    std::string value;
+template<typename T>
+class UnaryOption : public Option {
+    std::vector<T> values;
     std::string argName;
-    bool present = false;
+    bool isSet = false;
 
 protected:
-    virtual bool isValid(std::string str) {
-        return true;
-    }
+    virtual std::optional<T> isValid(std::string str) = 0;
 
 public:
-    StringOption(std::string arg_name, std::string default_val = ""): value(default_val), argName(arg_name) {}
-
-    std::string& getValue() {
-        return value;
+    UnaryOption(std::string arg_name): argName(arg_name) {}
+    UnaryOption(std::string arg_name, const T& def_value): argName(arg_name) {
+        values.push_back(def_value);
     }
-    void setValue(std::string val) {
-        value = val;
-        present = true;
+
+    const T& getValue() {
+        assert(!values.empty());
+        return values.back();
+    }
+    std::vector<T>& getValues() {
+        return values;
+    }
+    void setValue(const T& val) {
+        values.push_back(val);
+        isSet = true;
     }
 
     virtual unsigned getNumArgs() override {
         return 1;
     }
     virtual bool handle(std::string arg) override {
-        if (isValid(arg)) {
-            value = arg;
-            present = true;
+        if (const auto topt = isValid(arg); topt.has_value()) {
+            setValue(*topt);
             return true;
         }
         return false;
@@ -75,9 +81,46 @@ public:
         return argName;
     }
 
+    /// @brief Whether the option has been set by parsing
+    /// @return true if and only if the value has been set by parsing. Returns false if default value is used.
     bool isPresent() const {
-        return present;
+        return isSet;
     }
+    bool hasValue() const {
+        return !values.empty();
+    }
+};
+
+class StringOption : public UnaryOption<std::string> {
+protected:
+    virtual std::optional<std::string> isValid(std::string str) override {
+        return {str};
+    }
+
+public:
+    StringOption(std::string arg_name): UnaryOption(arg_name) {}
+    StringOption(std::string arg_name, std::string def_value): UnaryOption(arg_name, def_value) {}
+};
+
+class UintOption : public UnaryOption<unsigned> {
+protected:
+    virtual std::optional<unsigned> isValid(std::string str) override {
+        try {
+            int parsed = std::stoi(str, nullptr);
+            if (parsed <= 0) {
+                std::cerr << "The argument must be > 0, but " << parsed << " was found!";
+                return {};
+            }
+            return {parsed};
+        } catch (const std::exception& ex) {
+            std::cerr << "Could not parse integer argument! Found string: \"" << str << "\"";
+            return {};
+        }
+    }
+
+public:
+    UintOption(std::string arg_name): UnaryOption(arg_name) {}
+    UintOption(std::string arg_name, unsigned def_value): UnaryOption(arg_name, def_value) {}
 };
 
 class Parser {

@@ -50,7 +50,7 @@ ValueFormat* determine_format(const std::string& file_name, ValueFormat* prefere
     return preference;
 }
 
-ReturnCode load_file(ValueMap& values, std::string& file_name, ValueFormat* preference) {
+ReturnCode load_file(ValueMap& values, const std::string& file_name, ValueFormat* preference) {
     try {
         if (file_name == "-") {
             // TODO message to indicate the program expects user input and how to terminate
@@ -105,39 +105,7 @@ int main(int argc, char* argv[]) {
         "Specify a file to fetch input from. Alternatively, input may be specified in key-value pairs with --set.",
         "i"
     );
-    class IndentOption : public ArgParse::Option {
-        unsigned value = 2;
-
-    public:
-        virtual unsigned getNumArgs() override {
-            return 1;
-        }
-
-        virtual bool handle(std::string arg) override {
-            try {
-                int parsed = std::stoi(arg, nullptr);
-                if (parsed <= 0) {
-                    std::cerr << "The number of spaces per indent must be > 0, but " << parsed << " was found!";
-                    return false;
-                }
-                value = static_cast<unsigned>(parsed);
-            } catch (const std::exception& ex) {
-                std::cerr << "Could not parse argument for --indent! The number of spaces per indent must be an "
-                                "integer. Found string: \"";
-                std::cerr << arg << "\"";
-                return false;
-            }
-            return true;
-        }
-
-        virtual std::string getArgNames() override {
-            return "SIZE";
-        }
-
-        unsigned get() const {
-            return value;
-        }
-    } indent_arg;
+    ArgParse::UintOption indent_arg("SIZE", 2);
     parser.addOption(
         &indent_arg,
         "indent",
@@ -155,6 +123,15 @@ int main(int argc, char* argv[]) {
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
+    /*
+    ArgParse::UintOption single_invoc("INVOK_ID", 2);
+    parser.addOption(
+        &single_invoc,
+        "single",
+        "Run only one invocation even if multiple are specified (such as by LocalSize).",
+        ""
+    );
+    */
     ArgParse::StringOption template_arg("FILE");
     parser.addOption(
         &template_arg,
@@ -270,7 +247,7 @@ int main(int argc, char* argv[]) {
         std::stringstream ss;
         const auto& prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
-        if (unsigned indent_size = indent_arg.get(); indent_size > 0)
+        if (unsigned indent_size = indent_arg.getValue(); indent_size > 0)
             format2->setIndentSize(indent_size);
         format2->setTemplate(!generate.enabled);
         format2->printFile(ss, prog_ins);
@@ -309,7 +286,7 @@ int main(int argc, char* argv[]) {
         std::string out = out_arg.getValue();
         if (out_set && out != "-") {
             ValueFormat* format2 = determine_format(out, format);
-            if (unsigned indent_size = indent_arg.get(); indent_size > 0)
+            if (unsigned indent_size = indent_arg.getValue(); indent_size > 0)
                 format2->setIndentSize(indent_size);
             format2->printFile(ss, prog_outs);
 
