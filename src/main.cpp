@@ -25,9 +25,10 @@ enum ReturnCode : int {
     BAD_ARGS = 2,
     BAD_FILE = 3,
     BAD_PARSE = 4,
-    BAD_PROG_INPUT = 5,
-    FAILED_EXE = 6,
-    BAD_COMPARE = 7,
+    BAD_PROGRAM = 5,
+    BAD_PROG_INPUT = 6,
+    FAILED_EXE = 7,
+    BAD_COMPARE = 8,
 };
 
 Yaml yaml;
@@ -192,17 +193,6 @@ int main(int argc, char* argv[]) {
     ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
     assert(format != nullptr);
 
-    ValueMap inputs;
-    if (set_arg.isPresent()) {
-        // Parse the value and save in the key
-        try {
-            format->parseVariable(inputs, set_arg.getValue());
-        } catch (const std::exception& e) {
-            std::cerr << e.what() << std::endl;
-            return ReturnCode::BAD_PARSE;
-        }
-    }
-
     // Load the SPIR-V input file:
     std::ifstream ifs(spv_arg.getValue(), std::ios::binary);
     if (!ifs.is_open()) {
@@ -220,26 +210,44 @@ int main(int argc, char* argv[]) {
     ifs.read(buffer, length);
     ifs.close();
 
-    // We must load the input file, if any, very first. This is because specialization constants must know their input
-    // on the program parse. Indeed, if the size of input variables is dependent on specialization constants (which it
-    // might be), then it is vital the correct input is used before we generate the template.
-    // Of course, even if there are specialization constants, they should have some default value which will be used if
-    // the user doesn't provide something to override it.
-    if (in_arg.isPresent()) {
-        auto res = load_file(inputs, in_arg.getValue(), format);
-        if (res != ReturnCode::OK)
-            return res;
-    }
-
     // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
-    Spv::Program program;
+    Program program;
     try {
-        program.parse(std::bit_cast<uint8_t*>(buffer), length, inputs);
+        program.parse(std::bit_cast<uint8_t*>(buffer), length);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }
     delete[] buffer; // delete source now that it has been replaced with program
+
+    // We must load the inputs, if any, before init. This is because specialization constants must know their input.
+    // Indeed, if the size of input variables is dependent on specialization constants (which it might be), then it is
+    // vital the correct input is used before we generate the template.
+    // Of course, even if there are specialization constants, they should have some default value which will be used if
+    // the user doesn't provide something to override it.
+    ValueMap inputs;
+    if (in_arg.isPresent()) {
+        auto res = load_file(inputs, in_arg.getValue(), format);
+        if (res != ReturnCode::OK)
+            return res;
+    }
+    if (set_arg.isPresent()) {
+        // Parse the value and save in the key
+        try {
+            for (std::string val : set_arg.getValues())
+                format->parseVariable(inputs, val);
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << std::endl;
+            return ReturnCode::BAD_PARSE;
+        }
+    }
+
+    try {
+        program.init(inputs);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return ReturnCode::BAD_PROGRAM;
+    }
 
     if (template_arg.isPresent()) {
         std::string itemplate = template_arg.getValue();
@@ -264,7 +272,7 @@ int main(int argc, char* argv[]) {
 
     // Verify that the inputs loaded match what the program expects
     try {
-        program.setup(inputs);
+        program.checkInputs(inputs);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROG_INPUT;

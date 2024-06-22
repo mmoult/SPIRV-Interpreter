@@ -27,7 +27,7 @@ import value.aggregate;
 import value.pointer;
 import value.primitive;
 
-const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, unsigned at) {
+const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
     if (queue != nullptr) {
         for (const auto& request : *queue) {
             if (request.toDecorate == at) {
@@ -39,16 +39,16 @@ const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, un
     return nullptr;
 }
 
-void Spv::Instruction::applyVarDeco(Spv::Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
+void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
     bool set_name = false;
     if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
         for (auto location : *decorations) {
-            const Spv::Instruction& deco = queue->insts[location];
+            const Instruction& deco = queue->insts[location];
             switch (deco.opcode) {
             case spv::OpDecorate: // 71
                 break;
             case spv::OpName: { // 5
-                assert(deco.operands[1].type == Spv::Token::Type::STRING);
+                assert(deco.operands[1].type == Token::Type::STRING);
                 std::string name = std::get<std::string>(deco.operands[1].raw);
                 var.setName(name);
                 set_name = true;
@@ -201,10 +201,10 @@ void element_unary_op(const OpSrc& src, const OpDst& dst, std::vector<Data>& dat
     data[dst.at].redefine(res);
 }
 
-bool Spv::Instruction::makeResult(
+bool Instruction::makeResult(
     std::vector<Data>& data,
     unsigned location,
-    Spv::Instruction::DecoQueue* queue
+    Instruction::DecoQueue* queue
 ) const noexcept(false) {
     if (!hasResult)
         return false; // no result made!
@@ -930,7 +930,7 @@ bool Spv::Instruction::makeResult(
     return true;
 }
 
-bool Spv::Instruction::makeResultGlsl(
+bool Instruction::makeResultGlsl(
     std::vector<Data>& data,
     unsigned location,
     unsigned result_at

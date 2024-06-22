@@ -18,15 +18,7 @@ import spv.data;
 import spv.frame;
 import spv.instruction;
 
-export namespace Spv {
-
-class Program {
-    uint8_t* buffer;
-    int length;
-    /// @brief endianness of the program. true = big, false = little
-    bool endian;
-    int idx;
-
+export class Program {
     std::vector<Instruction> insts;
     unsigned entry;
 
@@ -37,51 +29,101 @@ class Program {
     std::vector<unsigned> ins;
     std::vector<unsigned> outs;
 
+    /// @brief For parsing the program from the binary words. Should identify whether the whole program is valid before
+    ///        any instructions are executed.
+    class ProgramLoader {
+        uint8_t* buffer;
+        int length;
+        /// @brief endianness of the program. true = big, false = little
+        bool endian;
+        int idx;
 
-    bool determineEndian() {
-        // The first four bytes are the SPIR-V magic number
-        // Determines the endianness of the program
-        uint32_t magic;
-        if (!getWord(magic))
-            return false;
-        if (magic == spv::MagicNumber)
-            return true;
-        // If the number fetched didn't match, try reversing the endianness and fetching again
-        endian = !endian;
-        idx -= 4;
-        getWord(magic);
-        return magic == spv::MagicNumber;
-    }
-
-    bool getWord(uint32_t& res) {
-        if (idx + 4 > length)
-            return false;
-
-        res = 0;
-        if (endian) {
-            for (int i = idx + 4; idx < i; ++idx) {
-                res = res << 8;
-                res += buffer[idx];
-            }
-        } else {
-            idx += 3;
-            for (int i = 0; i < 4; ++i) {
-                res = res << 8;
-                res += buffer[idx - i];
-            }
-            ++idx;
+        bool determineEndian() {
+            // The first four bytes are the SPIR-V magic number
+            // Determines the endianness of the program
+            uint32_t magic;
+            if (!getWord(magic))
+                return false;
+            if (magic == spv::MagicNumber)
+                return true;
+            // If the number fetched didn't match, try reversing the endianness and fetching again
+            endian = !endian;
+            idx -= 4;
+            getWord(magic);
+            return magic == spv::MagicNumber;
         }
-        return true;
-    }
 
-    /// Skip ahead by delta (in words)
-    bool skip(int delta) {
-        delta *= 4;
-        if (idx + delta >= length)
-            return false;
-        idx += delta;
-        return true;
-    }
+        bool getWord(uint32_t& res) {
+            if (idx + 4 > length)
+                return false;
+
+            res = 0;
+            if (endian) {
+                for (int i = idx + 4; idx < i; ++idx) {
+                    res = res << 8;
+                    res += buffer[idx];
+                }
+            } else {
+                idx += 3;
+                for (int i = 0; i < 4; ++i) {
+                    res = res << 8;
+                    res += buffer[idx - i];
+                }
+                ++idx;
+            }
+            return true;
+        }
+
+        /// Skip ahead by delta (in words)
+        bool skip(int delta) {
+            delta *= 4;
+            if (idx + delta >= length)
+                return false;
+            idx += delta;
+            return true;
+        }
+
+    public:
+        ProgramLoader(uint8_t* buffer, int length): buffer(buffer), length(length), endian(true), idx(0) {}
+
+        uint32_t parse(std::vector<Instruction>& insts) noexcept(false) {
+#define REQUIRE(COND, MSG) \
+if (!(COND)) \
+    throw std::runtime_error(MSG);
+
+            REQUIRE(determineEndian(), "Corrupted binary! Magic number missing.");
+            REQUIRE(skip(2), "Corrupted binary! Version and/or generator missing.");
+
+            uint32_t bound;
+            if (!getWord(bound))
+                throw std::runtime_error("Corrupted binary! Missing bound.");
+
+            REQUIRE(skip(1), "Corrupted binary! Missing reserved word.");
+
+            while (idx < length) {
+                // Each instruction is at least 1 word = 32 bits, where:
+                // - high bits = word count
+                // - low bits = opcode
+                uint32_t control;
+                REQUIRE(getWord(control), "Corrupted binary! Missing instruction control word.");
+                uint16_t word_count = control >> 16;
+                REQUIRE(word_count >= 1, "Corrupted binary! Word count for instruction less than 1.");
+                uint16_t opcode = control & 0xffff;
+
+                std::vector<uint32_t> words;
+                for (; word_count > 1; --word_count) { // first word in count is the control (already parsed)
+                    uint32_t word;
+                    REQUIRE(getWord(word), "Corrupted binary! Missing data in instruction stream!");
+                    words.push_back(word);
+                }
+
+                Instruction& inst = *(Instruction::readOp(insts, opcode, words));
+            }
+
+#undef REQUIRE
+            return bound;
+        }
+    };
 
     ValueMap getVariables(const std::vector<unsigned>& vars) const {
         ValueMap ret;
@@ -106,8 +148,7 @@ class Program {
     }
 
 public:
-    Program(): buffer(nullptr), length(0), endian(false), idx(0) {}
-
+    Program() = default;
     ~Program() {
         // The program manages the data, so it must clear on destruction
         // (Don't use for-each here in case we need the index for debugging.)
@@ -117,46 +158,21 @@ public:
     Program(const Program& other) = delete;
     Program& operator=(const Program& other) = delete;
 
-    void parse(uint8_t* buffer, int length, ValueMap& provided) noexcept(false) {
-        this->buffer = buffer;
-        this->length = length;
-
-#define REQUIRE(COND, MSG) \
-if (!(COND)) \
-    throw std::runtime_error(MSG);
-
-        REQUIRE(determineEndian(), "Corrupted binary! Magic number missing.");
-        REQUIRE(skip(2), "Corrupted binary! Version and/or generator missing.");
-
-        uint32_t bound;
-        if (!getWord(bound))
-            throw std::runtime_error("Corrupted binary! Missing bound.");
+    void parse(uint8_t* buffer, int length) noexcept(false) {
+        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
+        // This allows for a cleaner separation of data.
+        ProgramLoader load(buffer, length);
+        uint32_t bound = load.parse(insts);
         std::fill_n(std::back_inserter(data), bound, Data());
+    }
 
-        REQUIRE(skip(1), "Corrupted binary! Missing reserved word.");
-
+    void init(ValueMap& provided) noexcept(false) {
         Instruction::DecoQueue decorations(insts);
         bool entry_found = false; // whether the entry instruction has been found
         bool static_ctn = true; // whether we can construct results statically (until first OpFunction)
-        while (idx < length) {
-            // Each instruction is at least 1 word = 32 bits, where:
-            // - high bits = word count
-            // - low bits = opcode
-            uint32_t control;
-            REQUIRE(getWord(control), "Corrupted binary! Missing instruction control word.");
-            uint16_t word_count = control >> 16;
-            REQUIRE(word_count >= 1, "Corrupted binary! Word count for instruction less than 1.");
-            uint16_t opcode = control & 0xffff;
-
-            std::vector<uint32_t> words;
-            for (; word_count > 1; --word_count) { // first word in count is the control (already parsed)
-                uint32_t word;
-                REQUIRE(getWord(word), "Corrupted binary! Missing data in instruction stream!");
-                words.push_back(word);
-            }
-
-            Instruction& inst = *(Instruction::readOp(insts, opcode, words));
-            unsigned location = insts.size() - 1;
+        for (unsigned location = 0; location < insts.size(); ++location) {
+            Instruction& inst = insts[location];
+            auto opcode = inst.getOpcode();
 
             if (static_ctn || inst.isStaticDependent()) {
                 if (opcode == spv::OpFunction) {
@@ -182,11 +198,11 @@ if (!(COND)) \
             }
         }
 
-        REQUIRE(entry_found, "Missing entry function in SPIR-V source!");
-#undef REQUIRE
+        if (!entry_found)
+            throw std::runtime_error("Program is missing entry function!");
     }
 
-    void setup(ValueMap& provided) noexcept(false) {
+    void checkInputs(ValueMap& provided) noexcept(false) {
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
         for (const auto in : ins) {
@@ -337,5 +353,4 @@ if (!(COND)) \
     ValueMap getOutputs() const {
         return getVariables(outs);
     }
-};
 };

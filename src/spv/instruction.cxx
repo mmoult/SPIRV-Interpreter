@@ -21,8 +21,7 @@ import spv.frame;
 import spv.token;
 import value.pointer;
 
-export namespace Spv {
-class Instruction {
+export class Instruction {
     spv::Op opcode;
     bool hasResult;
     bool hasResultType;
@@ -159,6 +158,10 @@ public:
         }
     }
 
+    spv::Op getOpcode() const {
+        return opcode;
+    }
+
     unsigned getEntryStart(std::vector<Data>& data) const noexcept(false) {
         assert(opcode == spv::OpEntryPoint);
 
@@ -260,4 +263,3 @@ public:
         return 0;
     }
 };
-}; // namespace Spv
