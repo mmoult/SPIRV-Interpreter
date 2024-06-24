@@ -4,7 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>
 #include <array>
+#include <limits>
+#include <cmath>
 #include <memory>
 #include <stack>
 #include <string>
@@ -13,12 +16,109 @@ module;
 // TODO: plan to remove/change header(s) below
 #include <iostream>
 
+#include "../external/spirv.hpp"
 #include "type.hpp"
 #include "value.hpp"
 
 export module value.accelerationStructure;
 import value.aggregate;
 import value.primitive;
+
+// TODO: Move somewhere else, don't put it here. Could change to using external library like GLM.
+// TODO: Create classes or structs to better handle vectors and matrices
+namespace MathUtil {
+    /// @brief TODO
+    /// @param a 
+    /// @param b 
+    /// @return 
+    float dotProduct(const std::vector<float> a, const std::vector<float> b) {
+        assert(a.size() == b.size());
+
+        float result = 0.0f;
+
+        for (unsigned i = 0; i < a.size(); ++i)
+            result += (a[i] * b[i]);
+
+        return result;
+    }
+
+    /// @brief TODO
+    /// @param a 
+    /// @param b 
+    /// @return 
+    std::vector<float> crossProduct(const std::vector<float> a, const std::vector<float> b) {
+        // Limit to 3-D vectors
+        assert(a.size() == 3 && a.size() == b.size());
+
+        return std::vector<float> {
+            (a[1] * b[2]) - (a[2] * b[1]),
+            (a[2] * b[0]) - (a[0] * b[2]),
+            (a[0] * b[1]) - (a[1] * b[0])
+        };
+    }
+
+    /// @brief Scale vector a by s; for i in a do a[i] * s.
+    /// @param a Dimension n vector.
+    /// @param s Scale value.
+    /// @return Resulting vector from scaling.
+    std::vector<float> vectorScale(const std::vector<float> a, const float s) {
+        std::vector<float> result = a;
+
+        for (auto& value : result)
+            value *= s;
+
+        return result;
+    }
+
+    /// @brief Add vector a and vector b; (a + b). Vectors a and b must be the same dimension.
+    /// @param a Dimension n vector.
+    /// @param b Dimension n vector.
+    /// @return Resulting vector from addition.
+    std::vector<float> vectorAdd(const std::vector<float> a, const std::vector<float> b) {
+        assert(a.size() == b.size());
+
+        std::vector<float> result(a.size());
+        
+        for (unsigned i = 0; i < a.size(); ++i)
+            result[i] = a[i] + b[i];
+
+        return result;
+    }
+
+    /// @brief Subtract vector b from vector a; (a - b). Vectors a and b must be the same dimension.
+    /// @param a Dimension n vector.
+    /// @param b Dimension n vector.
+    /// @return Resulting vector from subtraction.
+    std::vector<float> vectorSubtract(const std::vector<float> a, const std::vector<float> b) {
+        assert(a.size() == b.size());
+
+        std::vector<float> result(a.size());
+        
+        for (unsigned i = 0; i < a.size(); ++i)
+            result[i] = a[i] - b[i];
+
+        return result;
+    }
+
+    /// @brief TODO
+    /// @param vec 
+    /// @param mat 
+    /// @return 
+    std::vector<float> vectorMatrixProduct(const std::vector<float> vec, const std::array<std::array<float, 4>, 3> mat) {
+        // TODO: Maybe use Strassen algorithm
+        // For now return a 3-D vector
+        // Multiple matrix to vector so a (3x4 dim) * (3x1 dim) where ignoreing 4th column -> (3x3 dim) * (3x1 dim) instead
+        std::vector<float> result;
+        for (unsigned row = 0; row < mat.size(); ++row) {
+            float value = 0.0f;
+            for (unsigned col = 0; col < mat[row].size() - 1; ++col) { // For now ignore 4th column of matrix
+                value += mat[row][col] * vec[col];
+            }
+            result.push_back(value);
+        }
+        return result;
+    }
+}
 
 /*
     TODO: convert raw pointers to smart pointers to not worry about memory reclaimation
@@ -28,14 +128,8 @@ import value.primitive;
     TODO: probably want a transformation matrix or something if ended up here via an instance node?
           How to transfer information from instance node to its respective acceleration structure?
 */
-export class AccelerationStructure {
+class AccelerationStructure {
 private:
-    // TODO: what should RayPayload be?
-    struct RayPayload {
-        float distance;
-        std::vector<float> color;
-    };
-
     enum class NodeType { Box, Instance, Primitive };
 
     class Node {
@@ -198,13 +292,286 @@ public:
             const int missIndex,
             const std::vector<float> rayOrigin,
             const float rayTMin,
-            const float rayTMax,
             const std::vector<float> rayDirection,
-            RayPayload& payload) const {
-        throw std::runtime_error("traceRay() in AccelerationStructure in acceleration-structure.cxx not implemented!");
+            const float rayTMax,
+            bool& didIntersectGeometry) {
+
+        // TODO: figure out payload
+        using NodeRef = std::unique_ptr<Node>*;  // Raw pointer to smart pointers
+
+        // TODO: can ignore SBT? Since only dealing with a single shader at a time
+
+        // TODO: flags
+        // Handle ray flags if something other than none was given
+        if ((rayFlags & spv::RayFlagsMask::RayFlagsMaskNone) != 0) {
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsOpaqueKHRMask) != 0) {
+                // TODO: Force all intersections with the trace to be opaque.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsNoOpaqueKHRMask) != 0) {
+                // TODO: Force all intersections with the trace to be non-opaque.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsTerminateOnFirstHitKHRMask) != 0) {
+                // TODO: Accept the first hit discovered.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsSkipClosestHitShaderKHRMask) != 0) {
+                // TODO: Do not execute a closest hit shader.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullBackFacingTrianglesKHRMask) != 0) {
+                // TODO: Do not intersect with the back face of triangles.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullFrontFacingTrianglesKHRMask) != 0) {
+                // TODO: Do not intersect with the front face of triangles.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullOpaqueKHRMask) != 0) {
+                // TODO: Do not intersect with opaque geometry.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullNoOpaqueKHRMask) != 0) {
+                // TODO: Do not intersect with non-opaque geometry.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsSkipTrianglesKHRMask) != 0) {
+                // TODO: Do not intersect with any triangle geometries.
+            }
+            if ((rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask) != 0) {
+                // TODO: Do not intersect with any aabb geometries.
+            }
+        }
+
+        std::stack<NodeRef> frontier;
+        frontier.push(&root);
+
+        std::cout << "~Ray origin: [ ";
+        for (const auto& a : rayOrigin) {
+            std::cout << a << " ";
+        }
+        std::cout << "]" << std::endl;
+        std::cout << "~Ray direction: [ ";
+        for (const auto& a : rayDirection) {
+            std::cout << a << " ";
+        }
+        std::cout << "]" << std::endl;
+
+        while (!frontier.empty()) {
+            std::unique_ptr<Node>& currNodeRef = *(frontier.top());
+            frontier.pop();
+
+            Node* currNode = currNodeRef.release();  // Take ownership
+
+            std::cout << "Trace ray: node type: " << static_cast<unsigned>(currNode->type()) << std::endl;
+
+            switch(currNode->type()) {
+            default: {
+                std::stringstream err;
+                err << "Found unknown node type (" << static_cast<int>(currNode->type())
+                    << ") in \"traceRay()\" method of class "
+                       "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
+                throw std::runtime_error(err.str());
+            }
+            case NodeType::Box: {
+                // TODO
+                BoxNode* boxNode = static_cast<BoxNode*>(currNode);
+                bool result = rayAABBIntersect(rayOrigin, rayDirection, rayTMin, rayTMax, boxNode->bounds);
+                if (result) {
+                    // Ray intersected; add it's children to be evaluated
+                    for (auto& child : boxNode->children) {
+                        frontier.push(&child);
+                    }
+                } else {
+                    // Ray didn't intersect
+                    std::cout << "Ray did not intersect with AABB" << std::endl;
+                }
+                break;
+            }
+            case NodeType::Instance: {
+                // TODO
+                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
+
+                // TODO
+                // Do not process this instance if it's invisible to the ray
+                if ((instanceNode->instanceMask & cullMask) == 0)
+                    break;
+
+                bool foundGeometryIntersection = false;
+
+                // Transform the ray to match the instance's space
+                std::vector<float> newRayOrigin =
+                        MathUtil::vectorMatrixProduct(rayOrigin, instanceNode->transformationMatrix);
+                std::vector<float> newRayDirection =
+                        MathUtil::vectorMatrixProduct(rayDirection, instanceNode->transformationMatrix);
+                
+                std::cout << "\tInstance node new ray origin and ray direction respectively: " << std::endl;
+                std::cout << "\t\torigin: [ ";
+                for (const auto& a : newRayOrigin) {
+                    std::cout << a << " ";
+                }
+                std::cout << "]" << std::endl;
+                std::cout << "\t\tdirection: [ ";
+                for (const auto& a : newRayDirection) {
+                    std::cout << a << " ";
+                }
+                std::cout << "]" << std::endl;
+
+                // Trace the ray in the respective acceleration structure
+                instanceNode->accelerationStructure->traceRay(rayFlags,
+                        cullMask,
+                        offsetSBT,
+                        strideSBT,
+                        missIndex,
+                        rayOrigin,
+                        rayTMin,
+                        rayDirection,
+                        rayTMax,
+                        foundGeometryIntersection);
+
+                // Handle the result of tracing the ray in the instance
+                if (foundGeometryIntersection) {
+                    // TODO: may want to terminate early if ray does intersect any primitive
+                    didIntersectGeometry = true;
+                } else {
+                    // Ray did not intersect
+                }
+
+                break;
+            }
+            case NodeType::Primitive: {
+                // TODO: handle procedural nodes
+                std::cout << "Trying primitive" << std::endl;
+                PrimitiveNode* primitiveNode = static_cast<PrimitiveNode*>(currNode);
+                float t, u, v;  // t : distance to intersection, (u,v) : uv coordinates/coordinates in triangle
+                bool result = rayTriangleIntersect(rayOrigin,
+                        rayDirection,
+                        rayTMin,
+                        rayTMax,
+                        primitiveNode->vertices,
+                        false,
+                        t,
+                        u,
+                        v);
+                if (result) {
+                    // Ray intersected
+                    std::printf("Ray intersected a primitive; t:%f, u:%f, v:%f\n", t, u, v);
+                    didIntersectGeometry = true;
+                } else {
+                    // Ray did not intersect
+                }
+                break;
+            }
+            }
+            
+            currNodeRef = std::unique_ptr<Node>(currNode);  // Give back ownership
+        }
     }
 
 private:
+    bool rayAABBIntersect(const std::vector<float> rayOrigin,
+            const std::vector<float> rayDirection,
+            const float rayTMin,
+            const float rayTMax,
+            const std::array<float, 6> bounds) const {
+
+        // Algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004." found
+        // on Scratchapixel
+        // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html)
+
+        // Bounds organized as (0)xmin, (1)xmax, (2)ymin, (3)ymax, (4)zmin, (5)zmax
+        // Ray organized as (0)x, (1)y, (2)z
+        
+        // Check the x-plane
+        float tmin = (bounds[0] - rayOrigin[0]) / rayDirection[0];
+        float tmax = (bounds[1] - rayOrigin[0]) / rayDirection[0];
+
+        if (tmin > tmax)
+            std::swap(tmin, tmax);
+
+        // Check the y-plane
+        float tymin = (bounds[2] - rayOrigin[1]) / rayDirection[1];
+        float tymax = (bounds[3] - rayOrigin[1]) / rayDirection[1];
+
+        if (tymin > tymax)
+            std::swap(tymin, tymax);
+
+        if ((tmin > tymax) || (tymin > tmax))
+            return false;
+
+        if (tymin > tmin)
+            tmin = tymin;
+        if (tymax < tmax)
+            tmax = tymax;
+
+        // Check the z-plane
+        float tzmin = (bounds[4] - rayOrigin[2]) / rayDirection[2];
+        float tzmax = (bounds[5] - rayOrigin[2]) / rayDirection[2];
+
+        if (tzmin > tzmax)
+            std::swap(tzmin, tzmax);
+
+        if ((tmin > tzmax) || (tzmin > tmax))
+            return false;
+
+        if (tzmin > tmin)
+            tmin = tzmin;
+        if (tzmax < tmax)
+            tmax = tzmax;
+
+        // TODO: correct logic?
+        // Only check the entry point of the ray into the box
+        if (tmin < rayTMin || tmin > rayTMax)
+            return false;
+
+        return true;
+    }
+
+    bool rayTriangleIntersect(const std::vector<float> rayOrigin,
+            const std::vector<float> rayDirection,
+            const float rayTMin,
+            const float rayTMax,
+            const std::vector<std::vector<float>> vertices,
+            const bool cullBackFace,
+            float& t,
+            float& u,
+            float& v) const {
+
+        // Moller-Trumbore ray/triangle intersection algorithm
+
+        constexpr float epsilon = std::numeric_limits<float>::epsilon();
+
+        // Find vectors for 2 edges that share a vertex
+        std::vector<float> edge1 = MathUtil::vectorSubtract(vertices[1], vertices[0]);
+        std::vector<float> edge2 = MathUtil::vectorSubtract(vertices[2], vertices[0]);
+
+        std::vector<float> pvec = MathUtil::crossProduct(rayDirection, edge2);
+
+        float determinant = MathUtil::dotProduct(edge1, pvec);
+
+        if (cullBackFace) {
+            if (determinant < epsilon)
+                return false;
+        } else {
+            if (std::fabs(determinant) < epsilon)
+                return false;
+        }
+
+        float inverseDeterminant = 1.0f / determinant;
+
+        std::vector<float> tvec = MathUtil::vectorSubtract(rayOrigin, vertices[0]);  // Distance from ray origin to shared vertex 
+
+        u = MathUtil::dotProduct(tvec, pvec) * inverseDeterminant;
+        if (u < 0 || u > 1)
+            return false;
+
+        std::vector<float> qvec = MathUtil::crossProduct(tvec, edge1);
+
+        v = MathUtil::dotProduct(rayDirection, qvec) * inverseDeterminant;
+        if (v < 0 || u + v > 1)
+            return false;
+
+        t = MathUtil::dotProduct(edge2, qvec) * inverseDeterminant;
+
+        if (t < rayTMin || t > rayTMax)
+            return false;
+
+        return true;
+    }
+
     std::string tabbedString(unsigned numTabs, std::string message) {
         std::stringstream result("");
 
@@ -219,7 +586,7 @@ public:
     std::string toString(unsigned tabLevel = 0) {
         std::stringstream result("");
 
-        result << tabbedString(tabLevel, "+ accelerationStructure") << id << std::endl;
+        result << tabbedString(tabLevel, "+ accelerationStructure id = ") << id << std::endl;
         result << tabbedString(tabLevel + 1, "* isTLAS") << " = " << (isTLAS ? "true" : "false") << std::endl;
         result << tabbedString(tabLevel + 1, "* splitValue") << " = " << splitValue << std::endl;
 
@@ -328,25 +695,20 @@ public:
     }
 
 private:
-    // TODO: need to change return type
-    void rayIntersect(Node* node) const {
-        throw std::runtime_error("rayIntersect() in AccelerationStructure in acceleration-structure.cxx not implemented!");
-    }
-
-private:
     // TODO: change classes to structs? Since not using private fields.
     class BoxNode : public Node {
     public:
         const std::array<float, 6> bounds;  // [ min x, max x, min y, max y, min z, max z ]
-        std::vector<std::unique_ptr<Node>> children; // TODO: look into unique_ptr and see how to deal with construction
+        std::vector<std::unique_ptr<Node>> children;
 
+        /// @brief Constructor for "BoxNode". IMPORTANT: Will transfer ownership of unique pointers.
+        /// @param bounds TODO
+        /// @param children TODO
         BoxNode(const std::array<float, 6> bounds, std::vector<std::unique_ptr<Node>>& children): bounds(bounds) {
             for (auto& child : children) {
                 this->children.push_back(std::move(child));
             }
         };
-
-        ~BoxNode() {};  // TODO
 
         NodeType type() {
             return NodeType::Box;
@@ -357,21 +719,22 @@ private:
     public:
         // TODO: some fields involving shaders, transformations, etc.
         std::array<std::array<float, 4>, 3> transformationMatrix;  // 3 x 4 matrix
+        unsigned instanceMask;  // TODO: handle
         std::shared_ptr<AccelerationStructure> accelerationStructure;
 
         InstanceNode(std::array<std::array<float, 4>, 3> transformationMatrix,
                 std::shared_ptr<AccelerationStructure>& accelerationStructure)
-            : transformationMatrix(transformationMatrix) {
+            : transformationMatrix(transformationMatrix),
+              instanceMask(0xff) {
             this->accelerationStructure = accelerationStructure;
         };
-
-        ~InstanceNode() {}; // TODO
 
         NodeType type() {
             return NodeType::Instance;
         }
     };
 
+    // TODO: Split into triangle and procedural
     class PrimitiveNode : public Node {
     public:
         std::vector<std::vector<float>> vertices;
@@ -380,8 +743,6 @@ private:
         PrimitiveNode(std::vector<std::vector<float>> vertices, std::vector<unsigned> indices)
             : vertices(vertices),
               indices(indices) {};
-
-        ~PrimitiveNode() {};  // TODO
 
         NodeType type() {
             return NodeType::Primitive;
@@ -439,7 +800,7 @@ public:
         }
 
         // Print it
-        std::cout << toString() << std::endl;
+        // std::cout << toString() << std::endl;
 
         // Build the BVH tree
         {
@@ -473,6 +834,77 @@ public:
 
             std::cout << "Printing acceleration structures based on tree construction:" << std::endl;
             std::cout << root->toString() << std::endl; // TODO: print it out to verify correct tree
+        }
+    }
+
+    void traceRay(const unsigned rayFlags,
+            const unsigned cullMask,
+            const int offsetSBT,
+            const int strideSBT,
+            const int missIndex,
+            const std::vector<float> rayOrigin,
+            const float rayTMin,
+            const std::vector<float> rayDirection,
+            const float rayTMax,
+            bool& didIntersectGeometry) const {
+
+        root->traceRay(rayFlags,
+                cullMask,
+                offsetSBT,
+                strideSBT,
+                missIndex,
+                rayOrigin,
+                rayTMin,
+                rayDirection,
+                rayTMax,
+                didIntersectGeometry);
+    }
+
+    // TODO
+    void fillPayload(Value* payloadInfo, const bool intersected) const {
+        std::stack<Value*> frontier;
+        frontier.push(payloadInfo);
+
+        while (!frontier.empty()) {
+            Value* curr = frontier.top();
+            frontier.pop();
+
+            switch (curr->getType().getBase()) {
+                default: {
+                    std::stringstream err;
+                    err << "Encountered unsupported data type in fill payload: " << curr->getType().getBase();
+                    throw std::runtime_error(err.str());
+                }
+                case DataType::FLOAT: {
+                    Primitive& val = static_cast<Primitive&>(*curr);
+                    val.copyFrom(Primitive(static_cast<float>(intersected)));
+                    break;
+                }
+                // case DataType::UINT: {
+                //     // TODO
+                //     break;
+                // }
+                // case DataType::INT: {
+                //     // TODO
+                //     break;
+                // }
+                // case DataType::BOOL: {
+                //     // TODO
+                //     break;
+                // }
+                // case DataType::STRING: {
+                //     // TODO
+                //     break;
+                // }
+                case DataType::ARRAY:
+                case DataType::STRUCT: {
+                    const Aggregate& agg = static_cast<const Aggregate&>(*curr);
+                    for (auto it = agg.begin(); it != agg.end(); ++it) {
+                        frontier.push(*it);
+                    }
+                    break;
+                }
+            }
         }
     }
 

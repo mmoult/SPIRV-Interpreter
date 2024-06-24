@@ -143,11 +143,13 @@ public:
             break;
         case SC::StorageClassUniform:
         case SC::StorageClassStorageBuffer:  // TODO: does this belong here?
+        case SC::StorageClassHitAttributeKHR:  // TODO: does this belong here?
+        case SC::StorageClassIncomingRayPayloadKHR:  // TODO: does this belong here?
             ins.push_back(id);
             outs.push_back(id);
             break;
         case SC::StorageClassOutput:
-        // case SC::StorageClassRayPayloadKHR:  // TODO: does this belong here?
+        case SC::StorageClassRayPayloadKHR:  // TODO: does this belong here? Read/write, not shared externally, no initializer
             outs.push_back(id);
             break;
         default:

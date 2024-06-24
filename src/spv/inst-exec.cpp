@@ -21,6 +21,8 @@ module spv.instruction;
 import spv.data;
 import spv.frame;
 import spv.token;
+import value.accelerationStructure;
+import value.aggregate;
 import value.primitive;
 
 void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
@@ -172,6 +174,79 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
         frame_stack.pop_back();
         inc_pc = !frame_stack.empty();
         break;
+    }
+    case spv::OpTraceRayKHR: { // 4445
+        // TODO: need to check execution model?
+        // Run it through a built-in ray tracing pipeline (implementation by interpreter)
+        // and the result will be either 0 for miss or 1 for hit.
+        //
+        // Both 0 and 1 can be used for the supported data types of the interpreter,
+        // specifically the primitive data types.
+        //
+        // Will fail if the acceleration structure contains procedural nodes because they
+        // require a user-defined intersection shader.
+
+        // --- Assertions
+        assert(getValue(0, data)->getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
+        for (unsigned i = 1; i < 6; ++i)
+            assert(getValue(i, data)->getType().getBase() == DataType::UINT);
+        assert(getValue(6, data)->getType().getBase() == DataType::ARRAY);
+        assert(getValue(7, data)->getType().getBase() == DataType::FLOAT);
+        assert(getValue(8, data)->getType().getBase() == DataType::ARRAY);
+        assert(getValue(9, data)->getType().getBase() == DataType::FLOAT);
+
+        // --- Gather arguments to instruction
+        AccelerationStructureManager& as = static_cast<AccelerationStructureManager&>(*getValue(0, data));
+
+        unsigned rayFlags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
+        unsigned cullMask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
+        unsigned offsetSBT = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+        unsigned strideSBT = static_cast<Primitive&>(*getValue(4, data)).data.u32;
+        unsigned missIndex = static_cast<Primitive&>(*getValue(5, data)).data.u32;
+
+        Array& rayOriginInfo = static_cast<Array&>(*getValue(6, data));  // TODO: is it possible that values could be integers?
+        std::vector<float> rayOrigin;
+        for (unsigned i = 0; i < rayOriginInfo.getSize(); ++i) {
+            rayOrigin.push_back(static_cast<Primitive&>(*(rayOriginInfo[i])).data.fp32);
+        }
+
+        float rayTMin = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
+
+        Array& rayDirectionInfo = static_cast<Array&>(*getValue(8, data));  // TODO: is it possible that values could be integers?
+        std::vector<float> rayDirection;
+        for (unsigned i = 0; i < rayDirectionInfo.getSize(); ++i) {
+            rayDirection.push_back(static_cast<Primitive&>(*(rayDirectionInfo[i])).data.fp32);
+        }
+
+        assert(rayOrigin.size() == rayDirection.size());  // Same dimension?
+
+        float rayTMax = static_cast<Primitive&>(*getValue(9, data)).data.fp32;
+
+        // TODO: payload could be an array or struct? What data types can it be? I believe it is user defined?
+        auto payloadPointer = getFromPointer(10, data);
+
+        // TODO: what should be outputted if runned in ray generation execution model
+        // --- Execute instruction
+        // Run it through our implementation of a ray tracing pipeline
+        // Only the 8 least-significant bits of Cull Mask are used in this instruction
+        // Only the 4 least-significant bits of SBT Offset are used in this instruction
+        // Only the 4 least-significant bits of SBT Stride are used in this instruction
+        // Only the 16 least-significant bits of Miss Index are used in this instruction
+        bool didIntersectGeometry;
+        as.traceRay(rayFlags,
+                cullMask & 0xFF,
+                offsetSBT & 0xF,
+                strideSBT & 0xF,
+                missIndex & 0xFFFF,
+                rayOrigin,
+                rayTMin,
+                rayDirection,
+                rayTMax,
+                didIntersectGeometry);
+
+        // Store the data into the payload
+        // TODO: figure out payload
+        as.fillPayload(payloadPointer, didIntersectGeometry);
     }
     }
 
