@@ -37,13 +37,13 @@ bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstr
 }
 
 void handle_type(
-    const Spv::Token::Type& type,
-    std::vector<Spv::Token>& operands,
+    const Token::Type& type,
+    std::vector<Token>& operands,
     const std::vector<uint32_t>& words,
     unsigned& i
 ) {
     uint32_t word = words[i++];
-    using Type = Spv::Token::Type;
+    using Type = Token::Type;
 
     switch (type) {
     default:
@@ -64,8 +64,8 @@ void handle_type(
     }
 }
 
-Spv::Instruction* Spv::Instruction::readOp(
-    std::vector<Spv::Instruction>& insts,
+Instruction* Instruction::readOp(
+    std::vector<Instruction>& insts,
     uint16_t opcode,
     std::vector<uint32_t>& words
 ) noexcept(false) {
@@ -77,7 +77,7 @@ Spv::Instruction* Spv::Instruction::readOp(
         throw std::invalid_argument("Cannot parse invalid SPIR-V opcode!");
 
     // Create token operands from the words available and for the given opcode
-    using Type = Spv::Token::Type;
+    using Type = Token::Type;
     std::vector<Type> to_load;
     std::vector<Type> optional;
 
@@ -310,7 +310,7 @@ Spv::Instruction* Spv::Instruction::readOp(
         break;
     }
 
-    Spv::Instruction& inst = insts.emplace_back(op, has_result, has_type);
+    Instruction& inst = insts.emplace_back(op, has_result, has_type);
     // Create tokens as requested
     unsigned i = 0;
 

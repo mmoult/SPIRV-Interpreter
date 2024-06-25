@@ -25,9 +25,10 @@ enum ReturnCode : int {
     BAD_ARGS = 2,
     BAD_FILE = 3,
     BAD_PARSE = 4,
-    BAD_PROG_INPUT = 5,
-    FAILED_EXE = 6,
-    BAD_COMPARE = 7,
+    BAD_PROGRAM = 5,
+    BAD_PROG_INPUT = 6,
+    FAILED_EXE = 7,
+    BAD_COMPARE = 8,
 };
 
 Yaml yaml;
@@ -50,7 +51,7 @@ ValueFormat* determine_format(const std::string& file_name, ValueFormat* prefere
     return preference;
 }
 
-ReturnCode load_file(ValueMap& values, std::string& file_name, ValueFormat* preference) {
+ReturnCode load_file(ValueMap& values, const std::string& file_name, ValueFormat* preference) {
     try {
         if (file_name == "-") {
             // TODO message to indicate the program expects user input and how to terminate
@@ -105,39 +106,7 @@ int main(int argc, char* argv[]) {
         "Specify a file to fetch input from. Alternatively, input may be specified in key-value pairs with --set.",
         "i"
     );
-    class IndentOption : public ArgParse::Option {
-        unsigned value = 2;
-
-    public:
-        virtual unsigned getNumArgs() override {
-            return 1;
-        }
-
-        virtual bool handle(std::string arg) override {
-            try {
-                int parsed = std::stoi(arg, nullptr);
-                if (parsed <= 0) {
-                    std::cerr << "The number of spaces per indent must be > 0, but " << parsed << " was found!";
-                    return false;
-                }
-                value = static_cast<unsigned>(parsed);
-            } catch (const std::exception& ex) {
-                std::cerr << "Could not parse argument for --indent! The number of spaces per indent must be an "
-                                "integer. Found string: \"";
-                std::cerr << arg << "\"";
-                return false;
-            }
-            return true;
-        }
-
-        virtual std::string getArgNames() override {
-            return "SIZE";
-        }
-
-        unsigned get() const {
-            return value;
-        }
-    } indent_arg;
+    ArgParse::UintOption indent_arg("SIZE", 2);
     parser.addOption(
         &indent_arg,
         "indent",
@@ -155,6 +124,15 @@ int main(int argc, char* argv[]) {
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
+    /*
+    ArgParse::UintOption single_invoc("INVOK_ID", 2);
+    parser.addOption(
+        &single_invoc,
+        "single",
+        "Run only one invocation even if multiple are specified (such as by LocalSize).",
+        ""
+    );
+    */
     ArgParse::StringOption template_arg("FILE");
     parser.addOption(
         &template_arg,
@@ -215,17 +193,6 @@ int main(int argc, char* argv[]) {
     ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
     assert(format != nullptr);
 
-    ValueMap inputs;
-    if (set_arg.isPresent()) {
-        // Parse the value and save in the key
-        try {
-            format->parseVariable(inputs, set_arg.getValue());
-        } catch (const std::exception& e) {
-            std::cerr << e.what() << std::endl;
-            return ReturnCode::BAD_PARSE;
-        }
-    }
-
     // Load the SPIR-V input file:
     std::ifstream ifs(spv_arg.getValue(), std::ios::binary);
     if (!ifs.is_open()) {
@@ -243,26 +210,44 @@ int main(int argc, char* argv[]) {
     ifs.read(buffer, length);
     ifs.close();
 
-    // We must load the input file, if any, very first. This is because specialization constants must know their input
-    // on the program parse. Indeed, if the size of input variables is dependent on specialization constants (which it
-    // might be), then it is vital the correct input is used before we generate the template.
-    // Of course, even if there are specialization constants, they should have some default value which will be used if
-    // the user doesn't provide something to override it.
-    if (in_arg.isPresent()) {
-        auto res = load_file(inputs, in_arg.getValue(), format);
-        if (res != ReturnCode::OK)
-            return res;
-    }
-
     // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
-    Spv::Program program;
+    Program program;
     try {
-        program.parse(std::bit_cast<uint8_t*>(buffer), length, inputs);
+        program.parse(std::bit_cast<uint8_t*>(buffer), length);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }
     delete[] buffer; // delete source now that it has been replaced with program
+
+    // We must load the inputs, if any, before init. This is because specialization constants must know their input.
+    // Indeed, if the size of input variables is dependent on specialization constants (which it might be), then it is
+    // vital the correct input is used before we generate the template.
+    // Of course, even if there are specialization constants, they should have some default value which will be used if
+    // the user doesn't provide something to override it.
+    ValueMap inputs;
+    if (in_arg.isPresent()) {
+        auto res = load_file(inputs, in_arg.getValue(), format);
+        if (res != ReturnCode::OK)
+            return res;
+    }
+    if (set_arg.isPresent()) {
+        // Parse the value and save in the key
+        try {
+            for (std::string val : set_arg.getValues())
+                format->parseVariable(inputs, val);
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << std::endl;
+            return ReturnCode::BAD_PARSE;
+        }
+    }
+
+    try {
+        program.init(inputs);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return ReturnCode::BAD_PROGRAM;
+    }
 
     if (template_arg.isPresent()) {
         std::string itemplate = template_arg.getValue();
@@ -270,7 +255,7 @@ int main(int argc, char* argv[]) {
         std::stringstream ss;
         const auto& prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
-        if (unsigned indent_size = indent_arg.get(); indent_size > 0)
+        if (unsigned indent_size = indent_arg.getValue(); indent_size > 0)
             format2->setIndentSize(indent_size);
         format2->setTemplate(!generate.enabled);
         format2->printFile(ss, prog_ins);
@@ -287,7 +272,7 @@ int main(int argc, char* argv[]) {
 
     // Verify that the inputs loaded match what the program expects
     try {
-        program.setup(inputs);
+        program.checkInputs(inputs);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROG_INPUT;
@@ -309,7 +294,7 @@ int main(int argc, char* argv[]) {
         std::string out = out_arg.getValue();
         if (out_set && out != "-") {
             ValueFormat* format2 = determine_format(out, format);
-            if (unsigned indent_size = indent_arg.get(); indent_size > 0)
+            if (unsigned indent_size = indent_arg.getValue(); indent_size > 0)
                 format2->setIndentSize(indent_size);
             format2->printFile(ss, prog_outs);
 

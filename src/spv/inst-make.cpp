@@ -14,6 +14,7 @@ module;
 #include <variant>
 #include <vector>
 
+#include <glm/glm.hpp>
 #include "../external/GLSL.std.450.h"
 #define SPV_ENABLE_UTILITY_CODE 1
 #include "../external/spirv.hpp"
@@ -27,7 +28,7 @@ import value.aggregate;
 import value.pointer;
 import value.primitive;
 
-const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, unsigned at) {
+const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
     if (queue != nullptr) {
         for (const auto& request : *queue) {
             if (request.toDecorate == at) {
@@ -39,16 +40,16 @@ const std::vector<unsigned>* find_request(Spv::Instruction::DecoQueue* queue, un
     return nullptr;
 }
 
-void Spv::Instruction::applyVarDeco(Spv::Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
+void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
     bool set_name = false;
     if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
         for (auto location : *decorations) {
-            const Spv::Instruction& deco = queue->insts[location];
+            const Instruction& deco = queue->insts[location];
             switch (deco.opcode) {
             case spv::OpDecorate: // 71
                 break;
             case spv::OpName: { // 5
-                assert(deco.operands[1].type == Spv::Token::Type::STRING);
+                assert(deco.operands[1].type == Token::Type::STRING);
                 std::string name = std::get<std::string>(deco.operands[1].raw);
                 var.setName(name);
                 set_name = true;
@@ -201,10 +202,10 @@ void element_unary_op(const OpSrc& src, const OpDst& dst, std::vector<Data>& dat
     data[dst.at].redefine(res);
 }
 
-bool Spv::Instruction::makeResult(
+bool Instruction::makeResult(
     std::vector<Data>& data,
     unsigned location,
-    Spv::Instruction::DecoQueue* queue
+    Instruction::DecoQueue* queue
 ) const noexcept(false) {
     if (!hasResult)
         return false; // no result made!
@@ -213,6 +214,7 @@ bool Spv::Instruction::makeResult(
     unsigned data_len = data.size();
     unsigned result_at = checkRef(hasResultType, data_len);
 
+    switch (opcode) {
 // Typical element-wise binary operation
 #define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
     OpSrc src{DataType::E_TYPE, checkRef(2, data_len), checkRef(3, data_len)}; \
@@ -243,8 +245,6 @@ bool Spv::Instruction::makeResult(
     element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
     break; \
 }
-
-    switch (opcode) {
     default: {
         std::stringstream err;
         err << "Cannot make result for unsupported instruction " << spv::OpToString(opcode) << "!";
@@ -821,6 +821,27 @@ bool Spv::Instruction::makeResult(
             err << " and " << osize << ".";
             throw std::runtime_error(err.str());
         }
+
+        // TODO: will remove because GLM probably not be worth it here. It's here to make sure GLM works.
+        if (size == 4) {
+            // 4-D vector
+            glm::vec4 a(
+                (*static_cast<const Primitive*>((*arr[0])[0])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[0])[1])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[0])[2])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[0])[3])).data.fp32
+            );
+            glm::vec4 b(
+                (*static_cast<const Primitive*>((*arr[1])[0])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[1])[1])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[1])[2])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[1])[3])).data.fp32
+            );
+            float result = glm::dot(a, b);
+            data[result_at].redefine(new Primitive(result));
+            break;
+        }
+
         float total = 0;
         for (unsigned i = 0; i < size; ++i) {
             const Primitive& n0 = *static_cast<const Primitive*>((*arr[0])[i]);
@@ -931,12 +952,15 @@ bool Spv::Instruction::makeResult(
         data[result_at].redefine(
                 new Type(Type::accelerationStructure(std::vector<const Type*> {}, std::vector<std::string> {})));
         break;
+#undef TYPICAL_E_BIN_OP
+#undef INT_E_BIN_OP
+#undef TYPICAL_E_UNARY_OP
     }
 
     return true;
 }
 
-bool Spv::Instruction::makeResultGlsl(
+bool Instruction::makeResultGlsl(
     std::vector<Data>& data,
     unsigned location,
     unsigned result_at
@@ -948,6 +972,12 @@ bool Spv::Instruction::makeResultGlsl(
     bool made = true;
 
     switch (ext_opcode) {
+#define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
+    OpSrc src{DataType::E_TYPE, checkRef(4, data_len), 0}; \
+    OpDst dst{checkRef(0, data_len), result_at}; \
+    element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
+    break; \
+}
     default: {
         std::stringstream err;
         err << "Unknown GLSL opcode: " << ext_opcode;
@@ -986,6 +1016,51 @@ bool Spv::Instruction::makeResultGlsl(
         TYPICAL_E_UNARY_OP(FLOAT, std::ceil(a->data.fp32));
     case GLSLstd450Sqrt: // 31
         TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.fp32));
+    case GLSLstd450Modf: { // 35
+        // fraction = modf(input, whole_pointer);
+        // OpExtInst %float %23 = %1 Modf %20 %22
+        OpSrc src{DataType::FLOAT, checkRef(4, data_len), 0};
+        OpDst dst{checkRef(0, data_len), result_at};
+        // whole_pointer is a pointer to a float value which can be modified. The only modifiable values in SPIR-V are
+        // variables, so we know whole_pointer should resolve to a float variable
+        Value* whole_val;
+        constexpr unsigned whole_index = 5;
+        if (Variable* found = getVariable(whole_index, data); found != nullptr)
+            whole_val = found->getVal();
+        else {
+            const Value* found_val = getValue(whole_index, data);
+            if (found_val == nullptr)
+                throw std::runtime_error("Couldn't resolve Modf whole pointer, which is neither a variable nor value!");
+            if (found_val->getType().getBase() != DataType::POINTER)
+                throw std::runtime_error("Modf whole pointer found of non-pointer type!");
+            const Pointer& whole_ptr = *static_cast<const Pointer*>(found_val);
+            Value* head_val = getHeadValue(whole_ptr, data);
+            whole_val = whole_ptr.dereference(*head_val);
+        }
+
+        Type* dst_type = getType(0, data);
+        int comp = -1;
+        if (dst_type->getBase() == DataType::ARRAY) {
+            // verify that whole is also an array type
+            if (whole_val->getType().getBase() != DataType::ARRAY)
+                throw std::runtime_error("Whole number pointer operand to modf doesn't match the array dest type!");
+            comp = 0;
+        }
+
+        element_unary_op(src, dst, data, [&](const Primitive* a) {
+            float whole;
+            float fract = std::modf(a->data.fp32, &whole);
+            Primitive whole_pr(whole);
+            if (comp == -1)
+                whole_val->copyFrom(whole_pr);
+            else {
+                (*static_cast<Array*>(whole_val))[comp]->copyFrom(whole_pr);
+                ++comp;
+            }
+            return fract;
+        });
+        break;
+    }
     case GLSLstd450Normalize: { // 69
         Value* vec_val = getValue(4, data);
         const Type& vec_type = vec_val->getType();
@@ -1024,6 +1099,4 @@ bool Spv::Instruction::makeResultGlsl(
     }
     return made;
 }
-#undef TYPICAL_E_BIN_OP
-#undef INT_E_BIN_OP
 #undef TYPICAL_E_UNARY_OP

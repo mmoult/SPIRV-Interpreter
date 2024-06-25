@@ -30,7 +30,7 @@ struct BreakPoint {
 };
 
 export class Debugger {
-    const std::vector<Spv::Instruction>& insts;
+    const std::vector<Instruction>& insts;
     unsigned maxLineDigits;
     ValueFormat& format;
     static constexpr unsigned BUFFER = 2;
@@ -153,7 +153,7 @@ export class Debugger {
     }
 
 public:
-    Debugger(const std::vector<Spv::Instruction>& insts, ValueFormat& format): insts(insts), format(format) {
+    Debugger(const std::vector<Instruction>& insts, ValueFormat& format): insts(insts), format(format) {
         rootCommands.insert("break", Cmd::BREAK);
         breakCommands.insert("add", Cmd::BREAK_ADD);
         breakCommands.insert("clear", Cmd::BREAK_CLEAR);

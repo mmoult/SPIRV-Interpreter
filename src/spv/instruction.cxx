@@ -21,12 +21,11 @@ import spv.frame;
 import spv.token;
 import value.pointer;
 
-export namespace Spv {
-class Instruction {
+export class Instruction {
     spv::Op opcode;
-    std::vector<Token> operands;
     bool hasResult;
     bool hasResultType;
+    std::vector<Token> operands;
 
     enum class Extension {
         GLSL_STD,
@@ -142,7 +141,9 @@ public:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
-        case SC::StorageClassStorageBuffer:  // TODO: does this belong here?
+        case SC::StorageClassWorkgroup:
+        case SC::StorageClassCrossWorkgroup:
+        case SC::StorageClassStorageBuffer:
         case SC::StorageClassHitAttributeKHR:  // TODO: does this belong here?
         case SC::StorageClassIncomingRayPayloadKHR:  // TODO: does this belong here?
             ins.push_back(id);
@@ -152,11 +153,16 @@ public:
         case SC::StorageClassRayPayloadKHR:  // TODO: does this belong here? Read/write, not shared externally, no initializer
             outs.push_back(id);
             break;
+        case SC::StorageClassPrivate:
+        case SC::StorageClassFunction:
         default:
-            // for now, the above cover all the interface storage classes
-            // There are other storage classes like Function, but they don't need to be used in io generation
+            // these aren't used for public interfaces
             break;
         }
+    }
+
+    spv::Op getOpcode() const {
+        return opcode;
     }
 
     unsigned getEntryStart(std::vector<Data>& data) const noexcept(false) {
@@ -167,6 +173,25 @@ public:
         if (fx == nullptr)
             throw std::runtime_error("Missing entry function in entry declaration!");
         return fx->getLocation();
+    }
+
+    void setLocalSize(unsigned* local_size) {
+        assert(opcode == spv::OpExecutionMode);
+
+        if (std::get<unsigned>(operands[1].raw) == spv::ExecutionMode::ExecutionModeLocalSize) {
+            for (unsigned i = 2; i < 5; ++i) {
+                if (operands.size() > i) {
+                    unsigned sz = std::get<unsigned>(operands[i].raw);
+                    if (sz > 1) {
+                        std::stringstream err;
+                        err << "Execution Mode local sizes > 1 currently unsupported! Found: " << sz;
+                        throw std::runtime_error(err.str());
+                    }
+                    local_size[i - 2] = sz;
+                } else
+                    break;  // default size local component size is 1
+            }
+        }
     }
 
     // There may be many decorations, but there are very few instructions which are decorated.
@@ -247,4 +272,3 @@ public:
         return 0;
     }
 };
-}; // namespace Spv

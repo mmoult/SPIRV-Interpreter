@@ -25,7 +25,7 @@ import value.accelerationStructure;
 import value.aggregate;
 import value.primitive;
 
-void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
+void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
     bool inc_pc = true;
     Frame& frame = frame_stack.back();
 
@@ -263,7 +263,7 @@ void Spv::Instruction::execute(std::vector<Data>& data, std::vector<Frame>& fram
     }
 }
 
-void Spv::Instruction::print() const {
+void Instruction::print() const {
     std::cout << spv::OpToString(opcode);
 
     unsigned i = 0;
