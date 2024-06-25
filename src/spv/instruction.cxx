@@ -177,9 +177,15 @@ public:
 
         if (std::get<unsigned>(operands[1].raw) == spv::ExecutionMode::ExecutionModeLocalSize) {
             for (unsigned i = 2; i < 5; ++i) {
-                if (operands.size() > i)
-                    local_size[i - 2] = std::get<unsigned>(operands[i].raw);
-                else
+                if (operands.size() > i) {
+                    unsigned sz = std::get<unsigned>(operands[i].raw);
+                    if (sz > 1) {
+                        std::stringstream err;
+                        err << "Execution Mode local sizes > 1 currently unsupported! Found: " << sz;
+                        throw std::runtime_error(err.str());
+                    }
+                    local_size[i - 2] = sz;
+                } else
                     break;  // default size local component size is 1
             }
         }

@@ -37,7 +37,7 @@ public:
         return indices;
     }
 
-    Value* dereference(Value& start) noexcept(false) {
+    Value* dereference(Value& start) const noexcept(false) {
         Value* res = &start;
         for (unsigned idx : indices) {
             if (DataType dt = res->getType().getBase(); dt != DataType::ARRAY && dt != DataType::STRUCT) {

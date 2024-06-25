@@ -213,6 +213,7 @@ bool Instruction::makeResult(
     unsigned data_len = data.size();
     unsigned result_at = checkRef(hasResultType, data_len);
 
+    switch (opcode) {
 // Typical element-wise binary operation
 #define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
     OpSrc src{DataType::E_TYPE, checkRef(2, data_len), checkRef(3, data_len)}; \
@@ -243,8 +244,6 @@ bool Instruction::makeResult(
     element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
     break; \
 }
-
-    switch (opcode) {
     default: {
         std::stringstream err;
         err << "Cannot make result for unsupported instruction " << spv::OpToString(opcode) << "!";
@@ -925,6 +924,9 @@ bool Instruction::makeResult(
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
+#undef TYPICAL_E_BIN_OP
+#undef INT_E_BIN_OP
+#undef TYPICAL_E_UNARY_OP
     }
 
     return true;
@@ -942,6 +944,12 @@ bool Instruction::makeResultGlsl(
     bool made = true;
 
     switch (ext_opcode) {
+#define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
+    OpSrc src{DataType::E_TYPE, checkRef(4, data_len), 0}; \
+    OpDst dst{checkRef(0, data_len), result_at}; \
+    element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
+    break; \
+}
     default: {
         std::stringstream err;
         err << "Unknown GLSL opcode: " << ext_opcode;
@@ -980,6 +988,51 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_UNARY_OP(FLOAT, std::ceil(a->data.fp32));
     case GLSLstd450Sqrt: // 31
         TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.fp32));
+    case GLSLstd450Modf: { // 35
+        // fraction = modf(input, whole_pointer);
+        // OpExtInst %float %23 = %1 Modf %20 %22
+        OpSrc src{DataType::FLOAT, checkRef(4, data_len), 0};
+        OpDst dst{checkRef(0, data_len), result_at};
+        // whole_pointer is a pointer to a float value which can be modified. The only modifiable values in SPIR-V are
+        // variables, so we know whole_pointer should resolve to a float variable
+        Value* whole_val;
+        constexpr unsigned whole_index = 5;
+        if (Variable* found = getVariable(whole_index, data); found != nullptr)
+            whole_val = found->getVal();
+        else {
+            const Value* found_val = getValue(whole_index, data);
+            if (found_val == nullptr)
+                throw std::runtime_error("Couldn't resolve Modf whole pointer, which is neither a variable nor value!");
+            if (found_val->getType().getBase() != DataType::POINTER)
+                throw std::runtime_error("Modf whole pointer found of non-pointer type!");
+            const Pointer& whole_ptr = *static_cast<const Pointer*>(found_val);
+            Value* head_val = getHeadValue(whole_ptr, data);
+            whole_val = whole_ptr.dereference(*head_val);
+        }
+
+        Type* dst_type = getType(0, data);
+        int comp = -1;
+        if (dst_type->getBase() == DataType::ARRAY) {
+            // verify that whole is also an array type
+            if (whole_val->getType().getBase() != DataType::ARRAY)
+                throw std::runtime_error("Whole number pointer operand to modf doesn't match the array dest type!");
+            comp = 0;
+        }
+
+        element_unary_op(src, dst, data, [&](const Primitive* a) {
+            float whole;
+            float fract = std::modf(a->data.fp32, &whole);
+            Primitive whole_pr(whole);
+            if (comp == -1)
+                whole_val->copyFrom(whole_pr);
+            else {
+                (*static_cast<Array*>(whole_val))[comp]->copyFrom(whole_pr);
+                ++comp;
+            }
+            return fract;
+        });
+        break;
+    }
     case GLSLstd450Normalize: { // 69
         Value* vec_val = getValue(4, data);
         const Type& vec_type = vec_val->getType();
@@ -1018,6 +1071,4 @@ bool Instruction::makeResultGlsl(
     }
     return made;
 }
-#undef TYPICAL_E_BIN_OP
-#undef INT_E_BIN_OP
 #undef TYPICAL_E_UNARY_OP
