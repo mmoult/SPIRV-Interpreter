@@ -14,6 +14,7 @@ module;
 #include <variant>
 #include <vector>
 
+#include <glm/glm.hpp>
 #include "../external/GLSL.std.450.h"
 #define SPV_ENABLE_UTILITY_CODE 1
 #include "../external/spirv.hpp"
