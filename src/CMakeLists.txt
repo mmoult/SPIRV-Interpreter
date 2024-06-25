@@ -56,6 +56,9 @@ if(HASH STREQUAL "")
 endif()
 message(STATUS "found hash: ${HASH}")
 
+add_subdirectory(external/glm)
+target_link_libraries(spv-interp glm::glm)
+
 add_executable(spv-run main.cpp)
 set_target_properties(spv-run PROPERTIES OUTPUT_NAME "spirv-run")
 target_compile_options(spv-run PUBLIC "-DHASH=${HASH}")
