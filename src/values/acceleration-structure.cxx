@@ -16,6 +16,7 @@ module;
 // TODO: plan to remove/change header(s) below
 #include <iostream>
 
+#include <glm/glm.hpp>
 #include "../external/spirv.hpp"
 #include "type.hpp"
 #include "value.hpp"
@@ -130,7 +131,7 @@ namespace MathUtil {
 */
 class AccelerationStructure {
 private:
-    enum class NodeType { Box, Instance, Primitive };
+    enum class NodeType { Box, Instance, Triangle, Procedural };
 
     class Node {
     public:
@@ -140,12 +141,11 @@ private:
 
     const unsigned id;  // identifier
     const bool isTLAS;  // true: TLAS, false: BLAS
-    const unsigned splitValue;  // What kind of BVH? A BVH2 (binary BVH)? etc.
-    // unsigned transformationMatrix;  // TODO: need to make it an actual matrix. Is it needed?
     std::unique_ptr<Node> root;  // Start of this acceleration structure
 
 public:
     /// @brief TODO: description
+    /// @param id
     /// @param structureInfo 
     /// @param nodeCounts 
     /// @param allAccelerationStructures 
@@ -156,26 +156,39 @@ public:
             std::vector<std::shared_ptr<AccelerationStructure>>& allAccelerationStructures,
             const unsigned numAccelerationStructures)
         : id(id),
-          isTLAS(static_cast<const Primitive&>(*(structureInfo[0])).data.b32),
-          splitValue(static_cast<const Primitive&>(*(structureInfo[1])).data.u32) {
-
-        // TODO: Keep track of an object-to-world matrix? Maybe just transform the ray instead (what data do I account for)?
-        // transformationMatrix = static_cast<const Primitive&>(*(structureInfo[2])).data.u32; // TODO: figure out
+          isTLAS(static_cast<const Primitive&>(*(structureInfo[0])).data.b32) {
 
         // Get node information
         const unsigned numBoxNodes = static_cast<const Primitive&>(*(nodeCounts[0])).data.u32;
         const unsigned numInstanceNodes = static_cast<const Primitive&>(*(nodeCounts[1])).data.u32;
-        const unsigned numPrimitiveNodes = static_cast<const Primitive&>(*(nodeCounts[2])).data.u32;
+        const unsigned numTriangleNodes = static_cast<const Primitive&>(*(nodeCounts[2])).data.u32;
+        const unsigned numProceduralNodes = static_cast<const Primitive&>(*(nodeCounts[3])).data.u32;
+        
+        const unsigned numPrimitiveNodes = numTriangleNodes + numProceduralNodes;
         assert((numInstanceNodes == 0 && numPrimitiveNodes > 0) || (numInstanceNodes > 0 && numPrimitiveNodes == 0));
 
         // Construct the nodes bottom-up
-        const unsigned offset = 4;  // offset of struct fields to the start of nodes
+        const unsigned offset = 1;  // offset of struct fields to the start of nodes
         const unsigned numNodes = numBoxNodes + numInstanceNodes + numPrimitiveNodes;
         std::vector<std::unique_ptr<Node>> nodes; // temporarily holds ownership of nodes
 
-        // Primitive nodes
-        for (unsigned i = 0; i < numPrimitiveNodes; ++i) {
+        // Procedural nodes
+        for (unsigned i = 0; i < numProceduralNodes; ++i) {
             const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i]));
+
+            const Array& boundsInfo = static_cast<const Array&>(*(primitiveInfo[0]));
+            std::array<float, 6> bounds;
+            for (unsigned j = 0; j < boundsInfo.getSize(); ++j) {
+                float bound = static_cast<const Primitive&>(*(boundsInfo[j])).data.fp32;
+                bounds[j] = bound;
+            }
+
+            nodes.push_back(std::make_unique<ProceduralNode>(bounds));
+        }
+
+        // Triangle node
+        for (unsigned i = 0; i < numTriangleNodes; ++i) {
+            const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numProceduralNodes]));
 
             // Vertices
             std::vector<std::vector<float>> vertices;
@@ -198,7 +211,7 @@ public:
                 indices.push_back(value);
             }
 
-            nodes.push_back(std::make_unique<PrimitiveNode>(vertices, indices));
+            nodes.push_back(std::make_unique<TriangleNode>(vertices, indices));
         }
 
         // Instance nodes
@@ -216,12 +229,15 @@ public:
                 }
             }
 
+            // Mask
+            unsigned mask = static_cast<const Primitive&>(*(instanceInfo[1])).data.u32;
+
             // Get respective acceleration structure
-            unsigned accelerationStructureIndex = static_cast<const Primitive&>(*(instanceInfo[1])).data.u32;
+            unsigned accelerationStructureIndex = static_cast<const Primitive&>(*(instanceInfo[2])).data.u32;
             unsigned index = numAccelerationStructures - 1 - accelerationStructureIndex;
             std::shared_ptr<AccelerationStructure>& as = allAccelerationStructures[index];
         
-            nodes.push_back(std::make_unique<InstanceNode>(transformationMatrix, as));
+            nodes.push_back(std::make_unique<InstanceNode>(transformationMatrix, mask, as));
         }
 
         // Box nodes
@@ -242,7 +258,6 @@ public:
                 unsigned childIndex = static_cast<const Primitive&>(*(childrenIndicesInfo[j])).data.u32;
                 childrenIndices.push_back(childIndex);
             }
-            assert(childrenIndices.size() <= splitValue); // TODO: not sure how split value works
 
             // Get the actual children
             std::vector<std::unique_ptr<Node>> children;
@@ -265,8 +280,7 @@ public:
             }
         }
 
-        const unsigned rootIndex = static_cast<const Primitive&>(*(structureInfo[3])).data.u32;
-        root = std::move(nodes[numNodes - 1 - rootIndex]);
+        root = std::move(nodes[numNodes - 1]);
 
         // All unique_ptr in "nodes" should be null
         for (const auto& n : nodes) {
@@ -432,29 +446,30 @@ public:
 
                 break;
             }
-            case NodeType::Primitive: {
+            case NodeType::Triangle: {
                 // TODO: handle procedural nodes
-                std::cout << "Trying primitive" << std::endl;
-                PrimitiveNode* primitiveNode = static_cast<PrimitiveNode*>(currNode);
+                std::cout << "Trying triangle" << std::endl;
+                TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
                 float t, u, v;  // t : distance to intersection, (u,v) : uv coordinates/coordinates in triangle
                 bool result = rayTriangleIntersect(rayOrigin,
                         rayDirection,
                         rayTMin,
                         rayTMax,
-                        primitiveNode->vertices,
+                        triangleNode->vertices,
                         false,
                         t,
                         u,
                         v);
                 if (result) {
                     // Ray intersected
-                    std::printf("Ray intersected a primitive; t:%f, u:%f, v:%f\n", t, u, v);
+                    std::printf("Ray intersected a triangle; t:%f, u:%f, v:%f\n", t, u, v);
                     didIntersectGeometry = true;
                 } else {
                     // Ray did not intersect
                 }
                 break;
             }
+            // case NodeType::Procedural: {}
             }
             
             currNodeRef = std::unique_ptr<Node>(currNode);  // Give back ownership
@@ -588,7 +603,6 @@ public:
 
         result << tabbedString(tabLevel, "+ accelerationStructure id = ") << id << std::endl;
         result << tabbedString(tabLevel + 1, "* isTLAS") << " = " << (isTLAS ? "true" : "false") << std::endl;
-        result << tabbedString(tabLevel + 1, "* splitValue") << " = " << splitValue << std::endl;
 
         using NodeRef = std::unique_ptr<Node>*;  // Raw pointer to smart pointers
 
@@ -666,20 +680,32 @@ public:
 
                 break;
             }
-            case NodeType::Primitive: {
-                PrimitiveNode* primitiveNode = static_cast<PrimitiveNode*>(currNode);
-                result << tabbedString(tabLevel + 1, "> primitiveNode") << std::endl;
+            case NodeType::Triangle: {
+                TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
+                result << tabbedString(tabLevel + 1, "> triangleNode") << std::endl;
                 result << tabbedString(tabLevel + 2, "* vertices") << " = [" << std::endl;
-                for (unsigned row = 0; row < primitiveNode->vertices.size(); ++row) {
+                for (unsigned row = 0; row < triangleNode->vertices.size(); ++row) {
                     result << tabbedString(tabLevel + 3, "[ ");
-                    for (unsigned col = 0; col < primitiveNode->vertices[row].size(); ++col) {
-                        result << primitiveNode->vertices[row][col] << ", ";
+                    for (unsigned col = 0; col < triangleNode->vertices[row].size(); ++col) {
+                        result << triangleNode->vertices[row][col] << ", ";
                     }
                     result << "]" << std::endl;
                 }
                 result << tabbedString(tabLevel + 2, "]") << std::endl;
                 result << tabbedString(tabLevel + 2, "* indices") << " = [ ";
-                for (const auto& value : primitiveNode->indices) {
+                for (const auto& value : triangleNode->indices) {
+                    result << value << ", ";
+                }
+                result << "]" << std::endl;
+
+                break;
+            }
+            case NodeType::Procedural: {
+                ProceduralNode* proceduralNode = static_cast<ProceduralNode*>(currNode);
+
+                result << tabbedString(tabLevel + 1, "> proceduralNode") << std::endl;
+                result << tabbedString(tabLevel + 2, "* bounds") << " = [ ";
+                for (const auto& value : proceduralNode->bounds) {
                     result << value << ", ";
                 }
                 result << "]" << std::endl;
@@ -723,9 +749,10 @@ private:
         std::shared_ptr<AccelerationStructure> accelerationStructure;
 
         InstanceNode(std::array<std::array<float, 4>, 3> transformationMatrix,
+                unsigned mask,
                 std::shared_ptr<AccelerationStructure>& accelerationStructure)
             : transformationMatrix(transformationMatrix),
-              instanceMask(0xff) {
+              instanceMask(mask) {
             this->accelerationStructure = accelerationStructure;
         };
 
@@ -734,18 +761,28 @@ private:
         }
     };
 
-    // TODO: Split into triangle and procedural
-    class PrimitiveNode : public Node {
+    class TriangleNode : public Node {
     public:
         std::vector<std::vector<float>> vertices;
         std::vector<unsigned> indices;
 
-        PrimitiveNode(std::vector<std::vector<float>> vertices, std::vector<unsigned> indices)
+        TriangleNode(std::vector<std::vector<float>> vertices, std::vector<unsigned> indices)
             : vertices(vertices),
               indices(indices) {};
 
         NodeType type() {
-            return NodeType::Primitive;
+            return NodeType::Triangle;
+        }
+    };
+
+    class ProceduralNode : public Node {
+    public:
+        const std::array<float, 6> bounds;  // [ min x, max x, min y, max y, min z, max z ]
+
+        ProceduralNode(const std::array<float, 6> bounds): bounds(bounds) {};
+
+        NodeType type() {
+            return NodeType::Procedural;
         }
     };
 };
@@ -753,7 +790,7 @@ private:
 export class AccelerationStructureManager : public Value {
 private:
     std::shared_ptr<AccelerationStructure> root = nullptr; // Start of all acceleration structures TODO: make unique?
-    Struct* structureInfo = nullptr;
+    Struct* structureInfo; // TODO: change to smart pointer?
 
 public:
     AccelerationStructureManager(Type t): Value(t) {}
@@ -774,8 +811,8 @@ public:
                             : static_cast<const Aggregate&>(new_val);
 
             // Get data about the structure from the "new_val"
-            std::vector<std::array<unsigned, 3>> structureData;
-            const Array& accelerationStructuresInfo = static_cast<const Array&>(*(other[1]));
+            std::vector<std::array<unsigned, 4>> structureData;
+            const Array& accelerationStructuresInfo = static_cast<const Array&>(*(other[0]));
             for (unsigned i = 0; i < accelerationStructuresInfo.getSize(); ++i) {
                 const Struct& currAccelerationStructureInfo = static_cast<const Struct&>(*(accelerationStructuresInfo[i]));
 
@@ -783,10 +820,13 @@ public:
                         static_cast<const Primitive&>(*(currAccelerationStructureInfo[0])).data.u32;
                 const unsigned numInstanceNodes =
                         static_cast<const Primitive&>(*(currAccelerationStructureInfo[1])).data.u32;
-                const unsigned numPrimitiveNodes =
+                const unsigned numTriangleNodes =
                         static_cast<const Primitive&>(*(currAccelerationStructureInfo[2])).data.u32;
-                
-                structureData.push_back(std::array<unsigned, 3> { numBoxNodes, numInstanceNodes, numPrimitiveNodes });
+                const unsigned numProceduralNodes =
+                        static_cast<const Primitive&>(*(currAccelerationStructureInfo[3])).data.u32;
+
+                structureData.push_back(
+                        std::array<unsigned, 4> {numBoxNodes, numInstanceNodes, numTriangleNodes, numProceduralNodes});
             }
 
             // Change the current type to match
@@ -800,22 +840,18 @@ public:
         }
 
         // Print it
-        // std::cout << toString() << std::endl;
+        std::cout << toString() << std::endl;
 
         // Build the BVH tree
         {
-            // TODO: Build tree bottom-up
-
             // Note: different instance nodes can point to the same acceleration structure
             std::vector<std::shared_ptr<AccelerationStructure>> accelerationStructures;
-
             const Struct& structureInfoRef = *structureInfo;
-            unsigned rootIndex = static_cast<const Primitive&>(*(structureInfoRef[0])).data.u32;
-            const Array& accelerationStructuresInfo = static_cast<const Array&>(*(structureInfoRef[1]));
+            const Array& accelerationStructuresInfo = static_cast<const Array&>(*(structureInfoRef[0]));
             unsigned numAccelerationStructures = accelerationStructuresInfo.getSize();
 
             // Construct each acceleration structure bottom-up
-            unsigned offset = 2; // Offset to the first acceleration structure
+            unsigned offset = 1; // Offset to the first acceleration structure
             for (int i = numAccelerationStructures - 1; i >= 0; --i) {
                 accelerationStructures.push_back(
                     std::make_unique<AccelerationStructure>(
@@ -829,8 +865,8 @@ public:
             }
 
             // Set the root acceleration structure 
-            root = std::move(accelerationStructures[(numAccelerationStructures - 1) - rootIndex]);
-            assert(accelerationStructures[(numAccelerationStructures - 1) - rootIndex] == nullptr);
+            root = std::move(accelerationStructures[numAccelerationStructures - 1]);
+            assert(accelerationStructures[numAccelerationStructures - 1] == nullptr);
 
             std::cout << "Printing acceleration structures based on tree construction:" << std::endl;
             std::cout << root->toString() << std::endl; // TODO: print it out to verify correct tree
@@ -908,138 +944,133 @@ public:
         }
     }
 
-    // TODO: change to use the type for names instead so it's not hard coded
+private:
+    // TODO: combine with one in AccelerationStructure class?
+    std::string tabbedString(unsigned numTabs, std::string message, std::string messageBeforeEachTab = "") {
+        std::stringstream result("");
+
+        for (unsigned i = 0; i < numTabs; ++i)
+            result << messageBeforeEachTab << "\t";
+        result << message;
+
+        return result.str();
+    }
+
+    std::string getPrimitiveValueAsString(const Value& value) {
+        std::stringstream result("");
+        const DataType& dataType = value.getType().getBase();
+
+        switch (dataType) {
+            default: {
+                std::stringstream err;
+                err << "Unsupported data type; cannot convert to primitive string: " << dataType;
+                throw std::runtime_error(err.str());
+            }
+            case DataType::FLOAT: {
+                result << static_cast<const Primitive&>(value).data.fp32;
+                break;
+            }
+            case DataType::UINT: {
+                result << static_cast<const Primitive&>(value).data.u32;
+                break;
+            }
+            case DataType::INT: {
+                result << static_cast<const Primitive&>(value).data.i32;
+                break;
+            }
+            case DataType::BOOL: {
+                result << (static_cast<const Primitive&>(value).data.b32 ? "true" : "false");
+                break;
+            }
+        }
+
+        return result.str();
+    }
+
+public:
+    /// @brief TODO: description
+    /// @return 
     std::string toString() {
         std::stringstream result("");
-        result << "++++ Structure for acceleration structures: ++++" << std::endl;
 
-        // !---------
-        unsigned rootIndex = static_cast<Primitive*>((*structureInfo)[0])->data.u32;
-        result << "rootIndex = " << rootIndex << std::endl;
+        // Contains the name, value, and number of tabs
+        using NameAndValue = std::tuple<const std::string, const Value*, const unsigned>;
 
-        // !---------
-        Array* accelerationStructuresInfoArray = static_cast<Array*>((*structureInfo)[1]);
-        result << "accelerationStructuresInfo = [" << std::endl;
-        unsigned numAccelerationStructures = accelerationStructuresInfoArray->getSize();
-        std::vector<std::vector<unsigned>> counts;
-        counts.reserve(numAccelerationStructures);
-        for (int i = 0; i < numAccelerationStructures; ++i) {
-            Struct* accelerationStructureInfoStruct = static_cast<Struct*>((*accelerationStructuresInfoArray)[i]);
-            result << "\t{" << std::endl;
+        std::stack<NameAndValue> frontier;
+        const Value customStringValue = Value(Type::string());
+        frontier.push(std::make_tuple(std::string("Structure for acceleration structures"), structureInfo, 0));
 
-            unsigned numBoxNodes = static_cast<Primitive*>((*accelerationStructureInfoStruct)[0])->data.u32;
-            result << "\t\tnumBoxNodes = " << numBoxNodes << std::endl;
+        while (!frontier.empty()) {
+            const NameAndValue top = frontier.top();
+            frontier.pop();
 
-            unsigned numInstanceNodes = static_cast<Primitive*>((*accelerationStructureInfoStruct)[1])->data.u32;
-            result << "\t\tnumInstanceNodes = " << numInstanceNodes << std::endl;
+            const std::string& name = get<0>(top);
+            const Value* value = get<1>(top);
+            const unsigned& numTabs = get<2>(top);
+            const DataType& dataType = value->getType().getBase();
+            const std::string arrayElementIndicator("");
 
-            unsigned numPrimitiveNodes = static_cast<Primitive*>((*accelerationStructureInfoStruct)[2])->data.u32;
-            result << "\t\tnumPrimitiveNodes = " << numPrimitiveNodes << std::endl;
-
-            result << "\t}," << std::endl;
-            
-            counts.push_back(std::vector<unsigned>{numBoxNodes, numInstanceNodes, numPrimitiveNodes});
-        }
-        result << "]" << std::endl;
-
-        // !---------
-        for (int i = 0; i < numAccelerationStructures; ++i) {
-            result << "accelerationStructure" << i << " {" << std::endl;
-
-            Struct* accelerationStructure = static_cast<Struct*>((*structureInfo)[i + 2]);
-
-            bool isTLAS = static_cast<Primitive*>((*accelerationStructure)[0])->data.b32;
-            result << "\tisTLAS = " << (isTLAS ? "true" : "false") << std::endl;
-
-            unsigned splitValue = static_cast<Primitive*>((*accelerationStructure)[1])->data.u32;
-            result << "\tsplitValue = " << splitValue << std::endl;
-
-            unsigned transformationMatrix = static_cast<Primitive*>((*accelerationStructure)[2])->data.u32;
-            result << "\ttransformationMatrix = " << transformationMatrix << std::endl;
-
-            unsigned rootNodeIndex = static_cast<Primitive*>((*accelerationStructure)[3])->data.u32;
-            result << "\trootNodeIndex = " << rootNodeIndex << std::endl;
-
-            unsigned numBoxNodes = counts[i][0];
-            unsigned numInstanceNodes = counts[i][1];
-            unsigned numPrimitiveNodes = counts[i][2];
-
-            unsigned offset = 4;
-            for (int j = 0; j < numBoxNodes; ++j) {
-                result << "\tbox" << j << " = {" << std::endl; 
-
-                Struct* boxNode = static_cast<Struct*>((*accelerationStructure)[j + offset]);
-                {
-                    Array* bounds = static_cast<Array*>((*boxNode)[0]);
-                    result << "\t\tbounds = [ ";
-                    for (int k = 0; k < bounds->getSize(); ++k)
-                        result << static_cast<Primitive*>((*bounds)[k])->data.fp32 << " ";
-                    result << "]" << std::endl;
-
-                    Array* childrenIndices = static_cast<Array*>((*boxNode)[1]);
-                    result << "\t\tchildrenIndices = [ ";
-                    for (int k = 0; k < childrenIndices->getSize(); ++k)
-                        result << static_cast<Primitive*>((*childrenIndices)[k])->data.u32 << " ";
-                    result << "]" << std::endl;
+            switch (dataType) {
+                default: {
+                    std::stringstream err;
+                    err << "Unsupported data type; cannot convert to string: " << dataType;
+                    throw std::runtime_error(err.str());
                 }
+                case DataType::FLOAT:
+                case DataType::UINT:
+                case DataType::INT:
+                case DataType::BOOL: {
+                    result << tabbedString(numTabs, name, "|") << " = " << getPrimitiveValueAsString(*value) << std::endl;
+                    break;
+                }
+                case DataType::STRUCT:
+                case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
+                    result << tabbedString(numTabs, name, "|") << " {" << std::endl;
+                    frontier.push(std::make_tuple(" }", &customStringValue, numTabs));
 
-                result << "\t}" << std::endl;
-            }
+                    const Struct& info = static_cast<const Struct&>(*value);
 
-            offset += numBoxNodes;
-            for (int j = 0; j < numInstanceNodes; ++j) {
-                result << "\tinstance" << j << " = {" << std::endl; 
+                    // Add the children to the stack
+                    const std::vector<std::string>& names = info.getType().getNames();
+                    assert(names.size() == info.getSize());
 
-                Struct* instanceNode = static_cast<Struct*>((*accelerationStructure)[j + offset]);
-                {
-                    result << "\t\ttransformationMatrix = [" << std::endl;
-                    Array* transformationMatrixInstance = static_cast<Array*>((*instanceNode)[0]);
-                    for (int k = 0; k < transformationMatrixInstance->getSize(); ++k) {
-                        result << "\t\t\t[ ";
-                        Array* rowInstance = static_cast<Array*>((*transformationMatrixInstance)[k]);
-                        for (int l = 0; l < rowInstance->getSize(); ++l) {
-                            float value = static_cast<Primitive*>((*rowInstance)[l])->data.fp32;
-                            result << value << " ";
+                    for (int i = names.size() - 1; i >= 0; --i) {
+                        std::stringstream message;
+                        message << names[i];
+                        frontier.push(std::make_tuple(message.str(), info[i], numTabs + 1));
+                    }
+
+                    break;
+                }
+                case DataType::ARRAY: {
+                    result << tabbedString(numTabs, name, "|");
+
+                    const Array& info = static_cast<const Array&>(*value);
+                    const DataType childDataType = info.getSize() > 0 ? info[0]->getType().getBase() : DataType::VOID;
+
+                    // Add the children to the stack if some kind of structure
+                    if (childDataType == DataType::STRUCT || childDataType == DataType::ARRAY ||
+                            childDataType == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) {
+                        result << " [" << std::endl;
+                        frontier.push(std::make_tuple(" ]", &customStringValue, numTabs));
+                        for (int i = info.getSize() - 1; i >= 0; --i) {
+                            frontier.push(std::make_tuple(arrayElementIndicator, info[i], numTabs + 1));
                         }
-                        result << "]" << std::endl;
+                    } else {
+                        result << " [ ";
+                        for (unsigned i = 0; i < info.getSize() - 1; ++i) {
+                            result << getPrimitiveValueAsString(*(info[i])) << ", ";
+                        }
+                        result << getPrimitiveValueAsString(*(info[info.getSize() - 1])) << " ]" << std::endl;
                     }
-                    result << "\t\t]" << std::endl;
 
-                    unsigned indexInstance = static_cast<Primitive*>((*instanceNode)[1])->data.u32;
-                    result << "\t\tindex = " << indexInstance << std::endl;
+                    break;
                 }
-
-                result << "\t}" << std::endl;
-            }
-
-            offset += numInstanceNodes;
-            for (int j = 0; j < numPrimitiveNodes; ++j) {
-                result << "\tprimitive" << j << " = {" << std::endl; 
-
-                Struct* primitiveNode = static_cast<Struct*>((*accelerationStructure)[j + offset]);
-                {
-                    Array* vertices = static_cast<Array*>((*primitiveNode)[0]);
-                    result << "\t\tvertices = [ ";
-                    for (int k = 0; k < vertices->getSize(); ++k) {
-                        Array* vertex = static_cast<Array*>((*vertices)[k]);
-                        result << "[ ";
-                        for (int l = 0; l < vertex->getSize(); ++l)
-                            result << static_cast<Primitive*>((*vertex)[l])->data.fp32 << " ";
-                        result << "] ";
-                    }
-                    result << "]" << std::endl;
-
-                    Array* indices = static_cast<Array*>((*primitiveNode)[1]);
-                    result << "\t\tindices = [ ";
-                    for (int k = 0; k < indices->getSize(); ++k)
-                        result << static_cast<Primitive*>((*indices)[k])->data.u32 << " ";
-                    result << "]" << std::endl;
+                case DataType::STRING: {
+                    result << tabbedString(numTabs, name, "|") << std::endl;
+                    break;
                 }
-
-                result << "\t}" << std::endl;
             }
-
-            result << "}" << std::endl;
         }
 
         return result.str();
@@ -1049,20 +1080,18 @@ public:
     /// @param data Number of nodes in each acceleration structure.
     /// @return Field names as strings and fields as types.
     static std::tuple<std::vector<std::string>, std::vector<const Type*>> getStructureFormat(
-            std::vector<std::array<unsigned, 3>>* data = nullptr) {
+            std::vector<std::array<unsigned, 4>>* data = nullptr) {
         // TODO: memory management?
         using Names = std::vector<std::string>;
         using Fields = std::vector<const Type*>;
 
-        Names names { "rootIndex", "accelerationStructuresInfo" };
+        Names names { "accelerationStructuresInfo" };
         Fields fields;
 
         // Note: "--- <field name>" means which field we are populating with the code below it
-        // --- rootIndex
-        fields.push_back(new Type(Type::primitive(DataType::UINT)));
 
         // --- accelerationStructuresInfo
-        const Names accelerationStructuresInfoName {"numBoxNodes", "numInstanceNodes", "numPrimitiveNodes"};
+        const Names accelerationStructuresInfoName { "numBoxNodes", "numInstanceNodes", "numTriangleNodes", "numProceduralNodes" };
         Fields accelerationStructuresInfoFields;
         {
             // --- numBoxNodes
@@ -1071,7 +1100,10 @@ public:
             // --- numInstanceNodes
             accelerationStructuresInfoFields.push_back(new Type(Type::primitive(DataType::UINT)));
 
-            // --- numPrimitiveNodes
+            // --- numTriangleNodes
+            accelerationStructuresInfoFields.push_back(new Type(Type::primitive(DataType::UINT)));
+
+            // --- numProceduralNodes
             accelerationStructuresInfoFields.push_back(new Type(Type::primitive(DataType::UINT)));
         }
         Type* accelerationStructuresInfoStruct =
@@ -1080,33 +1112,26 @@ public:
         fields.push_back(accelerationStructuresInfoArray);
 
         // Add the acceleration structures if we know how many there are
+        // Note: data contains information about the acceleration structures
         if (data != nullptr) {
 
             // Add on the acceleration structures
             for (int i = 0; i < data->size(); ++i) {
                 const unsigned numBoxNodes = (*data)[i][0];
                 const unsigned numInstanceNodes = (*data)[i][1];
-                const unsigned numPrimitiveNodes = (*data)[i][2];
+                const unsigned numTriangleNodes = (*data)[i][2];
+                const unsigned numProceduralNodes = (*data)[i][3];
 
                 // --- accelerationStructure
-                Names accelerationStructureFieldNames {"isTLAS", "splitValue", "transformationMatrix", "rootNodeIndex"};
+                Names accelerationStructureFieldNames { "isTLAS" };
                 Fields accelerationStructureFields;
                 {
                     // --- isTLAS
                     accelerationStructureFields.push_back(new Type(Type::primitive(DataType::BOOL)));
 
-                    // --- splitValue
-                    accelerationStructureFields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                    // --- transformationMatrix
-                    accelerationStructureFields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                    // --- rootNode
-                    accelerationStructureFields.push_back(new Type(Type::primitive(DataType::UINT)));
-
                     // --- boxNodes
                     if (numBoxNodes > 0) {
-                        const Names boxNodeFieldNames {"bounds", "childrenIndices"};
+                        const Names boxNodeFieldNames { "bounds", "childrenIndices" };
                         Fields boxNodeFields;
                         {
                             // --- bounds
@@ -1129,7 +1154,7 @@ public:
 
                     // --- instanceNodes
                     if (numInstanceNodes > 0) {
-                        Names instanceNodeFieldNames {"transformationMatrix", "index"};
+                        Names instanceNodeFieldNames { "transformationMatrix", "mask", "index" };
                         Fields instanceNodeFields;
                         {
                             // --- transformationMatrix
@@ -1139,6 +1164,9 @@ public:
                             Type* rows = new Type(Type::array(numCols, *floatValue));
                             Type* matrix = new Type(Type::array(numRows, *rows));
                             instanceNodeFields.push_back(matrix);
+
+                            // --- mask
+                            instanceNodeFields.push_back(new Type(Type::primitive(DataType::UINT)));
 
                             // --- index
                             instanceNodeFields.push_back(new Type(Type::primitive(DataType::UINT)));
@@ -1153,27 +1181,46 @@ public:
                         }
                     }
 
-                    // --- primitiveNodes
-                    if (numPrimitiveNodes > 0) {
-                        Names primitiveNodeFieldNames {"vertices", "indices"};
-                        Fields primitiveNodeFields;
+                    // --- triangleNodes
+                    if (numTriangleNodes > 0) {
+                        Names triangleNodeFieldNames { "vertices", "indices" };
+                        Fields triangleNodeFields;
                         {
                             // --- vertices
                             Type* floatValue = new Type(Type::primitive(DataType::FLOAT));
                             Type* vertex = new Type(Type::array(0, *floatValue));
-                            primitiveNodeFields.push_back(new Type(Type::array(0, *vertex)));
+                            triangleNodeFields.push_back(new Type(Type::array(0, *vertex)));
 
                             // --- indices
                             Type* indices = new Type(Type::primitive(DataType::UINT));
-                            primitiveNodeFields.push_back(new Type(Type::array(0, *indices)));
+                            triangleNodeFields.push_back(new Type(Type::array(0, *indices)));
                         }
-                        Type* primitiveNode = new Type(Type::structure(primitiveNodeFields, primitiveNodeFieldNames));
+                        Type* triangleNode = new Type(Type::structure(triangleNodeFields, triangleNodeFieldNames));
 
-                        for (int j = 0; j < numPrimitiveNodes; ++j) {
-                            std::stringstream primitiveNodeName;
-                            primitiveNodeName << "primitive" << j;
-                            accelerationStructureFieldNames.push_back(primitiveNodeName.str());
-                            accelerationStructureFields.push_back(primitiveNode);
+                        for (int j = 0; j < numTriangleNodes; ++j) {
+                            std::stringstream triangleNodeName;
+                            triangleNodeName << "triangle" << j;
+                            accelerationStructureFieldNames.push_back(triangleNodeName.str());
+                            accelerationStructureFields.push_back(triangleNode);
+                        }
+                    }
+
+                    // --- proceduralNodes
+                    if (numProceduralNodes > 0) {
+                        Names proceduralNodeFieldNames { "bounds" };
+                        Fields proceduralNodeFields;
+                        {
+                            // --- bounds
+                            Type* bounds = new Type(Type::primitive(DataType::FLOAT));
+                            proceduralNodeFields.push_back(new Type(Type::array(6, *bounds)));
+                        }
+                        Type* proceduralNode = new Type(Type::structure(proceduralNodeFields, proceduralNodeFieldNames));
+
+                        for (int j = 0; j < numProceduralNodes; ++j) {
+                            std::stringstream proceduralNodeName;
+                            proceduralNodeName << "procedural" << j;
+                            accelerationStructureFieldNames.push_back(proceduralNodeName.str());
+                            accelerationStructureFields.push_back(proceduralNode);
                         }
                     }
                 }
