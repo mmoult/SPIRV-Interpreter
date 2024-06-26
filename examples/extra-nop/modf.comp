@@ -1,0 +1,24 @@
+#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+// glslang will generate extra non-semantic debug info (such as OpLine and OpSource) when the -g is used.
+// For example:
+//   glslang -V --target-env spirv1.6 -g modf.comp
+// The interpreter should be able to ignore this info in case the provided spv uses it.
+
+layout(set = 0, binding = 0, std430) readonly buffer _6_7
+{
+    vec2 _m0[1];
+} _7;
+
+layout(set = 0, binding = 1, std430) writeonly buffer _8_9
+{
+    vec4 _m0[1];
+} _9;
+
+void main()
+{
+    vec4 _56;
+    _56.xz = modf(_7._m0[0], _56.yw);
+    _9._m0[0] = _56;
+}
