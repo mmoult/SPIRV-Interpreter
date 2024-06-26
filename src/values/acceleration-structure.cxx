@@ -82,14 +82,19 @@ public:
         for (unsigned i = 0; i < numProceduralNodes; ++i) {
             const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i]));
 
-            const Array& boundsInfo = static_cast<const Array&>(*(primitiveInfo[0]));
-            std::array<float, 6> bounds;
-            for (unsigned j = 0; j < boundsInfo.getSize(); ++j) {
-                float bound = static_cast<const Primitive&>(*(boundsInfo[j])).data.fp32;
-                bounds[j] = bound;
+            const Array& minBoundsInfo = static_cast<const Array&>(*(primitiveInfo[0]));
+            const Array& maxBoundsInfo = static_cast<const Array&>(*(primitiveInfo[1]));
+            glm::vec4 minBounds;
+            glm::vec4 maxBounds;
+            assert(minBoundsInfo.getSize() == maxBoundsInfo.getSize());
+            for (unsigned j = 0; j < minBoundsInfo.getSize(); ++j) {
+                minBounds[j] = static_cast<const Primitive&>(*(minBoundsInfo[j])).data.fp32;
+                maxBounds[j] = static_cast<const Primitive&>(*(maxBoundsInfo[j])).data.fp32;
             }
+            minBounds.w = 1.0f;
+            maxBounds.w = 1.0f;
 
-            nodes.push_back(std::make_unique<ProceduralNode>(bounds));
+            nodes.push_back(std::make_unique<ProceduralNode>(minBounds, maxBounds));
         }
 
         // Triangle node
@@ -150,14 +155,19 @@ public:
         for (unsigned i = 0; i < numBoxNodes; ++i) {
             const Struct& boxInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes - numInstanceNodes]));
         
-            const Array& boundsInfo = static_cast<const Array&>(*(boxInfo[0]));
-            std::array<float, 6> bounds;
-            for (unsigned j = 0; j < boundsInfo.getSize(); ++j) {
-                float bound = static_cast<const Primitive&>(*(boundsInfo[j])).data.fp32;
-                bounds[j] = bound;
+            const Array& minBoundsInfo = static_cast<const Array&>(*(boxInfo[0]));
+            const Array& maxBoundsInfo = static_cast<const Array&>(*(boxInfo[1]));
+            glm::vec4 minBounds;
+            glm::vec4 maxBounds;
+            assert(minBoundsInfo.getSize() == maxBoundsInfo.getSize());
+            for (unsigned j = 0; j < minBoundsInfo.getSize(); ++j) {
+                minBounds[j] = static_cast<const Primitive&>(*(minBoundsInfo[j])).data.fp32;
+                maxBounds[j] = static_cast<const Primitive&>(*(maxBoundsInfo[j])).data.fp32;
             }
+            minBounds.w = 1.0f;
+            maxBounds.w = 1.0f;
         
-            const Array& childrenIndicesInfo = static_cast<const Array&>(*(boxInfo[1]));
+            const Array& childrenIndicesInfo = static_cast<const Array&>(*(boxInfo[2]));
             std::vector<unsigned> childrenIndices;
             for (unsigned j = 0; j < childrenIndicesInfo.getSize(); ++j) {
                 unsigned childIndex = static_cast<const Primitive&>(*(childrenIndicesInfo[j])).data.u32;
@@ -171,7 +181,7 @@ public:
                 children.push_back(std::move(nodes[numNodes - 1 - childIndex]));
             }
         
-            nodes.push_back(std::make_unique<BoxNode>(bounds, children));
+            nodes.push_back(std::make_unique<BoxNode>(minBounds, maxBounds, children));
         }
 
         // Set the root node
@@ -256,6 +266,7 @@ public:
         std::stack<NodeRef> frontier;
         frontier.push(&root);
 
+        std::cout << "AS id: " << id << std::endl;
         std::cout << "~Ray origin: " << glm::to_string(rayOrigin) << std::endl;
         std::cout << "~Ray direction: " << glm::to_string(rayDirection)<< std::endl;
 
@@ -277,8 +288,8 @@ public:
             }
             case NodeType::Box: {
                 // TODO
-                BoxNode* boxNode = static_cast<BoxNode*>(currNode);
-                bool result = rayAABBIntersect(rayOrigin, rayDirection, rayTMin, rayTMax, boxNode->bounds);
+                BoxNode* boxNode = static_cast<BoxNode*>(currNode); 
+                bool result = rayAABBIntersect(rayOrigin, rayDirection, rayTMin, rayTMax, boxNode->minBounds, boxNode->maxBounds);
                 if (result) {
                     // Ray intersected; add it's children to be evaluated
                     for (auto& child : boxNode->children) {
@@ -302,12 +313,22 @@ public:
                 bool foundGeometryIntersection = false;
 
                 // Transform the ray to match the instance's space
-                glm::vec4 newRayOrigin = instanceNode->transformationMatrix * rayOrigin;
-                glm::vec4 newRayDirection = instanceNode->transformationMatrix * rayDirection;
+                glm::mat4x4 objectToWorld(1.0f); // Turn 3x4 to 4x4 so we can invert it
+                for (int i = 0; i < 3; ++i) {
+                    for (int j = 0; j < 4; ++j) {
+                        objectToWorld[i][j] = instanceNode->transformationMatrix[i][j];
+                    }
+                }
+
+                const glm::mat4x4 worldToObject = glm::inverse(objectToWorld);
+
+                glm::vec4 newRayOrigin = (rayOrigin * worldToObject);
+                glm::vec4 newRayDirection = (rayDirection * worldToObject);
                 
                 std::cout << "\tInstance node new ray origin and ray direction respectively: " << std::endl;
-                std::cout << "\t\torigin: " << glm::to_string(newRayOrigin) << std::endl;
-                std::cout << "\t\tdirection: " << glm::to_string(newRayDirection) << std::endl;
+                std::cout << "\t\tnew origin: " << glm::to_string(newRayOrigin) << std::endl;
+                std::cout << "\t\tnew direction: " << glm::to_string(newRayDirection) << std::endl;
+                std::cout << std::endl;
 
                 // Trace the ray in the respective acceleration structure
                 instanceNode->accelerationStructure->traceRay(rayFlags,
@@ -315,9 +336,9 @@ public:
                         offsetSBT,
                         strideSBT,
                         missIndex,
-                        rayOrigin,
+                        newRayOrigin,
                         rayTMin,
-                        rayDirection,
+                        newRayDirection,
                         rayTMax,
                         foundGeometryIntersection);
 
@@ -328,6 +349,8 @@ public:
                 } else {
                     // Ray did not intersect
                 }
+
+                std::cout << "\t!!!!!!!!!!!!!!!!!!!!! Done back to AS id: " << id << std::endl;
 
                 break;
             }
@@ -347,7 +370,7 @@ public:
                         v);
                 if (result) {
                     // Ray intersected
-                    std::printf("Ray intersected a triangle; t:%f, u:%f, v:%f\n", t, u, v);
+                    std::printf("+++ Ray intersected a triangle; t:%f, u:%f, v:%f\n", t, u, v);
                     didIntersectGeometry = true;
                 } else {
                     // Ray did not intersect
@@ -368,7 +391,8 @@ private:
             const glm::vec3 rayDirection,
             const float rayTMin,
             const float rayTMax,
-            const std::array<float, 6> bounds) const {
+            const glm::vec3 minBounds,
+            const glm::vec3 maxBounds) const {
 
         // Algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004." found
         // on Scratchapixel
@@ -378,15 +402,15 @@ private:
         // Ray organized as (0)x, (1)y, (2)z
         
         // Check the x-plane
-        float tmin = (bounds[0] - rayOrigin[0]) / rayDirection[0];
-        float tmax = (bounds[1] - rayOrigin[0]) / rayDirection[0];
+        float tmin = (minBounds.x - rayOrigin.x) / rayDirection.x;
+        float tmax = (maxBounds.x - rayOrigin.x) / rayDirection.x;
 
         if (tmin > tmax)
             std::swap(tmin, tmax);
 
         // Check the y-plane
-        float tymin = (bounds[2] - rayOrigin[1]) / rayDirection[1];
-        float tymax = (bounds[3] - rayOrigin[1]) / rayDirection[1];
+        float tymin = (minBounds.y - rayOrigin.y) / rayDirection.y;
+        float tymax = (maxBounds.y - rayOrigin.y) / rayDirection.y;
 
         if (tymin > tymax)
             std::swap(tymin, tymax);
@@ -400,8 +424,8 @@ private:
             tmax = tymax;
 
         // Check the z-plane
-        float tzmin = (bounds[4] - rayOrigin[2]) / rayDirection[2];
-        float tzmax = (bounds[5] - rayOrigin[2]) / rayDirection[2];
+        float tzmin = (minBounds.z - rayOrigin.z) / rayDirection.z;
+        float tzmax = (maxBounds.z - rayOrigin.z) / rayDirection.z;
 
         if (tzmin > tzmax)
             std::swap(tzmin, tzmax);
@@ -414,10 +438,10 @@ private:
         if (tzmax < tmax)
             tmax = tzmax;
 
-        // TODO: correct logic?
-        // Only check the entry point of the ray into the box
-        if (tmin < rayTMin || tmin > rayTMax)
-            return false;
+        // // TODO: correct logic?
+        // // Only check the entry point of the ray into the box
+        // if (tmin < rayTMin || tmin > rayTMax)
+        //     return false;
 
         return true;
     }
@@ -542,11 +566,10 @@ public:
                 }
 
                 result << tabbedString(tabLevel + 1, "> boxNode") << std::endl;
-                result << tabbedString(tabLevel + 2, "* bounds") << " = [ ";
-                for (const auto& value : boxNode->bounds) {
-                    result << value << ", ";
-                }
-                result << "]" << std::endl;
+                result << tabbedString(tabLevel + 2, "* minBounds = ") << glm::to_string(boxNode->minBounds)
+                       << std::endl;
+                result << tabbedString(tabLevel + 2, "* maxBounds = ") << glm::to_string(boxNode->maxBounds)
+                       << std::endl;
 
                 ++tabLevel;
                 break;
@@ -582,11 +605,10 @@ public:
                 ProceduralNode* proceduralNode = static_cast<ProceduralNode*>(currNode);
 
                 result << tabbedString(tabLevel + 1, "> proceduralNode") << std::endl;
-                result << tabbedString(tabLevel + 2, "* bounds") << " = [ ";
-                for (const auto& value : proceduralNode->bounds) {
-                    result << value << ", ";
-                }
-                result << "]" << std::endl;
+                result << tabbedString(tabLevel + 2, "* minBounds = ") << glm::to_string(proceduralNode->minBounds)
+                       << std::endl;
+                result << tabbedString(tabLevel + 2, "* maxBounds = ") << glm::to_string(proceduralNode->maxBounds)
+                       << std::endl;
 
                 break;
             }
@@ -602,13 +624,16 @@ private:
     // TODO: change classes to structs? Since not using private fields.
     class BoxNode : public Node {
     public:
-        const std::array<float, 6> bounds;  // [ min x, max x, min y, max y, min z, max z ]
+        const glm::vec4 minBounds; // min x, y, z
+        const glm::vec4 maxBounds; // max x, y, z
         std::vector<std::unique_ptr<Node>> children;
 
         /// @brief Constructor for "BoxNode". IMPORTANT: Will transfer ownership of unique pointers.
         /// @param bounds TODO
         /// @param children TODO
-        BoxNode(const std::array<float, 6> bounds, std::vector<std::unique_ptr<Node>>& children): bounds(bounds) {
+        BoxNode(const glm::vec4 minBounds, const glm::vec4 maxBounds, std::vector<std::unique_ptr<Node>>& children)
+            : minBounds(minBounds),
+              maxBounds(maxBounds) {
             for (auto& child : children) {
                 this->children.push_back(std::move(child));
             }
@@ -655,9 +680,12 @@ private:
 
     class ProceduralNode : public Node {
     public:
-        const std::array<float, 6> bounds;  // [ min x, max x, min y, max y, min z, max z ]
+        const glm::vec4 minBounds; // min x, y, z
+        const glm::vec4 maxBounds; // max x, y, z
 
-        ProceduralNode(const std::array<float, 6> bounds): bounds(bounds) {};
+        ProceduralNode(const glm::vec4 minBounds, const glm::vec4 maxBounds)
+            : minBounds(minBounds),
+              maxBounds(maxBounds) {};
 
         NodeType type() {
             return NodeType::Procedural;
@@ -763,7 +791,9 @@ public:
             bool& didIntersectGeometry) const {
 
         glm::vec4 convertedRayOrigin = glm::make_vec4(rayOrigin.data());
+        convertedRayOrigin.w = 1.0f;
         glm::vec4 convertedRayDirection = glm::make_vec4(rayDirection.data());
+        convertedRayDirection.w = 0.0f;
 
         root->traceRay(rayFlags,
                 cullMask,
@@ -1012,12 +1042,16 @@ public:
 
                     // --- boxNodes
                     if (numBoxNodes > 0) {
-                        const Names boxNodeFieldNames { "bounds", "childrenIndices" };
+                        const Names boxNodeFieldNames { "minBounds", "maxBounds", "childrenIndices" };
                         Fields boxNodeFields;
                         {
-                            // --- bounds
                             Type* bounds = new Type(Type::primitive(DataType::FLOAT));
-                            boxNodeFields.push_back(new Type(Type::array(6, *bounds)));
+
+                            // --- minBounds
+                            boxNodeFields.push_back(new Type(Type::array(3, *bounds)));
+
+                            // --- maxBounds
+                            boxNodeFields.push_back(new Type(Type::array(3, *bounds)));
 
                             // --- childrenIndices
                             Type* childrenIndex = new Type(Type::primitive(DataType::UINT));
@@ -1117,6 +1151,4 @@ public:
 
         return std::make_tuple(names, fields);
     }
-
-private: // TODO: add some helper methods to navigate the struct?
 };
