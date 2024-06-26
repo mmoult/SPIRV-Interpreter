@@ -46,6 +46,12 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
         // If the instruction did make a result, success! These instructions cannot modify control flow,
         // so assume inc_pc = true
         break;
+    case spv::OpNop: // 1
+    case spv::OpLine: // 8
+    case spv::OpNoLine: // 317
+    case spv::OpModuleProcessed: // 330
+        // No semantic value. Kept only for predictability / debugging. Do nothing
+        break;
     case spv::OpFunction: // 54
     case spv::OpLoopMerge: // 246
     case spv::OpSelectionMerge: // 247

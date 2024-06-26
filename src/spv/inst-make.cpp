@@ -250,6 +250,10 @@ bool Instruction::makeResult(
         err << "Cannot make result for unsupported instruction " << spv::OpToString(opcode) << "!";
         throw std::runtime_error(err.str());
     }
+    case spv::OpString: // 7
+        // In the future, we will need to support a string value type. However, at the moment, the only use of strings
+        // is for nonsemantic debug info which can safely be discarded.
+        break;
     case spv::OpExtInstImport: { // 11
         // Determine which extension the string represents
         assert(operands[1].type == Token::Type::STRING);

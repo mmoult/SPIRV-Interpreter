@@ -12,7 +12,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 12 test examples, and counting
+- 13 test examples, and counting
 
 ## Limitations
 
@@ -43,9 +43,10 @@ implementations. Ray tracing support is still in development.
 The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16 or `g++`
 version ≥ 14). The source should be platform independent, but little to no testing has been done on Windows or Mac.
 
-Here are a couple example commands to run from the repository's root directory:
+Here are a few commands to run from the repository's root directory:
 
 ```
+git submodule update --init --recursive
 cmake -B build -G Ninja
 ninja -C build all
 ```
@@ -64,14 +65,8 @@ The project has two complementary approaches to testing:
 > [!NOTE]
 > You *do not* need to have Catch2 to build or run the `spirv-run` executable or the integration tests.
 
-If you wish to run the unit tests, first verify that the submodule has been initialized:
-
-```
-git submodule update ---init --recursive
-```
-
-then follow the steps to build, also including `-DBUILD_TESTING=ON` as an argument to `cmake`. After building, you
-should find a `tests` executable at `build/test/tests`.
+If you wish to run the unit tests, follow the steps to build, also including `-DBUILD_TESTING=ON` as an argument to
+`cmake`. After building, you should find a `tests` executable at `build/test/tests`.
 
 ## Contributing
 Contributions via merge requests are welcome! Contributions should:
