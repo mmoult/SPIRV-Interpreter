@@ -16,7 +16,9 @@ module;
 // TODO: plan to remove/change header(s) below
 #include <iostream>
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
+#include <glm/ext.hpp>
 #include "../external/spirv.hpp"
 #include "type.hpp"
 #include "value.hpp"
@@ -24,102 +26,6 @@ module;
 export module value.accelerationStructure;
 import value.aggregate;
 import value.primitive;
-
-// TODO: Move somewhere else, don't put it here. Could change to using external library like GLM.
-// TODO: Create classes or structs to better handle vectors and matrices
-namespace MathUtil {
-    /// @brief TODO
-    /// @param a 
-    /// @param b 
-    /// @return 
-    float dotProduct(const std::vector<float> a, const std::vector<float> b) {
-        assert(a.size() == b.size());
-
-        float result = 0.0f;
-
-        for (unsigned i = 0; i < a.size(); ++i)
-            result += (a[i] * b[i]);
-
-        return result;
-    }
-
-    /// @brief TODO
-    /// @param a 
-    /// @param b 
-    /// @return 
-    std::vector<float> crossProduct(const std::vector<float> a, const std::vector<float> b) {
-        // Limit to 3-D vectors
-        assert(a.size() == 3 && a.size() == b.size());
-
-        return std::vector<float> {
-            (a[1] * b[2]) - (a[2] * b[1]),
-            (a[2] * b[0]) - (a[0] * b[2]),
-            (a[0] * b[1]) - (a[1] * b[0])
-        };
-    }
-
-    /// @brief Scale vector a by s; for i in a do a[i] * s.
-    /// @param a Dimension n vector.
-    /// @param s Scale value.
-    /// @return Resulting vector from scaling.
-    std::vector<float> vectorScale(const std::vector<float> a, const float s) {
-        std::vector<float> result = a;
-
-        for (auto& value : result)
-            value *= s;
-
-        return result;
-    }
-
-    /// @brief Add vector a and vector b; (a + b). Vectors a and b must be the same dimension.
-    /// @param a Dimension n vector.
-    /// @param b Dimension n vector.
-    /// @return Resulting vector from addition.
-    std::vector<float> vectorAdd(const std::vector<float> a, const std::vector<float> b) {
-        assert(a.size() == b.size());
-
-        std::vector<float> result(a.size());
-        
-        for (unsigned i = 0; i < a.size(); ++i)
-            result[i] = a[i] + b[i];
-
-        return result;
-    }
-
-    /// @brief Subtract vector b from vector a; (a - b). Vectors a and b must be the same dimension.
-    /// @param a Dimension n vector.
-    /// @param b Dimension n vector.
-    /// @return Resulting vector from subtraction.
-    std::vector<float> vectorSubtract(const std::vector<float> a, const std::vector<float> b) {
-        assert(a.size() == b.size());
-
-        std::vector<float> result(a.size());
-        
-        for (unsigned i = 0; i < a.size(); ++i)
-            result[i] = a[i] - b[i];
-
-        return result;
-    }
-
-    /// @brief TODO
-    /// @param vec 
-    /// @param mat 
-    /// @return 
-    std::vector<float> vectorMatrixProduct(const std::vector<float> vec, const std::array<std::array<float, 4>, 3> mat) {
-        // TODO: Maybe use Strassen algorithm
-        // For now return a 3-D vector
-        // Multiple matrix to vector so a (3x4 dim) * (3x1 dim) where ignoreing 4th column -> (3x3 dim) * (3x1 dim) instead
-        std::vector<float> result;
-        for (unsigned row = 0; row < mat.size(); ++row) {
-            float value = 0.0f;
-            for (unsigned col = 0; col < mat[row].size() - 1; ++col) { // For now ignore 4th column of matrix
-                value += mat[row][col] * vec[col];
-            }
-            result.push_back(value);
-        }
-        return result;
-    }
-}
 
 /*
     TODO: convert raw pointers to smart pointers to not worry about memory reclaimation
@@ -191,14 +97,14 @@ public:
             const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numProceduralNodes]));
 
             // Vertices
-            std::vector<std::vector<float>> vertices;
+            std::vector<glm::vec3> vertices;
             const Array& verticesInfo = static_cast<const Array&>(*(primitiveInfo[0]));
             for (unsigned j = 0; j < verticesInfo.getSize(); ++j) {
-                std::vector<float> vertex;
+                glm::vec3 vertex;
                 const Array& vertexInfo = static_cast<const Array&>(*(verticesInfo[j]));
+                assert(vertexInfo.getSize() == 3);
                 for (unsigned k = 0; k < vertexInfo.getSize(); ++k) {
-                    float value = static_cast<const Primitive&>(*(vertexInfo[k])).data.fp32;
-                    vertex.push_back(value);
+                    vertex[k] = static_cast<const Primitive&>(*(vertexInfo[k])).data.fp32;
                 }
                 vertices.push_back(vertex);
             }
@@ -210,7 +116,6 @@ public:
                 unsigned value = static_cast<const Primitive&>(*(indicesInfo[j])).data.u32;
                 indices.push_back(value);
             }
-
             nodes.push_back(std::make_unique<TriangleNode>(vertices, indices));
         }
 
@@ -219,7 +124,7 @@ public:
             const Struct& instanceInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes]));
         
             // Transformation matrix
-            std::array<std::array<float, 4>, 3> transformationMatrix;
+            glm::mat3x4 transformationMatrix;
             const Array& transformationMatrixInfo = static_cast<const Array&>(*(instanceInfo[0]));
             for (unsigned rowIndex = 0; rowIndex < transformationMatrixInfo.getSize(); ++rowIndex) {
                 const Array& rowInfo = static_cast<const Array&>(*(transformationMatrixInfo[rowIndex]));
@@ -298,22 +203,20 @@ public:
     // TODO
     // TODO: change return type to a ray payload or something related
     // TODO: change parameter types
+    // TODO: SBT once can do multiple shader invocations
     // Modifies payload parameter
     void traceRay(const unsigned rayFlags,
             const unsigned cullMask,
             const int offsetSBT,
             const int strideSBT,
             const int missIndex,
-            const std::vector<float> rayOrigin,
+            const glm::vec4 rayOrigin,
             const float rayTMin,
-            const std::vector<float> rayDirection,
+            const glm::vec4 rayDirection,
             const float rayTMax,
             bool& didIntersectGeometry) {
 
-        // TODO: figure out payload
-        using NodeRef = std::unique_ptr<Node>*;  // Raw pointer to smart pointers
-
-        // TODO: can ignore SBT? Since only dealing with a single shader at a time
+        using NodeRef = std::unique_ptr<Node>*;  // Raw pointer that points to smart pointer
 
         // TODO: flags
         // Handle ray flags if something other than none was given
@@ -353,16 +256,8 @@ public:
         std::stack<NodeRef> frontier;
         frontier.push(&root);
 
-        std::cout << "~Ray origin: [ ";
-        for (const auto& a : rayOrigin) {
-            std::cout << a << " ";
-        }
-        std::cout << "]" << std::endl;
-        std::cout << "~Ray direction: [ ";
-        for (const auto& a : rayDirection) {
-            std::cout << a << " ";
-        }
-        std::cout << "]" << std::endl;
+        std::cout << "~Ray origin: " << glm::to_string(rayOrigin) << std::endl;
+        std::cout << "~Ray direction: " << glm::to_string(rayDirection)<< std::endl;
 
         while (!frontier.empty()) {
             std::unique_ptr<Node>& currNodeRef = *(frontier.top());
@@ -407,22 +302,12 @@ public:
                 bool foundGeometryIntersection = false;
 
                 // Transform the ray to match the instance's space
-                std::vector<float> newRayOrigin =
-                        MathUtil::vectorMatrixProduct(rayOrigin, instanceNode->transformationMatrix);
-                std::vector<float> newRayDirection =
-                        MathUtil::vectorMatrixProduct(rayDirection, instanceNode->transformationMatrix);
+                glm::vec4 newRayOrigin = instanceNode->transformationMatrix * rayOrigin;
+                glm::vec4 newRayDirection = instanceNode->transformationMatrix * rayDirection;
                 
                 std::cout << "\tInstance node new ray origin and ray direction respectively: " << std::endl;
-                std::cout << "\t\torigin: [ ";
-                for (const auto& a : newRayOrigin) {
-                    std::cout << a << " ";
-                }
-                std::cout << "]" << std::endl;
-                std::cout << "\t\tdirection: [ ";
-                for (const auto& a : newRayDirection) {
-                    std::cout << a << " ";
-                }
-                std::cout << "]" << std::endl;
+                std::cout << "\t\torigin: " << glm::to_string(newRayOrigin) << std::endl;
+                std::cout << "\t\tdirection: " << glm::to_string(newRayDirection) << std::endl;
 
                 // Trace the ray in the respective acceleration structure
                 instanceNode->accelerationStructure->traceRay(rayFlags,
@@ -469,7 +354,9 @@ public:
                 }
                 break;
             }
-            // case NodeType::Procedural: {}
+            case NodeType::Procedural: { // TODO
+                throw std::runtime_error("Tracing a ray through a procedural is NOT implemented.");
+            }
             }
             
             currNodeRef = std::unique_ptr<Node>(currNode);  // Give back ownership
@@ -477,8 +364,8 @@ public:
     }
 
 private:
-    bool rayAABBIntersect(const std::vector<float> rayOrigin,
-            const std::vector<float> rayDirection,
+    bool rayAABBIntersect(const glm::vec3 rayOrigin,
+            const glm::vec3 rayDirection,
             const float rayTMin,
             const float rayTMax,
             const std::array<float, 6> bounds) const {
@@ -535,11 +422,11 @@ private:
         return true;
     }
 
-    bool rayTriangleIntersect(const std::vector<float> rayOrigin,
-            const std::vector<float> rayDirection,
+    bool rayTriangleIntersect(const glm::vec3 rayOrigin,
+            const glm::vec3 rayDirection,
             const float rayTMin,
             const float rayTMax,
-            const std::vector<std::vector<float>> vertices,
+            const std::vector<glm::vec3> vertices,
             const bool cullBackFace,
             float& t,
             float& u,
@@ -550,12 +437,12 @@ private:
         constexpr float epsilon = std::numeric_limits<float>::epsilon();
 
         // Find vectors for 2 edges that share a vertex
-        std::vector<float> edge1 = MathUtil::vectorSubtract(vertices[1], vertices[0]);
-        std::vector<float> edge2 = MathUtil::vectorSubtract(vertices[2], vertices[0]);
+        glm::vec3 edge1 = vertices[1] - vertices[0];
+        glm::vec3 edge2 = vertices[2] - vertices[0];
 
-        std::vector<float> pvec = MathUtil::crossProduct(rayDirection, edge2);
+        glm::vec3 pvec = glm::cross(rayDirection, edge2);
 
-        float determinant = MathUtil::dotProduct(edge1, pvec);
+        float determinant = glm::dot(edge1, pvec);
 
         if (cullBackFace) {
             if (determinant < epsilon)
@@ -567,19 +454,19 @@ private:
 
         float inverseDeterminant = 1.0f / determinant;
 
-        std::vector<float> tvec = MathUtil::vectorSubtract(rayOrigin, vertices[0]);  // Distance from ray origin to shared vertex 
+        glm::vec3 tvec = rayOrigin - vertices[0];  // Distance from ray origin to shared vertex 
 
-        u = MathUtil::dotProduct(tvec, pvec) * inverseDeterminant;
+        u = glm::dot(tvec, pvec) * inverseDeterminant;
         if (u < 0 || u > 1)
             return false;
 
-        std::vector<float> qvec = MathUtil::crossProduct(tvec, edge1);
+        glm::vec3 qvec = glm::cross(tvec, edge1);
 
-        v = MathUtil::dotProduct(rayDirection, qvec) * inverseDeterminant;
+        v = glm::dot(rayDirection, qvec) * inverseDeterminant;
         if (v < 0 || u + v > 1)
             return false;
 
-        t = MathUtil::dotProduct(edge2, qvec) * inverseDeterminant;
+        t = glm::dot(edge2, qvec) * inverseDeterminant;
 
         if (t < rayTMin || t > rayTMax)
             return false;
@@ -598,6 +485,7 @@ private:
     }
 
 public:
+    // TODO: make this less complex; easier to read and understand (goal: change tabbing logic)
     std::string toString(unsigned tabLevel = 0) {
         std::stringstream result("");
 
@@ -666,14 +554,8 @@ public:
             case NodeType::Instance: {
                 InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
                 result << tabbedString(tabLevel + 1, "> instanceNode") << std::endl;
-                result << tabbedString(tabLevel + 2, "* transformationMatrix") << " = [" << std::endl;
-                for (unsigned row = 0; row < instanceNode->transformationMatrix.size(); ++row) {
-                    result << tabbedString(tabLevel + 3, "[ ");
-                    for (unsigned col = 0; col < instanceNode->transformationMatrix[row].size(); ++col) {
-                        result << instanceNode->transformationMatrix[row][col] << ", ";
-                    }
-                    result << "]" << std::endl;
-                }
+                result << tabbedString(tabLevel + 2, "* transformationMatrix") << " = "
+                       << glm::to_string(instanceNode->transformationMatrix) << std::endl;
                 result << tabbedString(tabLevel + 2, "]") << std::endl;
 
                 result << instanceNode->accelerationStructure->toString(tabLevel + 2) << std::endl;
@@ -684,12 +566,8 @@ public:
                 TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
                 result << tabbedString(tabLevel + 1, "> triangleNode") << std::endl;
                 result << tabbedString(tabLevel + 2, "* vertices") << " = [" << std::endl;
-                for (unsigned row = 0; row < triangleNode->vertices.size(); ++row) {
-                    result << tabbedString(tabLevel + 3, "[ ");
-                    for (unsigned col = 0; col < triangleNode->vertices[row].size(); ++col) {
-                        result << triangleNode->vertices[row][col] << ", ";
-                    }
-                    result << "]" << std::endl;
+                for (unsigned i = 0; i < triangleNode->vertices.size(); ++i) {
+                    result << tabbedString(tabLevel + 3, glm::to_string(triangleNode->vertices[i])) << std::endl;
                 }
                 result << tabbedString(tabLevel + 2, "]") << std::endl;
                 result << tabbedString(tabLevel + 2, "* indices") << " = [ ";
@@ -744,11 +622,11 @@ private:
     class InstanceNode : public Node {
     public:
         // TODO: some fields involving shaders, transformations, etc.
-        std::array<std::array<float, 4>, 3> transformationMatrix;  // 3 x 4 matrix
-        unsigned instanceMask;  // TODO: handle
+        glm::mat3x4 transformationMatrix;
+        unsigned instanceMask;
         std::shared_ptr<AccelerationStructure> accelerationStructure;
 
-        InstanceNode(std::array<std::array<float, 4>, 3> transformationMatrix,
+        InstanceNode(glm::mat3x4 transformationMatrix,
                 unsigned mask,
                 std::shared_ptr<AccelerationStructure>& accelerationStructure)
             : transformationMatrix(transformationMatrix),
@@ -763,10 +641,10 @@ private:
 
     class TriangleNode : public Node {
     public:
-        std::vector<std::vector<float>> vertices;
+        std::vector<glm::vec3> vertices;
         std::vector<unsigned> indices;
 
-        TriangleNode(std::vector<std::vector<float>> vertices, std::vector<unsigned> indices)
+        TriangleNode(std::vector<glm::vec3> vertices, std::vector<unsigned> indices)
             : vertices(vertices),
               indices(indices) {};
 
@@ -884,14 +762,17 @@ public:
             const float rayTMax,
             bool& didIntersectGeometry) const {
 
+        glm::vec4 convertedRayOrigin = glm::make_vec4(rayOrigin.data());
+        glm::vec4 convertedRayDirection = glm::make_vec4(rayDirection.data());
+
         root->traceRay(rayFlags,
                 cullMask,
                 offsetSBT,
                 strideSBT,
                 missIndex,
-                rayOrigin,
+                convertedRayOrigin,
                 rayTMin,
-                rayDirection,
+                convertedRayDirection,
                 rayTMax,
                 didIntersectGeometry);
     }
