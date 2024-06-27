@@ -29,11 +29,7 @@ import value.primitive;
 
 /*
     TODO: convert raw pointers to smart pointers to not worry about memory reclaimation
-
     TODO: may want to change how to identify nodes or how nodes work
-
-    TODO: probably want a transformation matrix or something if ended up here via an instance node?
-          How to transfer information from instance node to its respective acceleration structure?
 */
 class AccelerationStructure {
 private:
@@ -82,8 +78,10 @@ public:
         for (unsigned i = 0; i < numProceduralNodes; ++i) {
             const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i]));
 
-            const Array& minBoundsInfo = static_cast<const Array&>(*(primitiveInfo[0]));
-            const Array& maxBoundsInfo = static_cast<const Array&>(*(primitiveInfo[1]));
+            const bool opaque = static_cast<const Primitive&>(*(primitiveInfo[0])).data.b32;
+
+            const Array& minBoundsInfo = static_cast<const Array&>(*(primitiveInfo[1]));
+            const Array& maxBoundsInfo = static_cast<const Array&>(*(primitiveInfo[2]));
             glm::vec4 minBounds;
             glm::vec4 maxBounds;
             assert(minBoundsInfo.getSize() == maxBoundsInfo.getSize());
@@ -94,16 +92,19 @@ public:
             minBounds.w = 1.0f;
             maxBounds.w = 1.0f;
 
-            nodes.push_back(std::make_unique<ProceduralNode>(minBounds, maxBounds));
+            nodes.push_back(std::make_unique<ProceduralNode>(opaque, minBounds, maxBounds));
         }
 
         // Triangle node
         for (unsigned i = 0; i < numTriangleNodes; ++i) {
             const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numProceduralNodes]));
 
+            // Opaque
+            const bool opaque = static_cast<const Primitive&>(*(primitiveInfo[0])).data.b32;
+
             // Vertices
             std::vector<glm::vec3> vertices;
-            const Array& verticesInfo = static_cast<const Array&>(*(primitiveInfo[0]));
+            const Array& verticesInfo = static_cast<const Array&>(*(primitiveInfo[1]));
             for (unsigned j = 0; j < verticesInfo.getSize(); ++j) {
                 glm::vec3 vertex;
                 const Array& vertexInfo = static_cast<const Array&>(*(verticesInfo[j]));
@@ -116,12 +117,13 @@ public:
         
             // Indices
             std::vector<unsigned> indices;
-            const Array& indicesInfo = static_cast<const Array&>(*(primitiveInfo[1]));
+            const Array& indicesInfo = static_cast<const Array&>(*(primitiveInfo[2]));
             for (unsigned j = 0; j < indicesInfo.getSize(); ++j) {
                 unsigned value = static_cast<const Primitive&>(*(indicesInfo[j])).data.u32;
                 indices.push_back(value);
             }
-            nodes.push_back(std::make_unique<TriangleNode>(vertices, indices));
+
+            nodes.push_back(std::make_unique<TriangleNode>(opaque,vertices, indices));
         }
 
         // Instance nodes
@@ -228,44 +230,48 @@ public:
 
         using NodeRef = std::unique_ptr<Node>*;  // Raw pointer that points to smart pointer
 
+        // Handle flags
+        bool rayFlagNone = (rayFlags | spv::RayFlagsMask::RayFlagsMaskNone) == 0;
+        bool rayFlagOpaque = rayFlags & spv::RayFlagsMask::RayFlagsOpaqueKHRMask;
+        bool rayFlagNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsNoOpaqueKHRMask;
+        bool rayFlagTerminateOnFirstHit = rayFlags & spv::RayFlagsMask::RayFlagsTerminateOnFirstHitKHRMask;
+        bool rayFlagSkipClosestHitShader = rayFlags & spv::RayFlagsMask::RayFlagsSkipClosestHitShaderKHRMask;
+        bool rayFlagCullBackFacingTriangles = rayFlags & spv::RayFlagsMask::RayFlagsCullBackFacingTrianglesKHRMask;
+        bool rayFlagCullFrontFacingTriangles = rayFlags & spv::RayFlagsMask::RayFlagsCullFrontFacingTrianglesKHRMask;
+        bool rayFlagCullOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullOpaqueKHRMask;
+        bool rayFlagCullNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullNoOpaqueKHRMask;
+        bool rayFlagSkipTriangles = rayFlags & spv::RayFlagsMask::RayFlagsSkipTrianglesKHRMask;
+        bool rayFlagSkipAABBs = rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask; // skip procedurals
+
         // TODO: flags
-        // Handle ray flags if something other than none was given
-        if ((rayFlags & spv::RayFlagsMask::RayFlagsMaskNone) != 0) {
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsOpaqueKHRMask) != 0) {
+        // Handle unsupported ray flags if something other than none was given
+        if (rayFlagNone) {
+            if (rayFlagOpaque) {
                 // TODO: Force all intersections with the trace to be opaque.
+                throw std::runtime_error("Ray flags: Opaque, not implemented");
             }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsNoOpaqueKHRMask) != 0) {
+            if (rayFlagNoOpaque) {
                 // TODO: Force all intersections with the trace to be non-opaque.
+                throw std::runtime_error("Ray flags: NoOpaque, not implemented");
             }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsTerminateOnFirstHitKHRMask) != 0) {
-                // TODO: Accept the first hit discovered.
-            }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsSkipClosestHitShaderKHRMask) != 0) {
+            if (rayFlagSkipClosestHitShader) {
                 // TODO: Do not execute a closest hit shader.
+                throw std::runtime_error("Ray flags: SkipClosestHitShader, not implemented");
             }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullBackFacingTrianglesKHRMask) != 0) {
-                // TODO: Do not intersect with the back face of triangles.
-            }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullFrontFacingTrianglesKHRMask) != 0) {
-                // TODO: Do not intersect with the front face of triangles.
-            }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullOpaqueKHRMask) != 0) {
+            if (rayFlagCullOpaque) {
                 // TODO: Do not intersect with opaque geometry.
+                throw std::runtime_error("Ray flags: CullOpaque, not implemented");
             }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsCullNoOpaqueKHRMask) != 0) {
+            if (rayFlagCullNoOpaque) {
                 // TODO: Do not intersect with non-opaque geometry.
-            }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsSkipTrianglesKHRMask) != 0) {
-                // TODO: Do not intersect with any triangle geometries.
-            }
-            if ((rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask) != 0) {
-                // TODO: Do not intersect with any aabb geometries.
+                throw std::runtime_error("Ray flags: CullNoOpaque, not implemented");
             }
         }
 
         std::stack<NodeRef> frontier;
         frontier.push(&root);
 
+        std::cout << "ray flags = " << rayFlags << std::endl;
         std::cout << "AS id: " << id << std::endl;
         std::cout << "~Ray origin: " << glm::to_string(rayOrigin) << std::endl;
         std::cout << "~Ray direction: " << glm::to_string(rayDirection)<< std::endl;
@@ -292,6 +298,7 @@ public:
                 bool result = rayAABBIntersect(rayOrigin, rayDirection, rayTMin, rayTMax, boxNode->minBounds, boxNode->maxBounds);
                 if (result) {
                     // Ray intersected; add it's children to be evaluated
+                    std::cout << "Ray intersected with AABB in box node" << std::endl;
                     for (auto& child : boxNode->children) {
                         frontier.push(&child);
                     }
@@ -307,8 +314,10 @@ public:
 
                 // TODO
                 // Do not process this instance if it's invisible to the ray
-                if ((instanceNode->instanceMask & cullMask) == 0)
+                if ((instanceNode->instanceMask & cullMask) == 0) {
+                    std::cout << "\tInstance is invisible to ray" << std::endl;
                     break;
+                }
 
                 bool foundGeometryIntersection = false;
 
@@ -346,17 +355,26 @@ public:
                 if (foundGeometryIntersection) {
                     // TODO: may want to terminate early if ray does intersect any primitive
                     didIntersectGeometry = true;
+                    
+                    // Terminate on the first hit if the flag was risen
+                    if (rayFlagTerminateOnFirstHit) {
+                        return;
+                    }
                 } else {
                     // Ray did not intersect
                 }
 
-                std::cout << "\t!!!!!!!!!!!!!!!!!!!!! Done back to AS id: " << id << std::endl;
+                std::cout << "\t!!!!!!!!!!!!!!!!!!!!! Done! Now going back to AS id: " << id << std::endl;
 
                 break;
             }
             case NodeType::Triangle: {
-                // TODO: handle procedural nodes
-                std::cout << "Trying triangle" << std::endl;
+                // Ignore triangle if this flag is true
+                if (rayFlagSkipTriangles) {
+                    std::cout << "SKIPPING THE TRIANGLES" << std::endl;
+                    break;
+                }
+                
                 TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
                 float t, u, v;  // t : distance to intersection, (u,v) : uv coordinates/coordinates in triangle
                 bool result = rayTriangleIntersect(rayOrigin,
@@ -364,7 +382,8 @@ public:
                         rayTMin,
                         rayTMax,
                         triangleNode->vertices,
-                        false,
+                        rayFlagCullBackFacingTriangles,
+                        rayFlagCullFrontFacingTriangles,
                         t,
                         u,
                         v);
@@ -372,6 +391,11 @@ public:
                     // Ray intersected
                     std::printf("+++ Ray intersected a triangle; t:%f, u:%f, v:%f\n", t, u, v);
                     didIntersectGeometry = true;
+                    // Terminate on the first hit if the flag was risen
+                    if (rayFlagTerminateOnFirstHit) { 
+                        std::cout << "Terminated on first hit!" << std::endl;
+                        return;
+                    }
                 } else {
                     // Ray did not intersect
                 }
@@ -379,6 +403,21 @@ public:
             }
             case NodeType::Procedural: { // TODO
                 throw std::runtime_error("Tracing a ray through a procedural is NOT implemented.");
+
+                // Ignore procedural if this flag is true
+                if (rayFlagSkipAABBs)
+                    break;
+                bool result = false;
+                if (result) {
+                    // Procedural geometry was hit
+                    // Terminate on the first hit if the flag was risen
+                    if (rayFlagTerminateOnFirstHit) {
+                        std::cout << "Terminated on first hit!" << std::endl;
+                        return;
+                    }
+                } else {
+                    // Ray did not hit
+                }
             }
             }
             
@@ -446,17 +485,22 @@ private:
         return true;
     }
 
+    // TODO: handle triangle face culling
+    // Moller-Trumbore ray/triangle intersection algorithm
     bool rayTriangleIntersect(const glm::vec3 rayOrigin,
             const glm::vec3 rayDirection,
             const float rayTMin,
             const float rayTMax,
             const std::vector<glm::vec3> vertices,
             const bool cullBackFace,
+            const bool cullFrontFace,
             float& t,
             float& u,
             float& v) const {
 
-        // Moller-Trumbore ray/triangle intersection algorithm
+        // Immediately return if culling both faces; triangle is nonexistent
+        if (cullBackFace && cullFrontFace)
+            return false;
 
         constexpr float epsilon = std::numeric_limits<float>::epsilon();
 
@@ -466,10 +510,16 @@ private:
 
         glm::vec3 pvec = glm::cross(rayDirection, edge2);
 
+        // If positive determinant, then the ray hit the front face
+        // If negative determinant, then the ray hit the back face
+        // If determinant is close to zero, then the ray missed the triangle
         float determinant = glm::dot(edge1, pvec);
 
         if (cullBackFace) {
             if (determinant < epsilon)
+                return false;
+        } else if (cullFrontFace) {
+            if (determinant > epsilon)
                 return false;
         } else {
             if (std::fabs(determinant) < epsilon)
@@ -588,6 +638,7 @@ public:
             case NodeType::Triangle: {
                 TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
                 result << tabbedString(tabLevel + 1, "> triangleNode") << std::endl;
+                result << tabbedString(tabLevel + 2, "* opaque = ") << (triangleNode->opaque ? "true" : "false") << std::endl;
                 result << tabbedString(tabLevel + 2, "* vertices") << " = [" << std::endl;
                 for (unsigned i = 0; i < triangleNode->vertices.size(); ++i) {
                     result << tabbedString(tabLevel + 3, glm::to_string(triangleNode->vertices[i])) << std::endl;
@@ -666,11 +717,13 @@ private:
 
     class TriangleNode : public Node {
     public:
-        std::vector<glm::vec3> vertices;
-        std::vector<unsigned> indices;
+        const bool opaque;
+        const std::vector<glm::vec3> vertices;
+        const std::vector<unsigned> indices;
 
-        TriangleNode(std::vector<glm::vec3> vertices, std::vector<unsigned> indices)
-            : vertices(vertices),
+        TriangleNode(const bool& opaque, const std::vector<glm::vec3>& vertices, const std::vector<unsigned>& indices)
+            : opaque(opaque),
+              vertices(vertices),
               indices(indices) {};
 
         NodeType type() {
@@ -680,11 +733,13 @@ private:
 
     class ProceduralNode : public Node {
     public:
+        const bool opaque;
         const glm::vec4 minBounds; // min x, y, z
         const glm::vec4 maxBounds; // max x, y, z
 
-        ProceduralNode(const glm::vec4 minBounds, const glm::vec4 maxBounds)
-            : minBounds(minBounds),
+        ProceduralNode(const bool& opaque, const glm::vec4& minBounds, const glm::vec4& maxBounds)
+            : opaque(opaque),
+              minBounds(minBounds),
               maxBounds(maxBounds) {};
 
         NodeType type() {
@@ -774,7 +829,6 @@ public:
             root = std::move(accelerationStructures[numAccelerationStructures - 1]);
             assert(accelerationStructures[numAccelerationStructures - 1] == nullptr);
 
-            std::cout << "Printing acceleration structures based on tree construction:" << std::endl;
             std::cout << root->toString() << std::endl; // TODO: print it out to verify correct tree
         }
     }
@@ -827,22 +881,21 @@ public:
                     val.copyFrom(Primitive(static_cast<float>(intersected)));
                     break;
                 }
-                // case DataType::UINT: {
-                //     // TODO
-                //     break;
-                // }
-                // case DataType::INT: {
-                //     // TODO
-                //     break;
-                // }
-                // case DataType::BOOL: {
-                //     // TODO
-                //     break;
-                // }
-                // case DataType::STRING: {
-                //     // TODO
-                //     break;
-                // }
+                case DataType::UINT: {
+                    Primitive& val = static_cast<Primitive&>(*curr);
+                    val.copyFrom(Primitive(static_cast<unsigned>(intersected)));
+                    break;
+                }
+                case DataType::INT: {
+                    Primitive& val = static_cast<Primitive&>(*curr);
+                    val.copyFrom(Primitive(static_cast<int>(intersected)));
+                    break;
+                }
+                case DataType::BOOL: {
+                    Primitive& val = static_cast<Primitive&>(*curr);
+                    val.copyFrom(Primitive(intersected));
+                    break;
+                }
                 case DataType::ARRAY:
                 case DataType::STRUCT: {
                     const Aggregate& agg = static_cast<const Aggregate&>(*curr);
@@ -1098,9 +1151,12 @@ public:
 
                     // --- triangleNodes
                     if (numTriangleNodes > 0) {
-                        Names triangleNodeFieldNames { "vertices", "indices" };
+                        Names triangleNodeFieldNames { "opaque", "vertices", "indices" };
                         Fields triangleNodeFields;
                         {
+                            // --- opaque
+                            triangleNodeFields.push_back(new Type(Type::primitive(DataType::BOOL)));
+
                             // --- vertices
                             Type* floatValue = new Type(Type::primitive(DataType::FLOAT));
                             Type* vertex = new Type(Type::array(0, *floatValue));
@@ -1122,9 +1178,12 @@ public:
 
                     // --- proceduralNodes
                     if (numProceduralNodes > 0) {
-                        Names proceduralNodeFieldNames { "bounds" };
+                        Names proceduralNodeFieldNames { "opaque", "bounds" };
                         Fields proceduralNodeFields;
                         {
+                            // --- opaque
+                            proceduralNodeFields.push_back(new Type(Type::primitive(DataType::BOOL)));
+
                             // --- bounds
                             Type* bounds = new Type(Type::primitive(DataType::FLOAT));
                             proceduralNodeFields.push_back(new Type(Type::array(6, *bounds)));
