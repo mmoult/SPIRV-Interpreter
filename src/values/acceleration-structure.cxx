@@ -231,7 +231,7 @@ public:
         using NodeRef = std::unique_ptr<Node>*;  // Raw pointer that points to smart pointer
 
         // Handle flags
-        bool rayFlagNone = (rayFlags | spv::RayFlagsMask::RayFlagsMaskNone) == 0;
+        bool rayFlagNone = (rayFlags | spv::RayFlagsMask::RayFlagsMaskNone) == 0; // TODO: reason to have this?
         bool rayFlagOpaque = rayFlags & spv::RayFlagsMask::RayFlagsOpaqueKHRMask;
         bool rayFlagNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsNoOpaqueKHRMask;
         bool rayFlagTerminateOnFirstHit = rayFlags & spv::RayFlagsMask::RayFlagsTerminateOnFirstHitKHRMask;
@@ -242,31 +242,6 @@ public:
         bool rayFlagCullNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullNoOpaqueKHRMask;
         bool rayFlagSkipTriangles = rayFlags & spv::RayFlagsMask::RayFlagsSkipTrianglesKHRMask;
         bool rayFlagSkipAABBs = rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask; // skip procedurals
-
-        // TODO: flags
-        // Handle unsupported ray flags if something other than none was given
-        if (rayFlagNone) {
-            if (rayFlagOpaque) {
-                // TODO: Force all intersections with the trace to be opaque.
-                throw std::runtime_error("Ray flags: Opaque, not implemented");
-            }
-            if (rayFlagNoOpaque) {
-                // TODO: Force all intersections with the trace to be non-opaque.
-                throw std::runtime_error("Ray flags: NoOpaque, not implemented");
-            }
-            if (rayFlagSkipClosestHitShader) {
-                // TODO: Do not execute a closest hit shader.
-                throw std::runtime_error("Ray flags: SkipClosestHitShader, not implemented");
-            }
-            if (rayFlagCullOpaque) {
-                // TODO: Do not intersect with opaque geometry.
-                throw std::runtime_error("Ray flags: CullOpaque, not implemented");
-            }
-            if (rayFlagCullNoOpaque) {
-                // TODO: Do not intersect with non-opaque geometry.
-                throw std::runtime_error("Ray flags: CullNoOpaque, not implemented");
-            }
-        }
 
         std::stack<NodeRef> frontier;
         frontier.push(&root);
@@ -368,6 +343,7 @@ public:
 
                 break;
             }
+            // TODO: could maybe combine triangle and procedural due to similarities?
             case NodeType::Triangle: {
                 // Ignore triangle if this flag is true
                 if (rayFlagSkipTriangles) {
@@ -376,6 +352,26 @@ public:
                 }
                 
                 TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
+                bool isOpaque = triangleNode->opaque;
+                assert(!(rayFlagOpaque && rayFlagNoOpaque));
+                if (rayFlagOpaque) {
+                    isOpaque = true;
+                } else if (rayFlagNoOpaque) {
+                    isOpaque = false;
+                }
+
+                if (rayFlagCullOpaque && isOpaque) {
+                    std::cout << "Culling opaque triangle" << std::endl;
+                    break;
+                }
+                if (rayFlagCullNoOpaque && !isOpaque) {
+                    std::cout << "Culling none opaque triangle" << std::endl;
+                    break;
+                }
+
+                // TODO: when multi-shader invocation is a thing, need to handle opacity
+
+                // Check if the ray intersects the triangle
                 float t, u, v;  // t : distance to intersection, (u,v) : uv coordinates/coordinates in triangle
                 bool result = rayTriangleIntersect(rayOrigin,
                         rayDirection,
@@ -387,10 +383,12 @@ public:
                         t,
                         u,
                         v);
+
                 if (result) {
                     // Ray intersected
-                    std::printf("+++ Ray intersected a triangle; t:%f, u:%f, v:%f\n", t, u, v);
+                    std::cout << "+++ Ray intersected a triangle; (t, u, v) = (" << t << ", " << u << ", " << v << ")" << std::endl; 
                     didIntersectGeometry = true;
+
                     // Terminate on the first hit if the flag was risen
                     if (rayFlagTerminateOnFirstHit) { 
                         std::cout << "Terminated on first hit!" << std::endl;
@@ -401,16 +399,54 @@ public:
                 }
                 break;
             }
-            case NodeType::Procedural: { // TODO
-                throw std::runtime_error("Tracing a ray through a procedural is NOT implemented.");
+            // TODO: Not correct until multiple shader invocation support.
+            // Currently, it returns an intersection if it intersects the 
+            // respective AABB for the procedural.
+            // TODO: add intersection shader invocation.
+            case NodeType::Procedural: {
+                std::cout << "WARNING: encountered procedural; multi-shader invocation not a feature; will return "
+                             "its AABB intersection result instead"
+                          << std::endl;
 
                 // Ignore procedural if this flag is true
-                if (rayFlagSkipAABBs)
+                if (rayFlagSkipAABBs) {
+                    std::cout << "SKIPPING THE PROCEDURALS" << std::endl;
                     break;
-                bool result = false;
+                }
+
+                ProceduralNode* proceduralNode = static_cast<ProceduralNode*>(currNode);
+                bool isOpaque = proceduralNode->opaque;
+                assert(!(rayFlagOpaque && rayFlagNoOpaque));
+                if (rayFlagOpaque) {
+                    isOpaque = true;
+                } else if (rayFlagNoOpaque) {
+                    isOpaque = false;
+                }
+
+                if (rayFlagCullOpaque && isOpaque) {
+                    std::cout << "Culling opaque procedural" << std::endl;
+                    break;
+                }
+                if (rayFlagCullNoOpaque && !isOpaque) {
+                    std::cout << "Culling none opaque procedural" << std::endl;
+                    break;
+                }
+
+                // TODO: when multi-shader invocation is a thing, need to handle opacity
+
+                bool result = rayAABBIntersect(rayOrigin,
+                        rayDirection,
+                        rayTMin,
+                        rayTMax,
+                        proceduralNode->minBounds,
+                        proceduralNode->maxBounds);
+
                 if (result) {
                     // Procedural geometry was hit
                     // Terminate on the first hit if the flag was risen
+                    std::cout << "+++ Ray intersected a procedural's AABB" << std::endl;
+                    didIntersectGeometry = true;
+
                     if (rayFlagTerminateOnFirstHit) {
                         std::cout << "Terminated on first hit!" << std::endl;
                         return;
@@ -423,6 +459,18 @@ public:
             
             currNodeRef = std::unique_ptr<Node>(currNode);  // Give back ownership
         }
+
+        // TODO: once multi-shader invocation is a thing, need to handle hit and miss shaders
+        // TODO: currently, the root acceleration structure has an id of 0 but maybe want to allow more flexibility
+        if (id != 0 || rayFlagSkipClosestHitShader) {
+            // TODO: Do not execute a closest hit shader.
+            std::cout << "Skip the closest hit shader" << std::endl;
+            return;
+            // didIntersectGeometry = false;
+        }
+
+        // Invoke a hit or miss shader here
+        std::cout << "Invoke closest hit shader / miss shader" << std::endl;
     }
 
 private:
@@ -1178,15 +1226,19 @@ public:
 
                     // --- proceduralNodes
                     if (numProceduralNodes > 0) {
-                        Names proceduralNodeFieldNames { "opaque", "bounds" };
+                        Names proceduralNodeFieldNames { "opaque", "minBounds", "maxBounds" };
                         Fields proceduralNodeFields;
                         {
                             // --- opaque
                             proceduralNodeFields.push_back(new Type(Type::primitive(DataType::BOOL)));
 
-                            // --- bounds
                             Type* bounds = new Type(Type::primitive(DataType::FLOAT));
-                            proceduralNodeFields.push_back(new Type(Type::array(6, *bounds)));
+
+                            // --- minBounds
+                            proceduralNodeFields.push_back(new Type(Type::array(3, *bounds)));
+
+                            // --- maxBounds
+                            proceduralNodeFields.push_back(new Type(Type::array(3, *bounds)));
                         }
                         Type* proceduralNode = new Type(Type::structure(proceduralNodeFields, proceduralNodeFieldNames));
 
