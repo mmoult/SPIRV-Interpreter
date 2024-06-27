@@ -201,6 +201,7 @@ Instruction* Instruction::readOp(
     case spv::OpFOrdGreaterThan: // 186
     case spv::OpFOrdLessThanEqual: // 188
     case spv::OpFOrdGreaterThanEqual: // 190
+    case spv::OpExecuteCallableKHR: // 4446
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;

@@ -182,15 +182,8 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
         break;
     }
     case spv::OpTraceRayKHR: { // 4445
-        // TODO: need to check execution model?
-        // Run it through a built-in ray tracing pipeline (implementation by interpreter)
-        // and the result will be either 0 for miss or 1 for hit.
-        //
-        // Both 0 and 1 can be used for the supported data types of the interpreter,
-        // specifically the primitive data types.
-        //
-        // Will fail if the acceleration structure contains procedural nodes because they
-        // require a user-defined intersection shader.
+        // TODO: change me once the interpreter supports shader invocation.
+        // Currently, run the ray through an implementation of a standard ray tracing pipeline
 
         // --- Assertions
         assert(getValue(0, data)->getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
@@ -228,10 +221,8 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
 
         float rayTMax = static_cast<Primitive&>(*getValue(9, data)).data.fp32;
 
-        // TODO: payload could be an array or struct? What data types can it be? I believe it is user defined?
         auto payloadPointer = getFromPointer(10, data);
 
-        // TODO: what should be outputted if runned in ray generation execution model
         // --- Execute instruction
         // Run it through our implementation of a ray tracing pipeline
         // Only the 8 least-significant bits of Cull Mask are used in this instruction
@@ -251,8 +242,23 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
                 didIntersectGeometry);
 
         // Store the data into the payload
-        // TODO: figure out payload
-        as.fillPayload(payloadPointer, didIntersectGeometry);
+
+        // TODO: currently, payload stores if a geometry was intersected (a boolean).
+        // Will need to change once the interpreter is capable to invoking other shaders.
+        // Note that payload is user-defined, so it is important that trace ray invokes
+        // other shaders (notably user-defined) which will correctly fill the payload.
+        as.fillPayloadWithBool(payloadPointer, didIntersectGeometry);
+
+        break;
+    }
+    case spv::OpExecuteCallableKHR: { // 4446
+        // TODO: call the callable shader once interpreter can invoke multiple shaders
+        unsigned indexSBT = static_cast<Primitive&>(*getValue(0, data)).data.u32;
+        auto shaderArguments = getFromPointer(1, data);
+        std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as of right now!" << std::endl;
+        std::cout << "Invoking callable shader at SBT index = (" << indexSBT << ") with argument of type ("
+                  << shaderArguments->getType().getBase() << ")" << std::endl;
+        break;
     }
     }
 

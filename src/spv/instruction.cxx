@@ -146,6 +146,8 @@ public:
         case SC::StorageClassStorageBuffer:
         case SC::StorageClassHitAttributeKHR:  // TODO: does this belong here?
         case SC::StorageClassIncomingRayPayloadKHR:  // TODO: does this belong here?
+        case SC::StorageClassCallableDataKHR:  // TODO: does this belong here?
+        case SC::StorageClassIncomingCallableDataKHR:  // TODO: does this belong here?
             ins.push_back(id);
             outs.push_back(id);
             break;

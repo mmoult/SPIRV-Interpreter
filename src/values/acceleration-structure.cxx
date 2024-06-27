@@ -212,9 +212,6 @@ public:
     and a TLAS corresponds to an entire scene built by positioning
     (with 3-by-4 transformation matrices) individual referenced BLASes.
     */
-    // TODO
-    // TODO: change return type to a ray payload or something related
-    // TODO: change parameter types
     // TODO: SBT once can do multiple shader invocations
     // Modifies payload parameter
     void traceRay(const unsigned rayFlags,
@@ -909,8 +906,8 @@ public:
                 didIntersectGeometry);
     }
 
-    // TODO
-    void fillPayload(Value* payloadInfo, const bool intersected) const {
+    // TODO:
+    void fillPayloadWithBool(Value* payloadInfo, const bool intersected) const {
         std::stack<Value*> frontier;
         frontier.push(payloadInfo);
 
