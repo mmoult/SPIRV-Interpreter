@@ -16,6 +16,7 @@ module;
 // TODO: plan to remove/change header(s) below
 #include <iostream>
 
+// TODO: probably want to reduce GLM files to link
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -26,6 +27,27 @@ module;
 export module value.accelerationStructure;
 import value.aggregate;
 import value.primitive;
+
+namespace Util {
+    std::string repeatedString(const unsigned num, const std::string str) {
+        std::stringstream result("");
+        for (unsigned i = 0; i < num; ++i)
+            result << str;
+        return result.str();
+    }
+
+    std::string glmVec3ToString(const glm::vec3 vec) {
+        std::stringstream result("");
+
+        result << "[ ";
+        for (unsigned i = 0; i < vec.length() - 1; ++i) {
+            result << vec[i] << ", ";
+        }
+        result << vec[vec.length() - 1] << " ]";
+
+        return result.str();
+    }
+}
 
 /*
     TODO: convert raw pointers to smart pointers to not worry about memory reclaimation
@@ -39,13 +61,15 @@ private:
     public:
         virtual ~Node() {};
         virtual NodeType type() = 0;
+        virtual std::string toString(const unsigned indent = 0, const std::string indentString = "") const = 0;
     };
 
-    const unsigned id;  // identifier
     const bool isTLAS;  // true: TLAS, false: BLAS
     std::unique_ptr<Node> root;  // Start of this acceleration structure
 
 public:
+    const unsigned id;  // identifier
+
     /// @brief TODO: description
     /// @param id
     /// @param structureInfo 
@@ -97,7 +121,8 @@ public:
 
         // Triangle node
         for (unsigned i = 0; i < numTriangleNodes; ++i) {
-            const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numProceduralNodes]));
+            const Struct& primitiveInfo =
+                    static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numProceduralNodes]));
 
             // Opaque
             const bool opaque = static_cast<const Primitive&>(*(primitiveInfo[0])).data.b32;
@@ -128,8 +153,9 @@ public:
 
         // Instance nodes
         for (unsigned i = 0; i < numInstanceNodes; ++i) {
-            const Struct& instanceInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes]));
-        
+            const Struct& instanceInfo =
+                    static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes]));
+
             // Transformation matrix
             glm::mat3x4 transformationMatrix;
             const Array& transformationMatrixInfo = static_cast<const Array&>(*(instanceInfo[0]));
@@ -155,8 +181,9 @@ public:
         // Box nodes
         assert(numPrimitiveNodes == 0 || numInstanceNodes == 0);
         for (unsigned i = 0; i < numBoxNodes; ++i) {
-            const Struct& boxInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes - numInstanceNodes]));
-        
+            const Struct& boxInfo = static_cast<const Struct&>(
+                    *(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes - numInstanceNodes]));
+
             const Array& minBoundsInfo = static_cast<const Array&>(*(boxInfo[0]));
             const Array& maxBoundsInfo = static_cast<const Array&>(*(boxInfo[1]));
             glm::vec4 minBounds;
@@ -186,23 +213,16 @@ public:
             nodes.push_back(std::make_unique<BoxNode>(minBounds, maxBounds, children));
         }
 
-        // Set the root node
-        // TODO: assertion to make sure nodes list is within expectation
-        for (unsigned i = 0; i < nodes.size(); ++i) {
-            const auto& n = nodes[i];
-            if (i == (numNodes - 1) - 0) {
-                assert(n != nullptr);
-            } else {
-                assert(n == nullptr);
-            }
-        }
+        // Assertion to make sure nodes list is within expectation
+        unsigned rootIndex = numNodes - 1;
+        for (unsigned i = 0; i < nodes.size(); ++i)
+            assert((i != rootIndex && nodes[i] == nullptr) || (i == rootIndex && nodes[i] != nullptr));
 
+        // Set the root node
         root = std::move(nodes[numNodes - 1]);
 
-        // All unique_ptr in "nodes" should be null
-        for (const auto& n : nodes) {
-            assert(n == nullptr);
-        }
+        // All unique_ptr in "nodes" should be null, so the root should be null
+        assert(nodes[rootIndex] == nullptr);
     };
 
     ~AccelerationStructure() {};
@@ -212,6 +232,9 @@ public:
     and a TLAS corresponds to an entire scene built by positioning
     (with 3-by-4 transformation matrices) individual referenced BLASes.
     */
+    // TODO
+    // TODO: change return type to a ray payload or something related
+    // TODO: change parameter types
     // TODO: SBT once can do multiple shader invocations
     // Modifies payload parameter
     void traceRay(const unsigned rayFlags,
@@ -281,7 +304,6 @@ public:
                 break;
             }
             case NodeType::Instance: {
-                // TODO
                 InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
 
                 // TODO
@@ -297,7 +319,7 @@ public:
                 glm::mat4x4 objectToWorld(1.0f); // Turn 3x4 to 4x4 so we can invert it
                 for (int i = 0; i < 3; ++i) {
                     for (int j = 0; j < 4; ++j) {
-                        objectToWorld[i][j] = instanceNode->transformationMatrix[i][j];
+                        objectToWorld[i][j] = instanceNode->objectToWorld[i][j];
                     }
                 }
 
@@ -471,20 +493,23 @@ public:
     }
 
 private:
-    bool rayAABBIntersect(const glm::vec3 rayOrigin,
-            const glm::vec3 rayDirection,
-            const float rayTMin,
-            const float rayTMax,
-            const glm::vec3 minBounds,
-            const glm::vec3 maxBounds) const {
+    // Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004."
+    // found on Scratchapixel
+    // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html)
+    bool rayAABBIntersect(const glm::vec3& rayOrigin,
+            const glm::vec3& rayDirection,
+            const float& rayTMin,
+            const float& rayTMax,
+            const glm::vec3& minBounds,
+            const glm::vec3& maxBounds) const {
 
-        // Algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004." found
-        // on Scratchapixel
-        // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html)
+        // Check if the ray if inside of the AABB; it is considered inside if right at the surface
+        bool insideAABB = rayOrigin.x >= minBounds.x && rayOrigin.y >= minBounds.y && rayOrigin.z >= minBounds.z &&
+                          rayOrigin.x <= maxBounds.x && rayOrigin.y <= maxBounds.y && rayOrigin.z <= maxBounds.z;
+        if (insideAABB)
+            return true;
 
-        // Bounds organized as (0)xmin, (1)xmax, (2)ymin, (3)ymax, (4)zmin, (5)zmax
-        // Ray organized as (0)x, (1)y, (2)z
-        
+        // Otherwise, check if the ray intersects the surface of the AABB from the outside
         // Check the x-plane
         float tmin = (minBounds.x - rayOrigin.x) / rayDirection.x;
         float tmax = (maxBounds.x - rayOrigin.x) / rayDirection.x;
@@ -522,10 +547,9 @@ private:
         if (tzmax < tmax)
             tmax = tzmax;
 
-        // // TODO: correct logic?
-        // // Only check the entry point of the ray into the box
-        // if (tmin < rayTMin || tmin > rayTMax)
-        //     return false;
+        // Only check the entry point of the ray into the box
+        if (tmin < rayTMin || tmin > rayTMax)
+            return false;
 
         return true;
     }
@@ -593,124 +617,51 @@ private:
         return true;
     }
 
-    std::string tabbedString(unsigned numTabs, std::string message) {
-        std::stringstream result("");
-
-        for (unsigned i = 0; i < numTabs; ++i)
-            result << "\t";
-        result << message;
-
-        return result.str();
-    }
-
 public:
-    // TODO: make this less complex; easier to read and understand (goal: change tabbing logic)
     std::string toString(unsigned tabLevel = 0) {
         std::stringstream result("");
+        const std::string tabString("|\t");
 
-        result << tabbedString(tabLevel, "+ accelerationStructure id = ") << id << std::endl;
-        result << tabbedString(tabLevel + 1, "* isTLAS") << " = " << (isTLAS ? "true" : "false") << std::endl;
-
-        using NodeRef = std::unique_ptr<Node>*;  // Raw pointer to smart pointers
+        result << Util::repeatedString(tabLevel, tabString) << "acceleration_structure_id = " << id << std::endl;
+        result << Util::repeatedString(tabLevel + 1, tabString) << "is_TLAS = " << (isTLAS ? "true" : "false") << std::endl;
+        
+        using NodeRef = std::tuple<std::unique_ptr<Node>*, unsigned>;  // Raw pointer to smart pointers
 
         std::stack<NodeRef> frontier;
-        frontier.push(&root);
-
-        // Variables for box node case
-        bool applyExtraTab = false;
-        std::stack<unsigned> remainingToExtraTab;
+        frontier.push(std::make_tuple(&root, tabLevel + 1));
 
         while (!frontier.empty()) {
-
-            // Extra tab logic only executes if entered box node previously
-            if (applyExtraTab && !remainingToExtraTab.empty()) {
-                unsigned& top = remainingToExtraTab.top();
-                if (top > 0) {
-                    --top;
-                } else if (top == 0) {
-                    --tabLevel;
-                    remainingToExtraTab.pop();
-                    if (remainingToExtraTab.empty()) {
-                        applyExtraTab = false;
-                    }
-                }
-            }
-
-            std::unique_ptr<Node>& currNodeRef = *(frontier.top());
+            NodeRef top = frontier.top();
+            std::unique_ptr<Node>& currNodeRef = *(get<0>(top));
+            const unsigned numTabs = get<1>(top);
             frontier.pop();
 
-            Node* currNode = currNodeRef.release();  // Take ownership
+            // Borrow ownership
+            Node* currNode = currNodeRef.release();
 
+            // Append string form of node
+            result << currNode->toString(numTabs + 1, tabString);
+
+            // Traverse down the hierarchy as necessary
             switch (currNode->type()) {
-            default: {
-                std::stringstream err;
-                err << "Found unknown node type (" << static_cast<int>(currNode->type())
-                    << ") in \"toString()\" method of class "
-                       "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
-                throw std::runtime_error(err.str());
-            }
             case NodeType::Box: {
                 BoxNode* boxNode = static_cast<BoxNode*>(currNode);
                 for (auto& child : boxNode->children) {
-                    frontier.push(&child);
+                    frontier.push(std::make_tuple(&child, numTabs + 1));
                 }
-                
-                if (boxNode->children.size() > 0) {
-                    applyExtraTab = true;
-                    remainingToExtraTab.push(boxNode->children.size());
-                }
-
-                result << tabbedString(tabLevel + 1, "> boxNode") << std::endl;
-                result << tabbedString(tabLevel + 2, "* minBounds = ") << glm::to_string(boxNode->minBounds)
-                       << std::endl;
-                result << tabbedString(tabLevel + 2, "* maxBounds = ") << glm::to_string(boxNode->maxBounds)
-                       << std::endl;
-
-                ++tabLevel;
                 break;
             }
             case NodeType::Instance: {
                 InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
-                result << tabbedString(tabLevel + 1, "> instanceNode") << std::endl;
-                result << tabbedString(tabLevel + 2, "* transformationMatrix") << " = "
-                       << glm::to_string(instanceNode->transformationMatrix) << std::endl;
-                result << tabbedString(tabLevel + 2, "]") << std::endl;
-
-                result << instanceNode->accelerationStructure->toString(tabLevel + 2) << std::endl;
-
+                result << instanceNode->accelerationStructure->toString(numTabs + 2);
                 break;
             }
-            case NodeType::Triangle: {
-                TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
-                result << tabbedString(tabLevel + 1, "> triangleNode") << std::endl;
-                result << tabbedString(tabLevel + 2, "* opaque = ") << (triangleNode->opaque ? "true" : "false") << std::endl;
-                result << tabbedString(tabLevel + 2, "* vertices") << " = [" << std::endl;
-                for (unsigned i = 0; i < triangleNode->vertices.size(); ++i) {
-                    result << tabbedString(tabLevel + 3, glm::to_string(triangleNode->vertices[i])) << std::endl;
-                }
-                result << tabbedString(tabLevel + 2, "]") << std::endl;
-                result << tabbedString(tabLevel + 2, "* indices") << " = [ ";
-                for (const auto& value : triangleNode->indices) {
-                    result << value << ", ";
-                }
-                result << "]" << std::endl;
-
+            default: // No paths after current node
                 break;
             }
-            case NodeType::Procedural: {
-                ProceduralNode* proceduralNode = static_cast<ProceduralNode*>(currNode);
 
-                result << tabbedString(tabLevel + 1, "> proceduralNode") << std::endl;
-                result << tabbedString(tabLevel + 2, "* minBounds = ") << glm::to_string(proceduralNode->minBounds)
-                       << std::endl;
-                result << tabbedString(tabLevel + 2, "* maxBounds = ") << glm::to_string(proceduralNode->maxBounds)
-                       << std::endl;
-
-                break;
-            }
-            }
-
-            currNodeRef = std::unique_ptr<Node>(currNode);  // Give back ownership
+            // Return ownership
+            currNodeRef = std::unique_ptr<Node>(currNode);
         }
 
         return result.str();
@@ -720,8 +671,8 @@ private:
     // TODO: change classes to structs? Since not using private fields.
     class BoxNode : public Node {
     public:
-        const glm::vec4 minBounds; // min x, y, z
-        const glm::vec4 maxBounds; // max x, y, z
+        const glm::vec4 minBounds; // min x, y, z, w
+        const glm::vec4 maxBounds; // max x, y, z, w
         std::vector<std::unique_ptr<Node>> children;
 
         /// @brief Constructor for "BoxNode". IMPORTANT: Will transfer ownership of unique pointers.
@@ -738,25 +689,68 @@ private:
         NodeType type() {
             return NodeType::Box;
         }
+
+        std::string toString(const unsigned indent = 0, const std::string indentString = "") const {
+            std::stringstream result("");
+
+            result << Util::repeatedString(indent, indentString) << "box_node" << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString)
+                   << "min_bounds = " << Util::glmVec3ToString(minBounds) << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString)
+                   << "max_bounds = " << Util::glmVec3ToString(maxBounds) << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString) << "num_children = " << children.size()
+                   << std::endl;
+
+            return result.str();
+        }
     };
 
     class InstanceNode : public Node {
     public:
         // TODO: some fields involving shaders, transformations, etc.
-        glm::mat3x4 transformationMatrix;
+        glm::mat3x4 objectToWorld;
         unsigned instanceMask;
         std::shared_ptr<AccelerationStructure> accelerationStructure;
 
         InstanceNode(glm::mat3x4 transformationMatrix,
                 unsigned mask,
                 std::shared_ptr<AccelerationStructure>& accelerationStructure)
-            : transformationMatrix(transformationMatrix),
+            : objectToWorld(transformationMatrix),
               instanceMask(mask) {
             this->accelerationStructure = accelerationStructure;
         };
 
         NodeType type() {
             return NodeType::Instance;
+        }
+
+        std::string toString(const unsigned indent = 0, const std::string indentString = "") const {
+            std::stringstream result("");
+
+            result << Util::repeatedString(indent, indentString) << "instance_node" << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString) << "object_to_world_matrix = [" << std::endl;
+            unsigned numRows = objectToWorld.length();
+            assert(numRows > 0);
+            unsigned numCols = objectToWorld[0].length();
+            for (unsigned row = 0; row < numRows; ++row) {
+                result << Util::repeatedString(indent + 2, indentString) << "[ ";
+                for (unsigned col = 0; col < numCols - 1; ++col) {
+                    result << objectToWorld[row][col] << ", ";
+                }
+                result << objectToWorld[row][numCols - 1] << " ]" << std::endl;
+            }
+            result << Util::repeatedString(indent + 1, indentString) << "]" << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString) << "instance_mask = " << instanceMask << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString)
+                   << "points_to_acceleration_structure_id = " << accelerationStructure->id << std::endl;
+
+            return result.str();
         }
     };
 
@@ -774,6 +768,32 @@ private:
         NodeType type() {
             return NodeType::Triangle;
         }
+
+        std::string toString(const unsigned indent = 0, const std::string indentString = "") const {
+            std::stringstream result("");
+
+            result << Util::repeatedString(indent, indentString) << "triangle_node" << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString) << "opaque = " << (opaque ? "true" : "false")
+                   << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString) << "vertices = [" << std::endl;
+            for (unsigned i = 0; i < vertices.size() - 1; ++i) {
+                result << Util::repeatedString(indent + 2, indentString) << Util::glmVec3ToString(vertices[i]) << ","
+                       << std::endl;
+            }
+            result << Util::repeatedString(indent + 2, indentString)
+                   << Util::glmVec3ToString(vertices[vertices.size() - 1]) << std::endl;
+            result << Util::repeatedString(indent + 1, indentString) << "]" << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString) << "indices = [ ";
+            for (unsigned i = 0; i < indices.size() - 1; ++i) {
+                result << indices[i] << ", ";
+            }
+            result << indices[indices.size() - 1] << " ]" << std::endl;
+
+            return result.str();
+        }
     };
 
     class ProceduralNode : public Node {
@@ -789,6 +809,23 @@ private:
 
         NodeType type() {
             return NodeType::Procedural;
+        }
+
+        std::string toString(const unsigned indent = 0, const std::string indentString = "") const {
+            std::stringstream result("");
+
+            result << Util::repeatedString(indent, indentString) << "procedural_node" << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString) << "opaque = " << (opaque ? "true" : "false")
+                   << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString)
+                   << "min_bounds = " << Util::glmVec3ToString(minBounds) << std::endl;
+
+            result << Util::repeatedString(indent + 1, indentString)
+                   << "max_bounds = " << Util::glmVec3ToString(maxBounds) << std::endl;
+
+            return result.str();
         }
     };
 };
@@ -954,17 +991,6 @@ public:
     }
 
 private:
-    // TODO: combine with one in AccelerationStructure class?
-    std::string tabbedString(unsigned numTabs, std::string message, std::string messageBeforeEachTab = "") {
-        std::stringstream result("");
-
-        for (unsigned i = 0; i < numTabs; ++i)
-            result << messageBeforeEachTab << "\t";
-        result << message;
-
-        return result.str();
-    }
-
     std::string getPrimitiveValueAsString(const Value& value) {
         std::stringstream result("");
         const DataType& dataType = value.getType().getBase();
@@ -1001,6 +1027,7 @@ public:
     /// @return 
     std::string toString() {
         std::stringstream result("");
+        const std::string tabString("|\t");
 
         // Contains the name, value, and number of tabs
         using NameAndValue = std::tuple<const std::string, const Value*, const unsigned>;
@@ -1029,12 +1056,12 @@ public:
                 case DataType::UINT:
                 case DataType::INT:
                 case DataType::BOOL: {
-                    result << tabbedString(numTabs, name, "|") << " = " << getPrimitiveValueAsString(*value) << std::endl;
+                    result << Util::repeatedString(numTabs, tabString) << name << " = " << getPrimitiveValueAsString(*value) << std::endl;
                     break;
                 }
                 case DataType::STRUCT:
                 case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
-                    result << tabbedString(numTabs, name, "|") << " {" << std::endl;
+                    result << Util::repeatedString(numTabs, tabString) << name << " {" << std::endl;
                     frontier.push(std::make_tuple(" }", &customStringValue, numTabs));
 
                     const Struct& info = static_cast<const Struct&>(*value);
@@ -1052,7 +1079,7 @@ public:
                     break;
                 }
                 case DataType::ARRAY: {
-                    result << tabbedString(numTabs, name, "|");
+                    result << Util::repeatedString(numTabs, tabString) << name;
 
                     const Array& info = static_cast<const Array&>(*value);
                     const DataType childDataType = info.getSize() > 0 ? info[0]->getType().getBase() : DataType::VOID;
@@ -1076,7 +1103,7 @@ public:
                     break;
                 }
                 case DataType::STRING: {
-                    result << tabbedString(numTabs, name, "|") << std::endl;
+                    result << Util::repeatedString(numTabs, tabString) << name << std::endl;
                     break;
                 }
             }
