@@ -193,15 +193,18 @@ Instruction* Instruction::readOp(
     case spv::OpMatrixTimesMatrix: // 146
     case spv::OpDot: // 148
     case spv::OpLogicalOr: // 166
+    case spv::OpLogicalAnd: // 167
     case spv::OpSGreaterThan: // 173
     case spv::OpSGreaterThanEqual: // 175
     case spv::OpSLessThan: // 177
     case spv::OpSLessThanEqual: // 179
+    case spv::OpFOrdEqual: // 180
     case spv::OpFOrdLessThan: // 184
     case spv::OpFOrdGreaterThan: // 186
     case spv::OpFOrdLessThanEqual: // 188
     case spv::OpFOrdGreaterThanEqual: // 190
     case spv::OpExecuteCallableKHR: // 4446
+    case spv::OpReportIntersectionKHR: // 5334
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;

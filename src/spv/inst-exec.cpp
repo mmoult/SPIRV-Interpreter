@@ -7,6 +7,7 @@ module;
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -255,9 +256,43 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
         // TODO: call the callable shader once interpreter can invoke multiple shaders
         unsigned indexSBT = static_cast<Primitive&>(*getValue(0, data)).data.u32;
         auto shaderArguments = getFromPointer(1, data);
-        std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as of right now!" << std::endl;
+        std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
         std::cout << "Invoking callable shader at SBT index = (" << indexSBT << ") with argument of type ("
                   << shaderArguments->getType().getBase() << ")" << std::endl;
+        break;
+    }
+    case spv::OpReportIntersectionKHR: { // 5334
+        // TODO: fix once multi-shader invocation a feature
+        // Get intersection information
+        std::cout << "WARNING: OpReportIntersectionKHR instruction does not follow specifications at the moment!" << std::endl;
+        const float hitT = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
+        const unsigned hitKind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+        std::cout << "Intersection shader reported an intersection with hitT = (" << hitT << ") and hitKind = ("
+                  << hitKind << ")" << std::endl;
+
+        // Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        Primitive& result = static_cast<Primitive&>(*getValue(1, data));
+        result.data.b32 = false;
+
+        // TODO: once intersection shader can be invoked by pipeline, use actual rayTMin and rayTMax.
+        // For now, using constants.
+        const float rayTMin = 0.0;
+        const float rayTMax = std::numeric_limits<float>::infinity();
+
+        if (hitT < rayTMin || hitT > rayTMax) {
+            // Intersection is outside of the current ray interval
+            std::cout << "\tRay missed; hitT was not in the range [" << rayTMin << ", " << rayTMax << "]" << std::endl;
+            result.data.b32 = false;
+        } else {
+            // TODO: Invoke any-hit shader.
+            // If ignored by any-hit, return false.
+            // If any-hit rejects it, return false.
+            std::cout << "\t(Not working right now) Invoking any-hit shader..." << std::endl;
+            std::cout << "\tSuccessful any-hit shader" << std::endl;
+            result.data.b32 = true;
+        }
+
         break;
     }
     }

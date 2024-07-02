@@ -956,6 +956,11 @@ bool Instruction::makeResult(
         data[result_at].redefine(
                 new Type(Type::accelerationStructure(std::vector<const Type*> {}, std::vector<std::string> {})));
         break;
+    case spv::OpReportIntersectionKHR: { // 5334
+        assert(hasResultType);
+        Type* ret_type = getType(0, data);
+        data[result_at].redefine(new Primitive(*ret_type));
+    }
 #undef TYPICAL_E_BIN_OP
 #undef INT_E_BIN_OP
 #undef TYPICAL_E_UNARY_OP
