@@ -138,21 +138,22 @@ public:
             [[fallthrough]];
         case SC::StorageClassUniformConstant:
         case SC::StorageClassInput:
+        case SC::StorageClassCallableDataKHR:
+        case SC::StorageClassIncomingCallableDataKHR: // TODO
+        case SC::StorageClassShaderRecordBufferKHR:  // TODO
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
         case SC::StorageClassWorkgroup:
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
-        case SC::StorageClassHitAttributeKHR:  // TODO: does this belong here?
-        case SC::StorageClassIncomingRayPayloadKHR:  // TODO: does this belong here?
-        case SC::StorageClassCallableDataKHR:  // TODO: does this belong here?
-        case SC::StorageClassIncomingCallableDataKHR:  // TODO: does this belong here?
+        case SC::StorageClassHitAttributeKHR:  // TODO
+        case SC::StorageClassIncomingRayPayloadKHR:  // TODO
             ins.push_back(id);
             outs.push_back(id);
             break;
         case SC::StorageClassOutput:
-        case SC::StorageClassRayPayloadKHR:  // TODO: does this belong here? Read/write, not shared externally, no initializer
+        case SC::StorageClassRayPayloadKHR:  // TODO
             outs.push_back(id);
             break;
         case SC::StorageClassPrivate:

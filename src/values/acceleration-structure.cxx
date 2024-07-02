@@ -50,8 +50,9 @@ namespace Util {
 }
 
 /*
-    TODO: convert raw pointers to smart pointers to not worry about memory reclaimation
+    TODO: convert raw pointers to smart pointers to deal with memory reclaimation
     TODO: may want to change how to identify nodes or how nodes work
+    TODO: handle the effects of winding order on intersections; right now, front face is CCW
 */
 class AccelerationStructure {
 private:
