@@ -17,15 +17,16 @@ module;
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
+#include "data/manager.h"
 module spv.instruction;
-import spv.data;
+import spv.data.data;
 import spv.frame;
 import spv.token;
 import value.primitive;
 
-void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const {
+void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
     bool inc_pc = true;
-    Frame& frame = frame_stack.back();
+    Frame& frame = *frame_stack.back();
 
     unsigned result_at;
     if (hasResult) {
@@ -33,6 +34,13 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
         assert(operands[idx].type == Token::Type::REF);
         result_at = std::get<unsigned>(operands[idx].raw);
     }
+
+    // Pops the current frame and returns whether there is any more frames after
+    auto pop_frame = [&frame_stack]() {
+        delete frame_stack.back();
+        frame_stack.pop_back();
+        return !frame_stack.empty();
+    };
 
     Value* dst_val = nullptr;
     switch (opcode) {
@@ -62,6 +70,7 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
         Type* var_type = getType(0, data);
         Variable* var = Variable::makeVariable(storage, *var_type);
         const Value* arg = frame.getArg();
+        // No need to clone the arg since we only delete from the data, not the arg list
         var->setVal(*arg);
         data[result_at].redefine(var);
         break;
@@ -81,7 +90,7 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
             args.push_back(var->getVal());
         }
 
-        frame_stack.emplace_back(fx->getLocation(), args, result_at);
+        frame_stack.push_back(new Frame(fx->getLocation(), args, result_at, *data.getSource()));
         inc_pc = false;
         break;
     }
@@ -154,8 +163,8 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
     case spv::OpKill: // 252
     case spv::OpTerminateInvocation: { // 4416
         // Completely stops execution
-        while (!frame_stack.empty())
-            frame_stack.pop_back();
+        while (pop_frame())
+            ;
         inc_pc = false;
         break;
     }
@@ -163,8 +172,7 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
         // verify that the stack didn't expect a return value
         if (frame.hasReturn())
             throw std::runtime_error("Missing value for function return!");
-        frame_stack.pop_back();
-        inc_pc = !frame_stack.empty(); // don't increment PC if we are at the end of program
+        inc_pc = pop_frame(); // don't increment PC if we are at the end of program
         break;
     case spv::OpReturnValue: { // 254
         if (!frame.hasReturn())
@@ -174,9 +182,10 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
         // to another call of the same function. The return could be (re)defined before the argument is used.
         Value* ret = val->getType().construct();
         ret->copyFrom(*val);
-        data[frame.getReturn()].redefine(ret);
-        frame_stack.pop_back();
-        inc_pc = !frame_stack.empty();
+        auto ret_at = frame.getReturn();
+        inc_pc = pop_frame();
+        // Save the return onto the previous frame
+        frame_stack.back()->getData()[ret_at].redefine(ret);
         break;
     }
     }
@@ -187,11 +196,7 @@ void Instruction::execute(std::vector<Data>& data, std::vector<Frame>& frame_sta
     }
 
     if (inc_pc)
-        frame_stack.back().incPC();
-
-    if (verbose && hasResult) {
-        // TODO
-    }
+        frame_stack.back()->incPC();
 }
 
 void Instruction::print() const {

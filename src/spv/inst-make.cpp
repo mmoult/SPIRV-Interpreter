@@ -20,8 +20,9 @@ module;
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
+#include "data/manager.h"
 module spv.instruction;
-import spv.data;
+import spv.data.data;
 import spv.frame;
 import spv.token;
 import value.aggregate;
@@ -109,7 +110,7 @@ struct OpDst {
     unsigned at;
 };
 template<typename F> // (const Primitive*, const Primitive* -> data primitive)
-void element_bin_op(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, F&& op) {
+void element_bin_op(const OpSrc& srcs, const OpDst& dst, DataView& data, F&& op) {
     const Value* src1 = data[srcs.val1].getValue();
     const Value* src2 = data[srcs.val2].getValue();
 
@@ -153,7 +154,7 @@ void element_bin_op(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data
     data[dst.at].redefine(res);
 }
 template<typename UF, typename IF>
-void element_int_bin_op(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& data, UF&& u_op, IF&& i_op) {
+void element_int_bin_op(const OpSrc& srcs, const OpDst& dst, DataView& data, UF&& u_op, IF&& i_op) {
     Value* first = data[srcs.val1].getValue();
     const Type& type = first->getType();
     DataType dt = type.getBase();
@@ -169,7 +170,7 @@ void element_int_bin_op(const OpSrc& srcs, const OpDst& dst, std::vector<Data>& 
         element_bin_op(src, dst, data, i_op);
 }
 template<typename F> // (const Primitive*, const Primitive* -> data primitive)
-void element_unary_op(const OpSrc& src, const OpDst& dst, std::vector<Data>& data, F&& op) {
+void element_unary_op(const OpSrc& src, const OpDst& dst, DataView& data, F&& op) {
     const Value* src1 = data[src.val1].getValue();
 
     // Operate on a single primitive scalar or array of primitives
@@ -203,7 +204,7 @@ void element_unary_op(const OpSrc& src, const OpDst& dst, std::vector<Data>& dat
 }
 
 bool Instruction::makeResult(
-    std::vector<Data>& data,
+    DataView& data,
     unsigned location,
     Instruction::DecoQueue* queue
 ) const noexcept(false) {
@@ -211,7 +212,7 @@ bool Instruction::makeResult(
         return false; // no result made!
 
     // Result type comes before result, if present
-    unsigned data_len = data.size();
+    unsigned data_len = data.getBound();
     unsigned result_at = checkRef(hasResultType, data_len);
 
     switch (opcode) {
@@ -959,11 +960,11 @@ bool Instruction::makeResult(
 }
 
 bool Instruction::makeResultGlsl(
-    std::vector<Data>& data,
+    DataView& data,
     unsigned location,
     unsigned result_at
 ) const noexcept(false) {
-    unsigned data_len = data.size();
+    unsigned data_len = data.getBound();
     // https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.pdf
     // extension opcode at operand[3]
     unsigned ext_opcode = std::get<unsigned>(operands[3].raw);

@@ -9,12 +9,13 @@ module;
 #include <stdexcept>
 #include <vector>
 
+#include "data/manager.h"
 #include "../external/spirv.hpp"
 #include "../values/value.hpp"
 export module spv.program;
 import format.parse;
 import front.debug;
-import spv.data;
+import spv.data.data;
 import spv.frame;
 import spv.instruction;
 
@@ -22,8 +23,7 @@ export class Program {
     std::vector<Instruction> insts;
     unsigned entry;
 
-    // An list of disparate data entries, where length == bound. Each entry can be:
-    std::vector<Data> data;
+    DataManager data;
     // Note: At some future time, we may associate one program with multiple data vectors. Therefore, the program
     // may keep ids, but never data objects directly!
     std::vector<unsigned> ins;
@@ -128,7 +128,7 @@ if (!(COND)) \
     ValueMap getVariables(const std::vector<unsigned>& vars) const {
         ValueMap ret;
         for (const auto v : vars) {
-            const auto var = data[v].getVariable();
+            const auto var = data.getGlobal()[v].getVariable();
             ret.emplace(var->getName(), var->getVal());
         }
         return ret;
@@ -148,28 +148,20 @@ if (!(COND)) \
     }
 
 public:
-    Program() = default;
-    ~Program() {
-        // The program manages the data, so it must clear on destruction
-        // (Don't use for-each here in case we need the index for debugging.)
-        for (unsigned i = 0; i < data.size(); ++i)
-            data[i].clear();
-    }
-    Program(const Program& other) = delete;
-    Program& operator=(const Program& other) = delete;
 
     void parse(uint8_t* buffer, int length) noexcept(false) {
         // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
         // This allows for a cleaner separation of data.
         ProgramLoader load(buffer, length);
         uint32_t bound = load.parse(insts);
-        std::fill_n(std::back_inserter(data), bound, Data());
+        data.setBound(bound);
     }
 
     void init(ValueMap& provided) noexcept(false) {
         Instruction::DecoQueue decorations(insts);
         bool entry_found = false; // whether the entry instruction has been found
         bool static_ctn = true; // whether we can construct results statically (until first OpFunction)
+        DataView& global = data.getGlobal();
         for (unsigned location = 0; location < insts.size(); ++location) {
             Instruction& inst = insts[location];
             auto opcode = inst.getOpcode();
@@ -190,10 +182,10 @@ public:
 
                 // Process the instruction as necessary
                 // If it has a static result, let it execute now on the data vector
-                if (!inst.queueDecoration(data.size(), location, decorations)) {
-                    inst.makeResult(data, location, &decorations);
+                if (!inst.queueDecoration(data.getBound(), location, decorations)) {
+                    inst.makeResult(global, location, &decorations);
                     if (isIOGenCode(opcode) && static_ctn)
-                        inst.ioGen(data, ins, outs, provided);
+                        inst.ioGen(global, ins, outs, provided);
                 }
             }
         }
@@ -205,8 +197,9 @@ public:
     void checkInputs(ValueMap& provided) noexcept(false) {
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
+        DataView& global = data.getGlobal();
         for (const auto in : ins) {
-            auto var = data[in].getVariable();
+            auto var = global[in].getVariable();
             // var already checked not null in ioGen
             inputs.push_back(var);
         }
@@ -263,8 +256,9 @@ public:
     std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true) {
         // First, create a list of variables from outputs
         std::vector<const Variable*> outputs;
+        const auto& global = data.getGlobal();
         for (const auto out : outs) {
-            auto var = data[out].getVariable();
+            auto var = global[out].getVariable();
             // var already checked not null in ioGen
             outputs.push_back(var);
         }
@@ -318,15 +312,17 @@ public:
     void execute(bool verbose, bool debug, ValueFormat& format) noexcept(false) {
         Debugger debugger(insts, format);
         Instruction& entry_inst = insts[entry];
-        unsigned start = entry_inst.getEntryStart(data);
+        unsigned start = entry_inst.getEntryStart(data.getGlobal());
 
         // SPIR-V forbids recursion (either direct or indirect), so we don't have to keep a stack frame for locals
         // However, we will simulate a stack frame for holding temporaries (args and returns) and pc
-        std::vector<Frame> frame_stack;
+        std::vector<Frame*> frame_stack;
         std::vector<const Value*> entry_args;
-        frame_stack.emplace_back(start, entry_args, 0);
+        frame_stack.push_back(new Frame(start, entry_args, 0, data));
         while (!frame_stack.empty()) {
-            unsigned i_at = frame_stack.back().getPC();
+            auto& cur_frame = *frame_stack.back();
+            DataView& cur_data = cur_frame.getData();
+            unsigned i_at = cur_frame.getPC();
             if (i_at >= insts.size())
                 throw std::runtime_error("Program execution left program's boundaries!");
 
@@ -334,15 +330,21 @@ public:
             if (verbose)
                 debugger.printLine(i_at);
             if (debug) {
-                if (debugger.invoke(i_at, data, frame_stack))
+                if (debugger.invoke(i_at, cur_data, frame_stack))
                     break;
             }
 
-            insts[i_at].execute(data, frame_stack, verbose);  // execute the line of code
+            unsigned frame_depth = frame_stack.size();
+            insts[i_at].execute(cur_data, frame_stack, verbose);  // execute the line of code
 
             // print the result if verbose
-            if (unsigned result = insts[i_at].getResult(); verbose && result > 0) {
-                debugger.print(result, data);
+            if (unsigned result = insts[i_at].getResult();
+                    // Print the result's value iff:
+                    // - verbose mode is enabled
+                    // - the instruction has a result to print
+                    // - the instruction didn't add or remove a frame (in which case, the value may be undefined)
+                    verbose && result > 0 && frame_stack.size() == frame_depth) {
+                debugger.print(result, cur_data);
             }
         }
     }

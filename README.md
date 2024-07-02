@@ -12,7 +12,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 13 test examples, and counting
+- 14 test examples, and counting
 
 ## Limitations
 
@@ -21,11 +21,6 @@ For the sake of runtime speed and code clarity, the interpreter expects syntacti
 nor does it intend to be, a SPIR-V validator. If that is what you need, use `spirv-val` in
 [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). If the input SPIR-V file is invalid, the behavior of the
 interpretation is undefined. This should not be a problem since most SPIR-V is auto-generated.
-
-### Recursion
-Static recursion is not *technically* forbidden by the SPIR-V spec, but it is forbidden by Vulkan (see
-`VUID-StandaloneSpirv-None-04634`). For the time being, the interpreter does not guarantee correct execution of programs
-with recursion (although support is planned for the future).
 
 ### Image Processing
 The SPIR-V specification does not explicitly define how some image operations should be done. This presents some
