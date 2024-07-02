@@ -1,0 +1,164 @@
+{
+    "gl_LaunchIDEXT" : [ 1, 2, 3 ],
+    "gl_LaunchSizeEXT" : [ 3, 2, 1 ],
+
+    "rayFlags" : 16, // Cull back facing triangles
+    "cullMask" : 255, // 0xFF
+    "offsetSBT" : 0,
+    "strideSBT" : 0,
+    "missIndex" : 0,
+    "rayOrigin" : [ 0.5, 1.84, -2.7 ],
+    "rayTMin" : 0.0,
+    "rayDirection" : [ 0.3, 0.0, 5.0 ],
+    "rayTMax" : 5.0, 
+
+    "indexSBTCallable" : 727,
+    "callableData": [ 1.234, 4.321 ],
+    
+    "accelStruct" : {
+        "accelerationStructuresInfo" : [
+            {
+                "numBoxNodes" : 3,
+                "numInstanceNodes" : 4,
+                "numTriangleNodes" : 0,
+                "numProceduralNodes" : 0
+            },
+            {
+                "numBoxNodes" : 3,
+                "numInstanceNodes" : 0,
+                "numTriangleNodes" : 3,
+                "numProceduralNodes" : 1
+            },
+            {
+                "numBoxNodes" : 0,
+                "numInstanceNodes" : 0,
+                "numTriangleNodes" : 1,
+                "numProceduralNodes" : 0
+            },
+            {
+                "numBoxNodes" : 1,
+                "numInstanceNodes" : 0,
+                "numTriangleNodes" : 2,
+                "numProceduralNodes" : 0
+            }
+        ],
+        "accelerationStructure0" : {
+            "isTLAS" : true,
+            "box0" : {
+                "minBounds": [ -4.0, -4.0, -7.0 ],
+                "maxBounds": [ 2.0, 6.0, 6.0 ],
+                "childrenIndices" : [ 1, 2 ]
+            },
+            "box1" : {
+                "minBounds": [ -4.0, -4.0, -7.0 ],
+                "maxBounds": [ 2.0, 6.0, -1.0 ],
+                "childrenIndices" : [ 3, 4 ]
+            },
+            "box2" : {
+                "minBounds": [ -4.0, -4.0, 1.0 ],
+                "maxBounds": [ 2.0, 6.0, 5.0 ],
+                "childrenIndices" : [ 5, 6 ]
+            },
+            "instance0" : {
+                "objectToWorldMatrix" : [ // Translate
+                    [ 1.0, 0.0, 0.0, 0.0 ],
+                    [ 0.0, 1.0, 0.0, 2.8 ],
+                    [ 0.0, 0.0, 1.0, -5.0 ]
+                ],
+                "mask" : 255, // 0xFF
+                "index" : 1
+            },
+            "instance1" : { // Single triangle
+                "objectToWorldMatrix" : [ // Translate
+                    [ 1.0, 0.0, 0.0, 0.5 ],
+                    [ 0.0, 1.0, 0.0, 1.74 ],
+                    [ 0.0, 0.0, 1.0, -1.36 ]
+                ],
+                "mask" : 1, // 0x1
+                "index" : 2
+            },
+            "instance2" : {
+                "objectToWorldMatrix" : [ // Translate to center -> Rotate by 45 degrees -> Scale by 2 -> Translate
+                    [ 1.4142, 0.0, -1.4142, -2.7071 ],
+                    [ 0.0, 2.0, 0.0, -2.04 ],
+                    [ 1.4142, 0.0, 1.4142, 3.1929 ]
+                ],
+                "mask" : 255, // 0xFF
+                "index" : 3
+            },
+            "instance3" : { // Single triangle
+                "objectToWorldMatrix" : [ // Translate
+                    [ 1.0, 0.0, 0.0, -0.5 ],
+                    [ 0.0, 1.0, 0.0, -1.74 ],
+                    [ 0.0, 0.0, 1.0, 1.36 ]
+                ],
+                "mask" : 1, // 0x1
+                "index" : 2
+            }
+        },
+        "accelerationStructure1" : {
+            "isTLAS" : false,
+            "box0" : {
+                "minBounds": [ -4.0, -2.0, -1.0 ],
+                "maxBounds": [ 2.0, 2.0, 2.0 ],
+                "childrenIndices" : [ 1, 2 ]
+            },
+            "box1" : {
+                "minBounds": [ 0.0, -2.0, 0.0 ],
+                "maxBounds": [ 2.0, 2.0, 2.0 ],
+                "childrenIndices" : [ 3, 4 ]
+            },
+            "box2" : {
+                "minBounds": [ -4.0, -2.0, -1.0 ],
+                "maxBounds": [ 0.0, 0.0, 2.0 ],
+                "childrenIndices" : [ 5, 6 ]
+            },
+            "triangle0" : {
+                "opaque" : true,
+                "vertices" : [ [ 0.0, 2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ 2.0, 0.0, 0.0 ] ],
+                "indices" : [ 0, 1, 2 ]
+            },
+            "triangle1" : {
+                "opaque" : true,
+                "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 2.0, 0.0, 0.0 ], [ 0.0, 0.0, 0.0 ] ],
+                "indices" : [ 0, 1, 2 ]
+            },
+            "triangle2" : {
+                "opaque" : true,
+                "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ -2.0, 0.0, 0.0 ] ],
+                "indices" : [ 0, 1, 2 ]
+            },
+            "procedural0" : {
+                "opaque" : true,
+                "minBounds" : [ -2.5, 0.0, 0.0 ],
+                "maxBounds" : [ -3.5, -1.0, -1.0 ]
+            }
+        },
+        "accelerationStructure2" : {
+            "isTLAS" : false,
+            "triangle0" : {
+                "opaque" : false,
+                "vertices" : [ [ 0.0, 1.5, 0.0 ], [ -1.25, -1.25, 0.0 ], [ 1.5, 0.0, 0.0 ] ],
+                "indices" : [ 0, 1, 2 ]
+            }
+        },
+        "accelerationStructure3" : {
+            "isTLAS" : false,
+            "box0" : {
+                "minBounds": [ 0.0, 0.0, -0.1 ],
+                "maxBounds": [ 1.0, 1.0, 0.1 ],
+                "childrenIndices" : [ 1, 2 ]
+            },
+            "triangle0" : {
+                "opaque" : true,
+                "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 1.0, 1.0, 0.0 ], [ 1.0, 0.0, 0.0 ] ],
+                "indices" : [ 0, 1, 2 ]
+            },
+            "triangle1" : {
+                "opaque" : true,
+                "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 0.0, 1.0, 0.0 ], [ 1.0, 1.0, 0.0 ] ],
+                "indices" : [ 0, 1, 2 ]
+            }
+        }
+    }
+}
