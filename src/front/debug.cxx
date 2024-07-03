@@ -14,13 +14,14 @@ module;
 #include <stdexcept>
 #include <vector>
 
+#include "../spv/data/manager.h"
 #include "../util/trie.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
 export module front.debug;
 import format.parse;
 import front.console;
-import spv.data;
+import spv.data.data;
 import spv.frame;
 import spv.instruction;
 import value.string;
@@ -143,12 +144,12 @@ export class Debugger {
         }
     }
 
-    void breakOnReturn(const std::vector<Frame>& frame_stack) {
+    void breakOnReturn(const std::vector<Frame*>& frame_stack) {
         // Create an ephemeral at the pc of the frame below ours on the stack
         if (frame_stack.size() > 1) {
-            const Frame& frame = frame_stack[frame_stack.size() - 2];
+            const Frame* frame = frame_stack[frame_stack.size() - 2];
             ephemeral.on = true;
-            ephemeral.line = frame.getPC() + 1;
+            ephemeral.line = frame->getPC() + 1;
         }
     }
 
@@ -175,7 +176,7 @@ public:
         maxLineDigits = numDigits(insts.size());
     }
 
-    void print(unsigned which, const std::vector<Data>& data) const {
+    void print(unsigned which, const DataView& data) const {
         std::stringstream out;
         ValueMap vars;
         std::stringstream result_name;
@@ -186,19 +187,28 @@ public:
         std::vector<Type*> to_delete;
 
         const String empty("null");
-        if (const Value* agot = data[which].getValue(); agot != nullptr) {
-            val = agot;
-            deleteAfter = false;
-        } else if (const Type* tgot = data[which].getType(); tgot != nullptr)
-            val = tgot->asValue(to_delete);
-        else if (const Variable* vgot = data[which].getVariable(); vgot != nullptr)
-            val = vgot->asValue(to_delete);
-        else if (const Function* fgot = data[which].getFunction(); fgot != nullptr)
-            val = fgot->asValue(to_delete);
+        bool defaulted = false;
+        if (!data.contains(which))
+            defaulted = true;
         else {
+            const Data& dat = data[which];
+            if (const Value* agot = dat.getValue(); agot != nullptr) {
+                val = agot;
+                deleteAfter = false;
+            } else if (const Type* tgot = dat.getType(); tgot != nullptr)
+                val = tgot->asValue(to_delete);
+            else if (const Variable* vgot = dat.getVariable(); vgot != nullptr)
+                val = vgot->asValue(to_delete);
+            else if (const Function* fgot = dat.getFunction(); fgot != nullptr)
+                val = fgot->asValue(to_delete);
+            else
+                defaulted = true;
+        }
+        if (defaulted) {
             val = &empty;
             deleteAfter = false;
         }
+
         vars[result_name.str()] = val;
 
         // Print the result
@@ -218,7 +228,7 @@ public:
         insts[i_at].print();
     }
 
-    bool invoke(unsigned i_at, const std::vector<Data>& data, const std::vector<Frame>& frame_stack) {
+    bool invoke(unsigned i_at, const DataView& data, const std::vector<Frame*>& frame_stack) {
         bool stop = stopNext;
         if (stop) {
             if (nextCheck.on) {
@@ -414,7 +424,7 @@ public:
                 if (!may_which.has_value())
                     break;
                 unsigned which = *may_which;
-                if (which >= data.size() || which == 0)
+                if (which >= data.getBound() || which == 0)
                     std::cout << "Cannot display %" << which << "! Outside of data range." << std::endl;
                 else
                     print(which, data);
@@ -428,7 +438,7 @@ public:
                 stop = false;
                 break;
             CASE PROGRAM: {
-                unsigned line_print = frame_stack.back().getPC();
+                unsigned line_print = frame_stack.back()->getPC();
                 unsigned surround = 3;
                 bool all = false;
                 unsigned num_tokens = tokens.size();
@@ -534,9 +544,9 @@ public:
                 const std::string return_label = "return:";
                 unsigned pc_max = 0;
                 unsigned return_max = 0;
-                for (const auto& frame : frame_stack) {
-                    pc_max = std::max(pc_max, frame.getPC());
-                    return_max = std::max(return_max, frame.getReturn());
+                for (const auto* frame : frame_stack) {
+                    pc_max = std::max(pc_max, frame->getPC());
+                    return_max = std::max(return_max, frame->getReturn());
                 }
                 pc_max = std::max(static_cast<unsigned>(pc_label.length()), numDigits(pc_max)) + BUFFER;
                 return_max = std::max(static_cast<unsigned>(return_label.length()), numDigits(return_max)) + BUFFER;
@@ -546,7 +556,7 @@ public:
                 std::cout << "last_label:" << std::endl;
                 // Print stack frames backwards so the current frame is on top and previous frames are below it
                 for (unsigned i = frame_stack.size(); i-- > 0;) {
-                    const auto& frame = frame_stack[i];
+                    const auto& frame = *frame_stack[i];
                     unsigned pc = frame.getPC();
                     std::cout << pc << std::string(pc_max - numDigits(pc), ' ');
                     if (!frame.hasReturn())

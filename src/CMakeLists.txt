@@ -16,7 +16,7 @@ target_sources(spv-interp
       front/argparse.cxx
       front/console.cxx
       front/debug.cxx
-      spv/data.cxx
+      spv/data/data.cxx
       spv/frame.cxx
       spv/instruction.cxx
       spv/program.cxx
@@ -31,6 +31,7 @@ target_sources(spv-interp
 # Add other source files
 target_sources(spv-interp
   PUBLIC
+    spv/data/manager.cpp
     spv/inst-exec.cpp
     spv/inst-make.cpp
     spv/inst-read.cpp

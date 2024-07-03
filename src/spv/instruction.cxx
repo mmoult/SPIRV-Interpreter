@@ -15,8 +15,9 @@ module;
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
+#include "data/manager.h"
 export module spv.instruction;
-import spv.data;
+import spv.data.data;
 import spv.frame;
 import spv.token;
 import value.pointer;
@@ -42,20 +43,20 @@ export class Instruction {
         return result_at;
     }
 
-    Type* getType(unsigned idx, std::vector<Data>& data) const {
-        return data[checkRef(idx, data.size())].getType();
+    Type* getType(unsigned idx, DataView& data) const {
+        return data[checkRef(idx, data.getBound())].getType();
     }
-    Value* getValue(unsigned idx, std::vector<Data>& data) const {
-        return data[checkRef(idx, data.size())].getValue();
+    Value* getValue(unsigned idx, DataView& data) const {
+        return data[checkRef(idx, data.getBound())].getValue();
     }
-    Function* getFunction(unsigned idx, std::vector<Data>& data) const {
-        return data[checkRef(idx, data.size())].getFunction();
+    Function* getFunction(unsigned idx, DataView& data) const {
+        return data[checkRef(idx, data.getBound())].getFunction();
     }
-    Variable* getVariable(unsigned idx, std::vector<Data>& data) const {
-        return data[checkRef(idx, data.size())].getVariable();
+    Variable* getVariable(unsigned idx, DataView& data) const {
+        return data[checkRef(idx, data.getBound())].getVariable();
     }
 
-    Value* getHeadValue(const Pointer& pointer, std::vector<Data>& data) const noexcept(false) {
+    Value* getHeadValue(const Pointer& pointer, DataView& data) const noexcept(false) {
         unsigned start = pointer.getHead();
         // Head can be either a variable or a value
         Value* head = data[start].getValue();
@@ -75,7 +76,7 @@ export class Instruction {
         return head;
     }
 
-    Value* getFromPointer(unsigned index, std::vector<Data>& data) const noexcept(false) {
+    Value* getFromPointer(unsigned index, DataView& data) const noexcept(false) {
         if (Variable* from = getVariable(index, data); from != nullptr)
             return from->getVal();
 
@@ -88,7 +89,7 @@ export class Instruction {
         return pointer.dereference(*head);
     }
 
-    bool makeResultGlsl(std::vector<Data>& data, unsigned location, unsigned result_at) const noexcept(false);
+    bool makeResultGlsl(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
 
     static std::string printOpcode(spv::Op opcode);
 
@@ -116,12 +117,12 @@ public:
     /// @param outs a list of ref indices in data pointing to out variables
     /// @param provided a map of input variables. Needed for spec constants
     void ioGen(
-        std::vector<Data>& data,
+        DataView& data,
         std::vector<unsigned>& ins,
         std::vector<unsigned>& outs,
         ValueMap& provided
     ) const noexcept(false) {
-        const unsigned len = data.size();
+        const unsigned len = data.getBound();
         Variable* var = getVariable(1, data);
         unsigned id = std::get<unsigned>(operands[1].raw);
         assert(var != nullptr);  // should have already been created
@@ -168,7 +169,7 @@ public:
         return opcode;
     }
 
-    unsigned getEntryStart(std::vector<Data>& data) const noexcept(false) {
+    unsigned getEntryStart(DataView& data) const noexcept(false) {
         assert(opcode == spv::OpEntryPoint);
 
         // The entry function ref is operand 1
@@ -253,7 +254,7 @@ public:
     /// @param data the vector of Data objects used by the program
     /// @param location the index of this instruction in the program
     /// @return whether some result was made. If used as a fallback, this should be true!
-    bool makeResult(std::vector<Data>& data, unsigned location, DecoQueue* queue) const noexcept(false);
+    bool makeResult(DataView& data, unsigned location, DecoQueue* queue) const noexcept(false);
 
     /// @brief whether instruction in non-static sections should make its result statically
     /// Some instructions, such as OpFunction and OpLabel, appear in non-static code sections, but need to
@@ -263,7 +264,7 @@ public:
         return opcode == spv::OpFunction || opcode == spv::OpLabel || opcode == spv::OpVariable;
     }
 
-    void execute(std::vector<Data>& data, std::vector<Frame>& frame_stack, bool verbose) const;
+    void execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const;
 
     void print() const;
 

@@ -10,10 +10,10 @@ module;
 #include <sstream>
 #include <stdexcept>
 
-#include "../external/spirv.hpp"
-#include "../values/type.hpp"
-#include "../values/value.hpp"
-export module spv.data;
+#include "../../external/spirv.hpp"
+#include "../../values/type.hpp"
+#include "../../values/value.hpp"
+export module spv.data.data;
 import value.aggregate;
 import value.primitive;
 import value.string;
