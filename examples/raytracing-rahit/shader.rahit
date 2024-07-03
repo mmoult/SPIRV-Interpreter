@@ -1,0 +1,20 @@
+#version 460 core
+#extension GL_EXT_ray_tracing : require
+
+layout(location = 0) in float opacity; // 0.0f = transparent, 1.0f = opaque
+
+void main()
+{
+    // The very first opaque geometry evaluated will terminate the ray
+    // Round about way so that interpreter can work with these
+    float o = opacity;
+    if (o > 1.0f)
+        o = 1.0f;
+    else if (o < 0.0f)
+        o = 0.0f;
+
+    if (o < 1.0f)
+        ignoreIntersectionEXT;
+    
+    terminateRayEXT;
+}
