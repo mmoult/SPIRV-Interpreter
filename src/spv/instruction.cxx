@@ -148,13 +148,13 @@ public:
         case SC::StorageClassWorkgroup:
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
+        case SC::StorageClassHitAttributeKHR:  // TODO
         case SC::StorageClassIncomingRayPayloadKHR:  // TODO
             ins.push_back(id);
             outs.push_back(id);
             break;
         case SC::StorageClassOutput:
         case SC::StorageClassRayPayloadKHR:  // TODO
-        case SC::StorageClassHitAttributeKHR:  // TODO
             outs.push_back(id);
             break;
         case SC::StorageClassPrivate:
