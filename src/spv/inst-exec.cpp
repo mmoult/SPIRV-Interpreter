@@ -270,6 +270,35 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                   << shaderArguments->getType().getBase() << ")" << std::endl;
         break;
     }
+    case spv::OpConvertUToAccelerationStructureKHR: {
+        // TODO: needs the get an acceleration structure from a buffer via a 64-bit address
+        // TODO: currently does not support uint64_t
+        std::cout << "WARNING: OpConvertUToAccelerationStructureKHR instruction does nothing as the moment!" << std::endl;
+        Value* addressPointer = getValue(2, data);
+        assert(addressPointer != nullptr);
+        uint64_t address = 0;
+        if (addressPointer->getType().getBase() == DataType::ARRAY) {
+            // case uvec2
+            Array& addressComponents = static_cast<Array&>(*addressPointer);
+            assert(addressComponents.getSize() == 2);
+            address = static_cast<Primitive&>(*(addressComponents[0])).data.u32;
+            address <<= 32;
+            uint32_t lower = static_cast<Primitive&>(*(addressComponents[1])).data.u32;
+            address |= lower;
+        } else {
+            // case uint64_t
+            throw std::runtime_error("uint64_t is unsupported for OpConvertUToAccelerationStructureKHR.");
+        }
+        std::cout << "\taddress = " << address << std::endl;
+                
+        // Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        AccelerationStructureManager& result = static_cast<AccelerationStructureManager&>(*getValue(1, data));
+
+        // TODO: set the acceleration structure
+        throw std::runtime_error("OpConvertUToAccelerationStructureKHR not implemented.");
+        break;
+    }
     case spv::OpIgnoreIntersectionKHR: { // 4448
         // TODO: update once interpreter supports multi-shader invocation
         std::cout << "WARNING: OpIgnoreIntersectionKHR instruction does nothing as the moment!" << std::endl;

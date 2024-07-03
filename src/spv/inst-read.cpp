@@ -219,6 +219,7 @@ Instruction* Instruction::readOp(
     case spv::OpLogicalNot: // 168
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
+    case spv::OpConvertUToAccelerationStructureKHR: // 4447
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeStruct: // 30

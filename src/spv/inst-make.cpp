@@ -951,6 +951,13 @@ bool Instruction::makeResult(
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
+    case spv::OpConvertUToAccelerationStructureKHR: { // 4447
+        assert(hasResultType);
+        Type* ret_type = getType(0, data);
+        assert(ret_type->getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
+        data[result_at].redefine(new Type(*ret_type));
+        break;
+    }
     case spv::OpTypeAccelerationStructureKHR: // 5341
         // Will define the type in class "AccelerationStructureManager" in "acceleration-structure.cxx" in "copyFrom()"
         // method. Passing in empty vectors instead.
