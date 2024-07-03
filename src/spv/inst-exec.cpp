@@ -270,8 +270,36 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                   << shaderArguments->getType().getBase() << ")" << std::endl;
         break;
     }
+    case spv::OpIgnoreIntersectionKHR: { // 4448
+        // TODO: update once interpreter supports multi-shader invocation
+        std::cout << "WARNING: OpIgnoreIntersectionKHR instruction does nothing as the moment!" << std::endl;
+        std::cout << "\tShould terminate the calling any-hit shader and continue ray traversal without modifying "
+                     "gl_RayTmaxEXT and gl_RayTminEXT."
+                  << std::endl;
+
+        // TODO: temporarily do what OpReturn does
+        // verify that the stack didn't expect a return value
+        if (frame.hasReturn())
+            throw std::runtime_error("Missing value for function return!");
+        inc_pc = pop_frame(); // don't increment PC if we are at the end of program
+
+        break;
+    }
+    case spv::OpTerminateRayKHR: { // 4449
+        // TODO: update once interpreter supports multi-shader invocation
+        std::cout << "WARNING: OpTerminateRayKHR instruction does nothing as the moment!" << std::endl;
+        std::cout << "\tShould stop the ray traversal and invoke the closest hit shader." << std::endl;
+
+        // TODO: temporarily do what OpReturn does
+        // verify that the stack didn't expect a return value
+        if (frame.hasReturn())
+            throw std::runtime_error("Missing value for function return!");
+        inc_pc = pop_frame(); // don't increment PC if we are at the end of program
+
+        break;
+    }
     case spv::OpReportIntersectionKHR: { // 5334
-        // TODO: fix once multi-shader invocation a feature
+        // TODO: update once interpreter supports multi-shader invocation
         // Get intersection information
         std::cout << "WARNING: OpReportIntersectionKHR instruction does not follow specifications at the moment!" << std::endl;
         const float hitT = static_cast<Primitive&>(*getValue(2, data)).data.fp32;

@@ -106,6 +106,8 @@ Instruction* Instruction::readOp(
     case spv::OpReturn: // 253
     case spv::OpNoLine: // 317
     case spv::OpTerminateInvocation: // 4416
+    case spv::OpIgnoreIntersectionKHR: // 4448
+    case spv::OpTerminateRayKHR: // 4449
     case spv::OpTypeAccelerationStructureKHR: // 5341
         // no operands to handle (besides result and type, if present)
         break;
