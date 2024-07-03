@@ -1,0 +1,107 @@
+// Sphere intersection algorithm adapted from Scratchapixel
+// https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection.html
+
+#version 460 core
+#extension GL_EXT_ray_tracing : require
+
+layout(location = 0) in vec3 sphereCenter;
+layout(location = 1) in float sphereRadius;
+layout(location = 2) out uint intersection;
+
+hitAttributeEXT vec3 normal;
+
+struct Intersection
+{
+    float t0;
+    float t1;
+    bool intersected;
+};
+
+Intersection solveQuadratic(float a, float b, float c)
+{
+    Intersection results = { -1.0f, -1.0f, false };
+
+    float discriminant = b * b - 4.0f * a * c;
+    if (discriminant < 0.0f)
+        return results;
+    else if (discriminant == 0.0f)
+    {
+        results.t0 = -0.5f * b / a;
+        results.t1 = results.t0;
+    }
+    else
+    {
+        float q = (b > 0.0f) ?
+            -0.5f * (b + sqrt(discriminant)) :
+            -0.5f * (b - sqrt(discriminant));
+        results.t0 = q / a;
+        results.t1 = c / q;
+    }
+
+    results.intersected = true;
+    return results;
+}
+
+Intersection raySphereIntersection(vec3 center, float radius, vec3 rayOrigin, vec3 rayDir) 
+{
+    Intersection results = { -1.0f, -1.0f, false };
+
+    const vec3 L = rayOrigin - center;
+    float a = dot(rayDir, rayDir);
+    float b = 2.0f * dot(rayDir, L);
+    float c = dot(L, L) - radius * radius;
+
+    Intersection quadraticResults = solveQuadratic(a, b, c);
+    if (!quadraticResults.intersected)
+        return results;
+
+    float t0 = quadraticResults.t0;
+    float t1 = quadraticResults.t1;
+
+    if (t0 > t1)
+    {
+        const float temp = t0;
+        t0 = t1;
+        t1 = temp;
+    }
+
+    // If t0 is negative, use t1 instead
+    if (t0 < 0.0f)
+    {
+        t0 = t1;
+
+        // If both are negative, return false
+        if (t0 < 0.0f)
+            return results;
+    }
+
+    results.t0 = t0;
+    results.t1 = t1;
+    results.intersected = true;
+    return results;
+}
+
+void main() 
+{
+    vec3 rayOrigin = gl_ObjectRayOriginEXT;
+    vec3 rayDirection = gl_ObjectRayDirectionEXT;
+
+    const Intersection result = raySphereIntersection (
+        sphereCenter, 
+        sphereRadius, 
+        rayOrigin, 
+        rayDirection
+    );
+
+    const float t = result.t0;
+
+    if (result.intersected && t >= 0)
+    {
+        // Intersected sphere in direction of ray
+        vec3 entryPoint = rayOrigin + rayDirection * t;
+        normal = normalize(entryPoint - sphereCenter);
+    }
+
+    // Note: parameters: hitT, hitKind
+    intersection = uint(reportIntersectionEXT(t, 0));
+}
