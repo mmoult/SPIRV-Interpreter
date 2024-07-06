@@ -124,15 +124,6 @@ int main(int argc, char* argv[]) {
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
-    /*
-    ArgParse::UintOption single_invoc("INVOK_ID", 2);
-    parser.addOption(
-        &single_invoc,
-        "single",
-        "Run only one invocation even if multiple are specified (such as by LocalSize).",
-        ""
-    );
-    */
     ArgParse::StringOption template_arg("FILE");
     parser.addOption(
         &template_arg,
@@ -222,7 +213,7 @@ int main(int argc, char* argv[]) {
 
     // We must load the inputs, if any, before init. This is because specialization constants must know their input.
     // Indeed, if the size of input variables is dependent on specialization constants (which it might be), then it is
-    // vital the correct input is used before we generate the template.
+    // vital that the correct input is used before we generate the template.
     // Of course, even if there are specialization constants, they should have some default value which will be used if
     // the user doesn't provide something to override it.
     ValueMap inputs;

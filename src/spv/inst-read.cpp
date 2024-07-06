@@ -188,14 +188,23 @@ Instruction* Instruction::readOp(
     case spv::OpMatrixTimesMatrix: // 146
     case spv::OpDot: // 148
     case spv::OpLogicalOr: // 166
+    case spv::OpIEqual: // 170
+    case spv::OpINotEqual: // 171
+    case spv::OpUGreaterThan: // 172
     case spv::OpSGreaterThan: // 173
+    case spv::OpUGreaterThanEqual: // 174
     case spv::OpSGreaterThanEqual: // 175
+    case spv::OpULessThan: // 176
     case spv::OpSLessThan: // 177
+    case spv::OpULessThanEqual: // 178
     case spv::OpSLessThanEqual: // 179
     case spv::OpFOrdLessThan: // 184
     case spv::OpFOrdGreaterThan: // 186
     case spv::OpFOrdLessThanEqual: // 188
     case spv::OpFOrdGreaterThanEqual: // 190
+    case spv::OpShiftRightLogical: // 194
+    case spv::OpShiftRightArithmetic: // 195
+    case spv::OpShiftLeftLogical: // 196
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
@@ -270,6 +279,7 @@ Instruction* Instruction::readOp(
         repeating = true;
         break;
     case spv::OpSelect: // 169
+    case spv::OpControlBarrier: // 224
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);

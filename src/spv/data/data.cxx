@@ -26,7 +26,7 @@ export class Variable {
     spv::StorageClass storage;
     // name of the variable, how this variable can be referenced by in and out toml files
     std::string name;
-    std::map<uint32_t, uint32_t> decorations;
+    spv::BuiltIn builtIn = spv::BuiltIn::BuiltInMax;
 
     // Whether this variable is a spec constant, which is treated as a value and a variable
     bool specConst;
@@ -40,7 +40,13 @@ export class Variable {
         specConst(spec_const) {}
 
 public:
-    Variable(const Variable&) = delete;
+    Variable(const Variable& other):
+            storage(other.storage),
+            name(other.name),
+            builtIn(other.builtIn),
+            specConst(other.specConst) {
+        val = other.val->getType().construct();
+    }
     Variable& operator= (const Variable&) = delete;
     ~Variable() {
         if (val != nullptr)
@@ -61,11 +67,6 @@ public:
     /// @param value saved (not copied) as the variable's value. Must be on the heap!
     [[nodiscard]] static Variable* makeSpecConst(Value* value) {
         return new Variable(value, spv::StorageClass::StorageClassPushConstant, true);
-    }
-
-    void decorate(uint32_t deco_type, uint32_t deco_value) {
-        // TODO: is it legal to have two decorations on the same type?
-        decorations[deco_type] = deco_value;
     }
 
     spv::StorageClass getStorageClass() const {
@@ -91,6 +92,13 @@ public:
     }
     Value* getVal() {
         return val;
+    }
+
+    void setBuiltIn(spv::BuiltIn built_in) {
+        builtIn = built_in;
+    }
+    spv::BuiltIn getBuiltIn() const {
+        return builtIn;
     }
 
     Value* asValue(std::vector<Type*>& to_delete) const {
@@ -194,6 +202,14 @@ public:
     }
 };
 
+export struct EntryPoint : public Function {
+    unsigned localX = 1;
+    unsigned localY = 1;
+    unsigned localZ = 1;
+
+    EntryPoint(Type* type, unsigned location): Function(type, location) {}
+};
+
 export class Data {
     // The Data owns but does not manage the raw.
     void* raw;
@@ -202,6 +218,7 @@ export class Data {
         UNDEFINED,
         VARIABLE,
         FUNCTION,
+        ENTRY,
         VALUE,
         TYPE,
     };
@@ -211,6 +228,7 @@ public:
     Data(): raw(nullptr), type(DType::UNDEFINED) {};
     Data(Variable* var): raw(var), type(DType::VARIABLE) {};
     Data(Function* func): raw(func), type(DType::FUNCTION) {};
+    Data(EntryPoint* entry): raw(entry), type(DType::ENTRY) {};
     Data(Value* val): raw(val), type(DType::VALUE) {};
     Data(Type* type): raw(type), type(DType::TYPE) {};
 
@@ -232,6 +250,7 @@ public:
     GET_X(TYPE, Type)
     GET_X(VARIABLE, Variable)
     GET_X(FUNCTION, Function)
+    GET_X(ENTRY, EntryPoint);
 #undef GET_X
 
     // Fetching of Values must be able to fetch spec constants, which are saved as program inputs but also need to be
@@ -282,6 +301,9 @@ public:
             break;
         case DType::FUNCTION:
             delete static_cast<Function*>(raw);
+            break;
+        case DType::ENTRY:
+            delete static_cast<EntryPoint*>(raw);
             break;
         case DType::VALUE:
             delete static_cast<Value*>(raw);

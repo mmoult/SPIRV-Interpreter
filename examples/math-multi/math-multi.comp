@@ -1,0 +1,44 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 3, binding = 1, std430) readonly buffer InputBuffer
+{
+    mediump float exposure_bloom;
+    float values[];
+} in_buf;
+
+layout(set = 1, binding = 0, std140) uniform defaultUniformsCS
+{
+    float texture_samples;
+} in_tex;
+
+layout(set = 3, binding = 2, std430) buffer OutputBuffer
+{
+    mediump vec4 adaptive_avg_pad;
+} out_buf;
+
+shared float shared_samples[gl_WorkGroupSize.x];
+
+void main()
+{
+    shared_samples[gl_LocalInvocationIndex] = in_buf.values[gl_LocalInvocationIndex];
+    barrier();
+    for (mediump uint i = gl_WorkGroupSize.x; i > 0u; i = i >> 1u)
+    {
+        if (gl_LocalInvocationIndex < i)
+        {
+            shared_samples[gl_LocalInvocationIndex] += shared_samples[i - gl_LocalInvocationIndex - 1];
+        }
+        barrier();
+    }
+    if (gl_LocalInvocationIndex == 0u)
+    {
+        mediump float avg_lum = exp((shared_samples[0] * in_tex.texture_samples) + 1.59);
+        out_buf.adaptive_avg_pad.y = avg_lum;
+        mediump float gray = 0.65 - (1.3 / (1.0 + log(avg_lum + 1.5) / 6.3));
+        gray *= in_buf.exposure_bloom;
+        mediump float exposure = log2(max(gray / avg_lum, 8.0-03));
+        out_buf.adaptive_avg_pad.x = avg_lum;
+        out_buf.adaptive_avg_pad.z = exposure;
+    }
+}

@@ -32,8 +32,9 @@ struct BreakPoint {
 
 export class Debugger {
     const std::vector<Instruction>& insts;
-    unsigned maxLineDigits;
     ValueFormat& format;
+    unsigned maxLineDigits;
+    unsigned maxInvocDigits;
     static constexpr unsigned BUFFER = 2;
 
     // Command handling:
@@ -154,7 +155,8 @@ export class Debugger {
     }
 
 public:
-    Debugger(const std::vector<Instruction>& insts, ValueFormat& format): insts(insts), format(format) {
+    Debugger(const std::vector<Instruction>& insts, ValueFormat& format, unsigned num_invoc):
+            insts(insts), format(format), maxLineDigits(numDigits(insts.size())) {
         rootCommands.insert("break", Cmd::BREAK);
         breakCommands.insert("add", Cmd::BREAK_ADD);
         breakCommands.insert("clear", Cmd::BREAK_CLEAR);
@@ -173,7 +175,7 @@ public:
         rootCommands.insert("run", Cmd::RUN);
         rootCommands.insert("stack", Cmd::STACK);
         rootCommands.insert("step", Cmd::STEP);
-        maxLineDigits = numDigits(insts.size());
+        maxInvocDigits = (num_invoc > 1)? numDigits(num_invoc) : 0;
     }
 
     void print(unsigned which, const DataView& data) const {
@@ -201,6 +203,8 @@ public:
                 val = vgot->asValue(to_delete);
             else if (const Function* fgot = dat.getFunction(); fgot != nullptr)
                 val = fgot->asValue(to_delete);
+            else if (const EntryPoint* egot = dat.getEntryPoint(); egot != nullptr)
+                val = egot->asValue(to_delete);
             else
                 defaulted = true;
         }
@@ -223,7 +227,9 @@ public:
         }
     }
 
-    void printLine(unsigned i_at) const {
+    void printLine(unsigned invoc, unsigned i_at) const {
+        if (maxInvocDigits > 0)
+            std::cout << "I" << invoc << std::string(maxInvocDigits - numDigits(invoc) + BUFFER, ' ');
         std::cout << i_at << std::string(maxLineDigits - numDigits(i_at) + BUFFER, ' ');
         insts[i_at].print();
     }

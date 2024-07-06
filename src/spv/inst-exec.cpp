@@ -24,8 +24,9 @@ import spv.frame;
 import spv.token;
 import value.primitive;
 
-void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
+bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
     bool inc_pc = true;
+    bool blocked = false;
     Frame& frame = *frame_stack.back();
 
     unsigned result_at;
@@ -61,6 +62,7 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // No semantic value. Kept only for predictability / debugging. Do nothing
         break;
     case spv::OpFunction: // 54
+    case spv::OpMemoryBarrier: // 225
     case spv::OpLoopMerge: // 246
     case spv::OpSelectionMerge: // 247
         break;  // should print for verbose
@@ -78,6 +80,7 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     case spv::OpFunctionEnd: // 56
         throw std::runtime_error("Missing return before function end!");
     case spv::OpFunctionCall: { // 57
+        // Note: cannot call an entry point, right?
         Function* fx = getFunction(2, data);
         std::vector<const Value*> args;
         for (unsigned i = 3; i < operands.size(); ++i) {
@@ -90,7 +93,7 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             args.push_back(var->getVal());
         }
 
-        frame_stack.push_back(new Frame(fx->getLocation(), args, result_at, *data.getSource()));
+        frame_stack.push_back(new Frame(fx->getLocation(), args, result_at, *data.getPrev()));
         inc_pc = false;
         break;
     }
@@ -116,6 +119,11 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         Value* val = getValue(1, data);
         Value* store_to = getFromPointer(0, data);
         store_to->copyFrom(*val);
+        break;
+    }
+    case spv::OpControlBarrier: { // 224
+        blocked = true;
+        // TODO surely there is more to do here...
         break;
     }
     case spv::OpPhi: { // 245
@@ -197,6 +205,8 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
     if (inc_pc)
         frame_stack.back()->incPC();
+
+    return blocked;
 }
 
 void Instruction::print() const {

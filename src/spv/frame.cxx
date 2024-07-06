@@ -37,17 +37,17 @@ export class Frame {
     bool first;
 
 public:
-    Frame(unsigned pc, std::vector<const Value*>& args, unsigned ret_at, DataManager& data) :
+    Frame(unsigned pc, std::vector<const Value*>& args, unsigned ret_at, DataView& data) :
         pc(pc),
         curLabel(0),
         lastLabel(0),
         args(args),
         retAt(ret_at),
-        view(data.makeView()),
+        view(data.getSource()->makeView(&data)),
         argCount(0),
         first(true) {}
     Frame(const Frame&) = delete;
-    Frame& operator= (const Frame&) = delete;
+    Frame& operator=(const Frame&) = delete;
     ~Frame() {
         while (argCount < args.size())
             delete getArg();
