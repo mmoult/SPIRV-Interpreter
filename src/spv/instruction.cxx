@@ -194,25 +194,6 @@ public:
         return *fx;
     }
 
-    void setLocalSize(unsigned* local_size) {
-        assert(opcode == spv::OpExecutionMode);
-
-        if (std::get<unsigned>(operands[1].raw) == spv::ExecutionMode::ExecutionModeLocalSize) {
-            for (unsigned i = 2; i < 5; ++i) {
-                if (operands.size() > i) {
-                    unsigned sz = std::get<unsigned>(operands[i].raw);
-                    if (sz > 1) {
-                        std::stringstream err;
-                        err << "Execution Mode local sizes > 1 currently unsupported! Found: " << sz;
-                        throw std::runtime_error(err.str());
-                    }
-                    local_size[i - 2] = sz;
-                } else
-                    break;  // default size local component size is 1
-            }
-        }
-    }
-
     // There may be many decorations, but there are very few instructions which are decorated.
     // Therefore, it is best for space to iterate through a vector of requests, where each request is
     // bound to a single reference, but may have several attached decoration instructions pending.
@@ -245,6 +226,7 @@ public:
         case spv::OpExecutionMode: // 16
         case spv::OpDecorate: // 71
         case spv::OpMemberDecorate: // 72
+        case spv::OpExecutionModeId: // 331
             unsigned to_decor = checkRef((opcode == spv::OpEntryPoint)? 1 : 0, data_size);
             // Search through the queue to see if the ref already has a request
             unsigned i = 0;

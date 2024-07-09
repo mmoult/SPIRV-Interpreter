@@ -257,6 +257,70 @@ void element_unary_op(const OpSrc& src, const OpDst& dst, DataView& data, F&& op
     Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
+// Sources can be either of the integral types (int or uint) but must match
+template<typename UF, typename IF>
+void element_int_unary_op(const OpSrc& srcs, const OpDst& dst, DataView& data, UF&& u_op, IF&& i_op) {
+    Value* first = data[srcs.val1].getValue();
+    const Type& type = first->getType();
+    DataType dt = type.getBase();
+    if (dt == DataType::ARRAY)
+        dt = type.getElement().getBase();
+    if (dt != DataType::INT && dt != DataType::UINT)
+        throw std::runtime_error("Cannot perform integer-typed unary operation on non-integer base operand!");
+    OpSrc src{dt, srcs.val1, srcs.val2};
+
+    if (dt == DataType::UINT)
+        element_unary_op(src, dst, data, u_op);
+    else
+        element_unary_op(src, dst, data, i_op);
+}
+
+// Typical element-wise binary operation
+#define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
+    OpSrc src{DataType::E_TYPE, checkRef(src_at, data_len), checkRef(src_at + 1, data_len)}; \
+    OpDst dst{checkRef(dst_type_at, data_len), result_at}; \
+    element_bin_op(src, dst, data, [](const Primitive* a, const Primitive* b) { return BIN_OP; }); \
+    break; \
+}
+// Integer (either signed or unsigned as long as they match) element-wise binary operation
+// Spec requires a very specific type of edge behavior where: "
+//   The resulting value equals the low-order N bits of the correct result R, where N is the component width and R is
+//   computed with enough precision to avoid overflow and underflow.
+// ".
+// For the time being, we are ignoring this stipulation because checking is slow and well-formed programs are typically
+// expected not to overflow or underflow.
+#define INT_E_BIN_OP(BIN_OP) { \
+    element_int_bin_op( \
+        OpSrc{DataType::INT, checkRef(src_at, data_len), checkRef(src_at + 1, data_len)}, \
+        OpDst{checkRef(dst_type_at, data_len), result_at}, \
+        data, \
+        [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }, \
+        [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; } \
+    ); \
+    break; \
+}
+#define INT_E_UNARY_OP(UNARY_OP) { \
+    element_int_unary_op( \
+        OpSrc{DataType::INT, checkRef(src_at, data_len), 0}, \
+        OpDst{checkRef(dst_type_at, data_len), result_at}, \
+        data, \
+        [](const Primitive* a) { return UNARY_OP a->data.u32; }, \
+        [](const Primitive* a) { return UNARY_OP a->data.i32; } \
+    ); \
+    break; \
+}
+// Element shift operation, which may have integral operands
+#define E_SHIFT_OP(SHIFT_LAMBDA) \
+    OpSrc src{DataType::UINT, checkRef(src_at, data_len), checkRef(src_at + 1, data_len)}; \
+    OpDst dst{checkRef(dst_type_at, data_len), result_at}; \
+    element_shift_op(src, dst, data, SHIFT_LAMBDA);
+// Typical unary operation
+#define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
+    OpSrc src{DataType::E_TYPE, checkRef(src_at, data_len), 0}; \
+    OpDst dst{checkRef(dst_type_at, data_len), result_at}; \
+    element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
+    break; \
+}
 
 bool Instruction::makeResult(
     DataView& data,
@@ -270,43 +334,10 @@ bool Instruction::makeResult(
     unsigned data_len = data.getBound();
     unsigned result_at = checkRef(hasResultType, data_len);
 
+    constexpr unsigned dst_type_at = 0;
+    constexpr unsigned src_at = 2;
+
     switch (opcode) {
-// Typical element-wise binary operation
-#define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
-    OpSrc src{DataType::E_TYPE, checkRef(2, data_len), checkRef(3, data_len)}; \
-    OpDst dst{checkRef(0, data_len), result_at}; \
-    element_bin_op(src, dst, data, [](const Primitive* a, const Primitive* b) { return BIN_OP; }); \
-    break; \
-}
-// Integer (either signed or unsigned as long as they match) element-wise binary operation
-// Spec requires a very specific type of edge behavior where: "
-//   The resulting value equals the low-order N bits of the correct result R, where N is the component width and R is
-//   computed with enough precision to avoid overflow and underflow.
-// ".
-// For the time being, we are ignoring this stipulation because checking is slow and well-formed programs are typically
-// expected not to overflow or underflow.
-#define INT_E_BIN_OP(BIN_OP) { \
-    element_int_bin_op( \
-        OpSrc{DataType::INT, checkRef(2, data_len), checkRef(3, data_len)}, \
-        OpDst{checkRef(0, data_len), result_at}, \
-        data, \
-        [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }, \
-        [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; } \
-    ); \
-    break; \
-}
-// Element shift operation, which may have integral operands
-#define E_SHIFT_OP(SHIFT_LAMBDA) \
-    OpSrc src{DataType::UINT, checkRef(2, data_len), checkRef(3, data_len)}; \
-    OpDst dst{checkRef(0, data_len), result_at}; \
-    element_shift_op(src, dst, data, SHIFT_LAMBDA);
-// Typical unary operation
-#define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
-    OpSrc src{DataType::E_TYPE, checkRef(2, data_len), 0}; \
-    OpDst dst{checkRef(0, data_len), result_at}; \
-    element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
-    break; \
-}
     default: {
         std::stringstream err;
         err << "Cannot make result for unsupported instruction " << spv::OpToString(opcode) << "!";
@@ -570,6 +601,21 @@ bool Instruction::makeResult(
                     break;
                 }
             }
+            case spv::OpExecutionModeId: {
+                // examples:
+                // - OpExecutionModeId %main LocalSizeId %uint_8 %uint_1 %uint_1
+                assert(deco->operands[1].type == Token::Type::CONST);
+                switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
+                case spv::ExecutionMode::ExecutionModeLocalSizeId:
+                    assert(deco->operands.size() == 5);
+                    ep->localX = static_cast<const Primitive*>(getValue(2, data))->data.u32;
+                    ep->localY = static_cast<const Primitive*>(getValue(3, data))->data.u32;
+                    ep->localZ = static_cast<const Primitive*>(getValue(4, data))->data.u32;
+                    break;
+                default:
+                    break;
+                }
+            }
             case spv::OpEntryPoint:
             default:
                 break; // other decorations should not occur
@@ -712,10 +758,14 @@ bool Instruction::makeResult(
         data[result_at].redefine(to_ret);
         break;
     }
-    case spv::OpConvertFToS: // 110
+    case spv::OpConvertFToU: // 109
         TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint32_t>(a->data.fp32));
+    case spv::OpConvertFToS: // 110
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<int32_t>(a->data.fp32));
     case spv::OpConvertSToF: // 111
         TYPICAL_E_UNARY_OP(INT, static_cast<float>(a->data.i32));
+    case spv::OpConvertUToF: // 112
+        TYPICAL_E_UNARY_OP(UINT, static_cast<float>(a->data.u32));
     case spv::OpFNegate: // 127
         TYPICAL_E_UNARY_OP(FLOAT, -a->data.fp32);
     case spv::OpIAdd: // 128
@@ -747,6 +797,9 @@ bool Instruction::makeResult(
         element_bin_op(src, dst, data, op);
         break;
     }
+    case spv::OpUMod: // 137
+        // Result undefined if the denominator is 0. Maybe print an undefined warning?
+        TYPICAL_E_BIN_OP(FLOAT, (b->data.u32 != 0)? a->data.u32 % b->data.u32 : 0);
     case spv::OpVectorTimesScalar: { // 142
         Value* vec_val = getValue(2, data);
         const Type& vec_type = vec_val->getType();
@@ -935,15 +988,15 @@ bool Instruction::makeResult(
         if (size == 4) {
             // 4-D vector
             glm::vec4 a(
-                (*static_cast<const Primitive*>((*arr[0])[0])).data.fp32, 
-                (*static_cast<const Primitive*>((*arr[0])[1])).data.fp32, 
-                (*static_cast<const Primitive*>((*arr[0])[2])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[0])[0])).data.fp32,
+                (*static_cast<const Primitive*>((*arr[0])[1])).data.fp32,
+                (*static_cast<const Primitive*>((*arr[0])[2])).data.fp32,
                 (*static_cast<const Primitive*>((*arr[0])[3])).data.fp32
             );
             glm::vec4 b(
-                (*static_cast<const Primitive*>((*arr[1])[0])).data.fp32, 
-                (*static_cast<const Primitive*>((*arr[1])[1])).data.fp32, 
-                (*static_cast<const Primitive*>((*arr[1])[2])).data.fp32, 
+                (*static_cast<const Primitive*>((*arr[1])[0])).data.fp32,
+                (*static_cast<const Primitive*>((*arr[1])[1])).data.fp32,
+                (*static_cast<const Primitive*>((*arr[1])[2])).data.fp32,
                 (*static_cast<const Primitive*>((*arr[1])[3])).data.fp32
             );
             float result = glm::dot(a, b);
@@ -958,6 +1011,42 @@ bool Instruction::makeResult(
             total += n0.data.fp32 * n1.data.fp32;
         }
         data[result_at].redefine(new Primitive(total));
+        break;
+    }
+    case spv::OpAny: { // 154
+        Value* vec_val = getValue(src_at, data);
+        const Type& vec_type = vec_val->getType();
+        if (vec_type.getBase() != DataType::ARRAY)
+            throw std::runtime_error("Could not load vector argument to OpAny!");
+        const Array& vec = *static_cast<Array*>(vec_val);
+        if (vec_type.getElement().getBase() != DataType::BOOL)
+            throw std::runtime_error("Vector operand of OpAny must have bool type!");
+
+        unsigned size = vec.getSize();
+        bool any = false;
+        for (unsigned i = 0; i < size; ++i) {
+            const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
+            any |= vec_e.data.b32;
+        }
+        data[result_at].redefine(new Primitive(any));
+        break;
+    }
+    case spv::OpAll: { // 155
+    Value* vec_val = getValue(src_at, data);
+        const Type& vec_type = vec_val->getType();
+        if (vec_type.getBase() != DataType::ARRAY)
+            throw std::runtime_error("Could not load vector argument to OpAll!");
+        const Array& vec = *static_cast<Array*>(vec_val);
+        if (vec_type.getElement().getBase() != DataType::BOOL)
+            throw std::runtime_error("Vector operand of OpAny must have bool type!");
+
+        unsigned size = vec.getSize();
+        bool all = true;
+        for (unsigned i = 0; i < size; ++i) {
+            const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
+            all &= vec_e.data.b32;
+        }
+        data[result_at].redefine(new Primitive(all));
         break;
     }
     case spv::OpIsNan: // 156
@@ -1054,16 +1143,34 @@ bool Instruction::makeResult(
         TYPICAL_E_BIN_OP(INT, a->data.i32 <= b->data.i32);
     case spv::OpFOrdEqual: // 180
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 == b->data.fp32);
+    case spv::OpFUnordEqual: // 181
+        TYPICAL_E_BIN_OP(FLOAT,
+            std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 == b->data.fp32);
     case spv::OpFOrdNotEqual: // 182
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 != b->data.fp32);
+    case spv::OpFUnordNotEqual: // 183
+        TYPICAL_E_BIN_OP(FLOAT,
+            std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 != b->data.fp32);
     case spv::OpFOrdLessThan: // 184
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 < b->data.fp32);
+    case spv::OpFUnordLessThan: // 185
+        TYPICAL_E_BIN_OP(FLOAT,
+            std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 < b->data.fp32);
     case spv::OpFOrdGreaterThan: // 186
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 > b->data.fp32);
+    case spv::OpFUnordGreaterThan: // 187
+        TYPICAL_E_BIN_OP(FLOAT,
+            std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 > b->data.fp32);
     case spv::OpFOrdLessThanEqual: // 188
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 <= b->data.fp32);
+    case spv::OpFUnordLessThanEqual: // 189
+        TYPICAL_E_BIN_OP(FLOAT,
+            std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 <= b->data.fp32);
     case spv::OpFOrdGreaterThanEqual: // 190
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 >= b->data.fp32);
+    case spv::OpFUnordGreaterThanEqual: // 191
+        TYPICAL_E_BIN_OP(FLOAT,
+            std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 >= b->data.fp32);
     case spv::OpShiftRightLogical: { // 194
         E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u32 >> b->data.u32; });
         break;
@@ -1092,13 +1199,17 @@ bool Instruction::makeResult(
         E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u32 << b->data.u32; });
         break;
     }
+    case spv::OpBitwiseOr: // 197
+        INT_E_BIN_OP(|);
+    case spv::OpBitwiseXor: // 198
+        INT_E_BIN_OP(^);
+    case spv::OpBitwiseAnd: // 199
+        INT_E_BIN_OP(&);
+    case spv::OpNot: // 200
+        INT_E_UNARY_OP(~);
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
-#undef TYPICAL_E_BIN_OP
-#undef INT_E_BIN_OP
-#undef TYPICAL_E_UNARY_OP
-#undef E_SHIFT_OP
     }
 
     return true;
@@ -1115,19 +1226,10 @@ bool Instruction::makeResultGlsl(
     unsigned ext_opcode = std::get<unsigned>(operands[3].raw);
     bool made = true;
 
+    constexpr unsigned dst_type_at = 0;
+    constexpr unsigned src_at = 4;
+
     switch (ext_opcode) {
-#define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
-    OpSrc src{DataType::E_TYPE, checkRef(4, data_len), 0}; \
-    OpDst dst{checkRef(0, data_len), result_at}; \
-    element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
-    break; \
-}
-#define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
-    OpSrc src{DataType::E_TYPE, checkRef(4, data_len), checkRef(5, data_len)}; \
-    OpDst dst{checkRef(0, data_len), result_at}; \
-    element_bin_op(src, dst, data, [](const Primitive* a, const Primitive* b) { return BIN_OP; }); \
-    break; \
-}
     default: {
         std::stringstream err;
         err << "Unknown GLSL opcode: " << ext_opcode;
@@ -1269,5 +1371,7 @@ bool Instruction::makeResultGlsl(
     }
     return made;
 }
-#undef TYPICAL_E_UNARY_OP
 #undef TYPICAL_E_BIN_OP
+#undef INT_E_BIN_OP
+#undef TYPICAL_E_UNARY_OP
+#undef E_SHIFT_OP
