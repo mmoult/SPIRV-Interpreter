@@ -26,6 +26,7 @@ target_sources(spv-interp
       values/aggregate.cxx
       values/pointer.cxx
       values/primitive.cxx
+      values/ray-query.cxx
       values/string.cxx
 )
 # Add other source files
