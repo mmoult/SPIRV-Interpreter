@@ -612,6 +612,8 @@ bool Instruction::makeResult(
         TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint32_t>(a->data.fp32));
     case spv::OpConvertSToF: // 111
         TYPICAL_E_UNARY_OP(INT, static_cast<float>(a->data.i32));
+    case spv::OpConvertUToF: // 112
+        TYPICAL_E_UNARY_OP(UINT, static_cast<float>(a->data.u32));
     case spv::OpFNegate: // 127
         TYPICAL_E_UNARY_OP(FLOAT, -a->data.fp32);
     case spv::OpIAdd: // 128
@@ -951,11 +953,8 @@ bool Instruction::makeResult(
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
-    case spv::OpConvertUToAccelerationStructureKHR: { // 4447
-        assert(hasResultType);
-        Type* ret_type = getType(0, data);
-        assert(ret_type->getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
-        data[result_at].redefine(new Type(*ret_type));
+    case spv::OpTypeRayQueryKHR: { // 4472
+        data[result_at].redefine(new Type(Type::rayQuery()));
         break;
     }
     case spv::OpTypeAccelerationStructureKHR: // 5341
@@ -964,10 +963,16 @@ bool Instruction::makeResult(
         data[result_at].redefine(
                 new Type(Type::accelerationStructure(std::vector<const Type*> {}, std::vector<std::string> {})));
         break;
-    case spv::OpReportIntersectionKHR: { // 5334
+    case spv::OpConvertUToAccelerationStructureKHR: // 4447
+    case spv::OpReportIntersectionKHR: // 5334
+    case spv::OpRayQueryGetRayTMinKHR: // 6016
+    case spv::OpRayQueryGetRayFlagsKHR: // 6017
+    case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
+    case spv::OpRayQueryGetWorldRayOriginKHR: { // 6030
         assert(hasResultType);
         Type* ret_type = getType(0, data);
-        data[result_at].redefine(new Primitive(*ret_type));
+        data[result_at].redefine(ret_type->construct());
+        break;
     }
 #undef TYPICAL_E_BIN_OP
 #undef INT_E_BIN_OP

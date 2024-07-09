@@ -108,6 +108,7 @@ Instruction* Instruction::readOp(
     case spv::OpTerminateInvocation: // 4416
     case spv::OpIgnoreIntersectionKHR: // 4448
     case spv::OpTerminateRayKHR: // 4449
+    case spv::OpTypeRayQueryKHR: // 4472
     case spv::OpTypeAccelerationStructureKHR: // 5341
         // no operands to handle (besides result and type, if present)
         break;
@@ -213,6 +214,7 @@ Instruction* Instruction::readOp(
     case spv::OpTypeRuntimeArray: // 29
     case spv::OpTranspose: // 84
     case spv::OpConvertSToF: // 111
+    case spv::OpConvertUToF: // 112
     case spv::OpFNegate: // 127
     case spv::OpIsNan: // 156
     case spv::OpIsInf: // 157
@@ -220,6 +222,11 @@ Instruction* Instruction::readOp(
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
     case spv::OpConvertUToAccelerationStructureKHR: // 4447
+    case spv::OpRayQueryTerminateKHR: // 4474
+    case spv::OpRayQueryGetRayTMinKHR: // 6016
+    case spv::OpRayQueryGetRayFlagsKHR: // 6017
+    case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
+    case spv::OpRayQueryGetWorldRayOriginKHR: // 6030
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeStruct: // 30
@@ -311,8 +318,12 @@ Instruction* Instruction::readOp(
         optional.push_back(Type::UINT);
         optional.push_back(Type::UINT);
         break;
-    case spv::OpTraceRayKHR: // 4445 TODO
+    case spv::OpTraceRayKHR: // 4445
         for (int i = 0; i < 11; ++i)
+            to_load.push_back(Type::REF);
+        break;
+    case spv::OpRayQueryInitializeKHR: // 4473
+        for (int i = 0; i < 8; ++i)
             to_load.push_back(Type::REF);
         break;
     }
@@ -357,6 +368,7 @@ Instruction* Instruction::readOp(
         // Contains only implemented extensions.
         const std::vector<std::string> supported_ext {
             "SPV_KHR_ray_tracing",
+            "SPV_KHR_ray_query"
         };
 
         auto it = std::find(supported_ext.begin(), supported_ext.end(), ext_name);

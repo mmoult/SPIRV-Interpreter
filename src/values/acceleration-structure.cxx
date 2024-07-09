@@ -228,6 +228,11 @@ public:
 
     ~AccelerationStructure() {};
 
+    // TODO: step through the acceleration structure for each call and return the node that was intersected.
+    const std::unique_ptr<Node>& stepTraceRay(const std::unique_ptr<Node>& start) const {
+        throw std::runtime_error("stepTraceRay() not implemented.");
+    }
+
     /*
     Typically, a BLAS corresponds to individual 3D models within a scene,
     and a TLAS corresponds to an entire scene built by positioning
@@ -884,7 +889,7 @@ public:
         }
 
         // Print it
-        std::cout << toString() << std::endl;
+        // std::cout << toString() << std::endl;
 
         // Build the BVH tree
         {
@@ -912,7 +917,7 @@ public:
             root = std::move(accelerationStructures[numAccelerationStructures - 1]);
             assert(accelerationStructures[numAccelerationStructures - 1] == nullptr);
 
-            std::cout << root->toString() << std::endl; // TODO: print it out to verify correct tree
+            // std::cout << root->toString() << std::endl; // TODO: print it out to verify correct tree
         }
     }
 

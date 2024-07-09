@@ -26,6 +26,7 @@ import spv.token;
 import value.accelerationStructure;
 import value.aggregate;
 import value.primitive;
+import value.rayQuery;
 
 void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
     bool inc_pc = true;
@@ -327,6 +328,59 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
         break;
     }
+    case spv::OpRayQueryInitializeKHR: { // 4473
+        // --- Assertions
+        assert(getFromPointer(0, data)->getType().getBase() == DataType::RAY_QUERY);
+        assert(getValue(1, data)->getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
+        assert(getValue(2, data)->getType().getBase() == DataType::UINT);
+        assert(getValue(3, data)->getType().getBase() == DataType::UINT);
+        assert(getValue(4, data)->getType().getBase() == DataType::ARRAY);
+        assert(getValue(5, data)->getType().getBase() == DataType::FLOAT);
+        assert(getValue(6, data)->getType().getBase() == DataType::ARRAY);
+        assert(getValue(7, data)->getType().getBase() == DataType::FLOAT);
+
+        // --- Get the arguments
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(0, data));
+        AccelerationStructureManager& as = static_cast<AccelerationStructureManager&>(*getValue(1, data));
+        unsigned rayFlags = static_cast<Primitive&>(*getValue(2, data)).data.u32;
+        unsigned cullMask = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Array& rayOriginInfo = static_cast<Array&>(*getValue(4, data));  // TODO: is it possible that values could be integers?
+        std::vector<float> rayOrigin;
+        for (unsigned i = 0; i < rayOriginInfo.getSize(); ++i) {
+            rayOrigin.push_back(static_cast<Primitive&>(*(rayOriginInfo[i])).data.fp32);
+        }
+
+        float rayTMin = static_cast<Primitive&>(*getValue(5, data)).data.fp32;
+
+        Array& rayDirectionInfo = static_cast<Array&>(*getValue(6, data));  // TODO: is it possible that values could be integers?
+        std::vector<float> rayDirection;
+        for (unsigned i = 0; i < rayDirectionInfo.getSize(); ++i) {
+            rayDirection.push_back(static_cast<Primitive&>(*(rayDirectionInfo[i])).data.fp32);
+        }
+
+        assert(rayOrigin.size() == rayDirection.size());  // Same dimension?
+
+        float rayTMax = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
+
+        // Initialize the ray query
+        rayQuery.initialize(as, rayFlags, cullMask, rayOrigin, rayTMin, rayDirection, rayTMax);
+
+        break;
+    }
+    case spv::OpRayQueryTerminateKHR: { // 4474
+        // --- Assertions
+        assert(getFromPointer(0, data) != nullptr &&
+                getFromPointer(0, data)->getType().getBase() == DataType::RAY_QUERY);
+
+        // --- Get the arguments
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(0, data));
+
+        // --- Terminate the given ray query
+        rayQuery.terminate();
+
+        break;
+    }
     case spv::OpReportIntersectionKHR: { // 5334
         // TODO: update once interpreter supports multi-shader invocation
         // Get intersection information
@@ -357,6 +411,84 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             std::cout << "\t(Not working right now) Invoking any-hit shader..." << std::endl;
             std::cout << "\tSuccessful any-hit shader" << std::endl;
             result.data.b32 = true;
+        }
+
+        break;
+    }
+    case spv::OpRayQueryGetRayTMinKHR: { // 6016
+        // --- Assertions
+        assert(getFromPointer(2, data) != nullptr &&
+                getFromPointer(2, data)->getType().getBase() == DataType::RAY_QUERY);
+
+        // --- Get the arguments
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        // --- Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        Primitive& result = static_cast<Primitive&>(*getValue(1, data));
+
+        // --- Store the return value
+        result.data.fp32 = rayQuery.getRayTMin();
+
+        break;
+    }
+    case spv::OpRayQueryGetRayFlagsKHR: { // 6017
+        // --- Assertions
+        assert(getFromPointer(2, data) != nullptr &&
+                getFromPointer(2, data)->getType().getBase() == DataType::RAY_QUERY);
+
+        // --- Get the arguments
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        // --- Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        Primitive& result = static_cast<Primitive&>(*getValue(1, data));
+
+        // --- Store the return value
+        result.data.u32 = rayQuery.getRayFlags();
+
+        break;
+    }
+    case spv::OpRayQueryGetWorldRayDirectionKHR: { // 6029
+        // --- Assertions
+        assert(getFromPointer(2, data) != nullptr &&
+                getFromPointer(2, data)->getType().getBase() == DataType::RAY_QUERY);
+
+        // --- Get the arguments
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(2, data));
+        
+        // --- Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 3);
+
+        // --- Store the return value
+        const auto origin = rayQuery.getWorldRayDirection();
+        for (unsigned i = 0; i < result.getSize(); ++i) {
+            Primitive& location = static_cast<Primitive&>(*(result[i]));
+            location.data.fp32 = origin[i];
+        }
+
+        break;
+    }
+    case spv::OpRayQueryGetWorldRayOriginKHR: { // 6030
+        // --- Assertions
+        assert(getFromPointer(2, data) != nullptr &&
+                getFromPointer(2, data)->getType().getBase() == DataType::RAY_QUERY);
+
+        // --- Get the arguments
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(2, data));
+        
+        // --- Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 3);
+
+        // --- Store the return value
+        const auto origin = rayQuery.getWorldRayOrigin();
+        for (unsigned i = 0; i < result.getSize(); ++i) {
+            Primitive& location = static_cast<Primitive&>(*(result[i]));
+            location.data.fp32 = origin[i];
         }
 
         break;

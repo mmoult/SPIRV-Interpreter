@@ -24,7 +24,8 @@ enum DataType : unsigned {
     VOID = 7,
     FUNCTION = 8,
     POINTER = 9,
-    RAY_TRACING_ACCELERATION_STRUCTURE = 10
+    RAY_TRACING_ACCELERATION_STRUCTURE = 10,
+    RAY_QUERY = 11
 };
 
 // necessary forward reference
@@ -121,6 +122,10 @@ public:
     static inline Type accelerationStructure(std::vector<const Type*> sub_list, std::vector<std::string> name_list) {
         assert(sub_list.size() == name_list.size());
         return Type(DataType::RAY_TRACING_ACCELERATION_STRUCTURE, sub_list, name_list);
+    }
+
+    static inline Type rayQuery() {
+        return Type(DataType::RAY_QUERY, 0, nullptr);
     }
 
     // Other methods:
