@@ -393,19 +393,23 @@ private: // TODO: traversal related stuff
     using NodeRef = std::shared_ptr<Node>*;  // Raw pointer that points to smart pointer
 
     std::stack<NodeRef> nodesToEval;
+    bool activeTrace = false;
 
-    // Current ray information
+    // Ray properties
     unsigned rayFlags = 0;
     unsigned cullMask = 0;
+    glm::vec4 rayOrigin{ 0.0f, 0.0f, 0.0f, 0.0f };
+    glm::vec4 rayDirection{ 0.0f, 0.0f, 0.0f, 0.0f };
+    float rayTMin = 0.0f;
+    float rayTMax = 0.0f;
+
+    // Shader binding table information
+    bool useSBT = false;
     unsigned offsetSBT = 0;
     unsigned strideSBT = 0;
     unsigned missIndex = 0;
-    glm::vec4 rayOrigin{ 0.0f, 0.0f, 0.0f, 0.0f };
-    float rayTMin = 0.0f;
-    glm::vec4 rayDirection{ 0.0f, 0.0f, 0.0f, 0.0f };
-    float rayTMax = 0.0f;
 
-    // Current ray flags
+    // Ray flags
     bool rayFlagNone = false;
     bool rayFlagOpaque = false;
     bool rayFlagNoOpaque = false;
@@ -432,21 +436,35 @@ private: // TODO: traversal related stuff
         rayFlagSkipAABBs = rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask; // skip procedurals
     }
 
+    void clearTrace() {
+        while (!nodesToEval.empty()) {
+            nodesToEval.pop();
+        }
+    }
+
     void initTrace() {
+        activeTrace = true;
         nodesToEval.push(&root);
     }
 
 public: // TODO: also traversal stuff
 
+    void resetTrace() {
+        activeTrace = false;
+        clearTrace();
+        initTrace();
+    }
+    
     void initTrace(const unsigned& rayFlags,
             const unsigned& cullMask,
-            const unsigned& offsetSBT,
-            const unsigned& strideSBT,
-            const unsigned& missIndex,
             const std::vector<float>& rayOrigin,
+            const std::vector<float>& rayDirection,            
             const float& rayTMin,
-            const std::vector<float>& rayDirection,
-            const float& rayTMax) {
+            const float& rayTMax,
+            const bool& useSBT,
+            const unsigned offsetSBT = 0,
+            const unsigned strideSBT = 0,
+            const unsigned missIndex = 0) {
         
         assert(rayOrigin.size() == 3 && rayDirection.size() == 3);
         glm::vec4 convertedRayOrigin = glm::make_vec4(rayOrigin.data());
@@ -456,47 +474,45 @@ public: // TODO: also traversal stuff
 
         this->rayFlags = rayFlags;
         this->cullMask = cullMask;
+        this->rayOrigin = convertedRayOrigin;
+        this->rayDirection = convertedRayDirection;
+        this->rayTMin = rayTMin;
+        this->rayTMax = rayTMax;
+
+        this->useSBT = useSBT;
         this->offsetSBT = offsetSBT;
         this->strideSBT = strideSBT;
         this->missIndex = missIndex;
-        this->rayOrigin = convertedRayOrigin;
-        this->rayTMin = rayTMin;
-        this->rayDirection = convertedRayDirection;
-        this->rayTMax = rayTMax;
 
         setFlags();
-        initTrace();
+        resetTrace();
     }
 
     void initTrace(const unsigned& rayFlags,
             const unsigned& cullMask,
-            const unsigned& offsetSBT,
-            const unsigned& strideSBT,
-            const unsigned& missIndex,
             const glm::vec4& rayOrigin,
-            const float& rayTMin,
             const glm::vec4& rayDirection,
-            const float& rayTMax) {
+            const float& rayTMin,
+            const float& rayTMax,
+            const bool& useSBT,
+            const unsigned offsetSBT = 0,
+            const unsigned strideSBT = 0,
+            const unsigned missIndex = 0) {
                 
         this->rayFlags = rayFlags;
         this->cullMask = cullMask;
+        this->rayOrigin = rayOrigin;
+        this->rayDirection = rayDirection;
+        this->rayTMin = rayTMin;
+        this->rayTMax = rayTMax;
+
+        this->useSBT = useSBT;
         this->offsetSBT = offsetSBT;
         this->strideSBT = strideSBT;
         this->missIndex = missIndex;
-        this->rayOrigin = rayOrigin;
-        this->rayTMin = rayTMin;
-        this->rayDirection = rayDirection;
-        this->rayTMax = rayTMax;
 
         setFlags();
-        initTrace();
-    }
-
-    void resetTrace() {
-        while (!nodesToEval.empty())
-            nodesToEval.pop();
-
-        initTrace();
+        resetTrace();
     }
 
 private:
@@ -506,11 +522,15 @@ public:
     // TODO: step to the next primitive
     // TODO: change instance node pop and push logic
     bool stepTrace(bool& didIntersectGeometry) {
-        unsigned loopCount = 0;
+        if (!activeTrace) {
+            std::cout << "Out of paths to trace ray for acceleration structure id = (" << id << ")." << std::endl
+                      << "Please (re-)initialize (or reset) the trace." << std::endl;
+            return false;
+        }
+
         bool foundPrimitive = false;
 
         while (!foundPrimitive && (nodesToEval.size() > 0)) {
-            ++loopCount;
 
             NodeRef currNodeRef = nodesToEval.top();
             Node* currNode = currNodeRef->get();
@@ -580,15 +600,19 @@ public:
                     // node's acceleration structure.
                     instanceNode->accelerationStructure->initTrace(rayFlags,
                             cullMask,
+                            newRayOrigin,
+                            newRayDirection,
+                            rayTMin,
+                            rayTMax,
+                            useSBT,
                             offsetSBT,
                             strideSBT,
-                            missIndex,
-                            newRayOrigin,
-                            rayTMin,
-                            newRayDirection,
-                            rayTMax);
+                            missIndex);
                 }
                 didPopNodePreviously = !(instanceNode->accelerationStructure->stepTrace(foundGeometryIntersection));
+                if (!didPopNodePreviously) {
+                    nodesToEval.push(currNodeRef);
+                }
 
                 // Handle the result of tracing the ray in the instance
                 if (foundGeometryIntersection) {
@@ -604,12 +628,9 @@ public:
                     // Ray did not intersect
                 }
 
-                if (!didPopNodePreviously) {
-                    nodesToEval.push(currNodeRef);
-                    foundPrimitive = true;
-                } else {
-                    didPopNodePreviously = true;
-                }
+                // Instance node's acceleration structure will either reach a primitive mid-search or the final primitive.
+                // Therefore, it will always reach a primitive.
+                foundPrimitive = true;
 
                 std::cout << "\t!!!!!!!!!!!!!!!!!!!!! Done! Now going back to AS id: " << id << std::endl;
 
@@ -734,6 +755,11 @@ public:
             }
         }
 
+        
+        if (nodesToEval.empty()) {
+            std::cout << "@@@@@@@@@@ Making trace inactive." << std::endl;
+            activeTrace = false;
+        }
         return !nodesToEval.empty();
     }
 
@@ -748,18 +774,19 @@ public:
     // TODO: change parameter types
     // TODO: SBT once can do multiple shader invocations
     // Modifies payload parameter
-    void traceRay(const unsigned rayFlags,
+    void traceRay(bool& didIntersectGeometry,
+            const unsigned rayFlags,
             const unsigned cullMask,
-            const unsigned offsetSBT,
-            const unsigned strideSBT,
-            const unsigned missIndex,
             const glm::vec4 rayOrigin,
-            const float rayTMin,
             const glm::vec4 rayDirection,
+            const float rayTMin,
             const float rayTMax,
-            bool& didIntersectGeometry) {
+            const bool& useSBT,
+            const unsigned offsetSBT = 0,
+            const unsigned strideSBT = 0,
+            const unsigned missIndex = 0) {
 
-        initTrace(rayFlags, cullMask, offsetSBT, strideSBT, missIndex, rayOrigin, rayTMin, rayDirection, rayTMax);
+        initTrace(rayFlags, cullMask, rayOrigin, rayDirection, rayTMin, rayTMax, useSBT, offsetSBT, strideSBT, missIndex);
 
         bool intersect = false;
         while (stepTrace(intersect)) {
@@ -1040,32 +1067,63 @@ public:
         }
     }
 
-    void traceRay(const unsigned rayFlags,
-            const unsigned cullMask,
-            const unsigned offsetSBT,
-            const unsigned strideSBT,
-            const unsigned missIndex,
-            const std::vector<float> rayOrigin,
-            const float rayTMin,
-            const std::vector<float> rayDirection,
-            const float rayTMax,
-            bool& didIntersectGeometry) const {
+    void initStepTraceRay(const unsigned& rayFlags,
+            const unsigned& cullMask,
+            const std::vector<float>& rayOrigin,
+            const std::vector<float>& rayDirection,
+            const float& rayTMin,
+            const float& rayTMax,
+            const bool& useSBT,
+            const unsigned offsetSBT = 0,
+            const unsigned strideSBT = 0,
+            const unsigned missIndex = 0) {
+
+        root->initTrace(rayFlags,
+                cullMask,
+                rayOrigin,
+                rayDirection,
+                rayTMin,
+                rayTMax,
+                useSBT,
+                offsetSBT,
+                strideSBT,
+                missIndex);
+    }
+
+    bool stepTraceRay() {
+        // TODO: do something with intersected geometry argument
+        bool intersectedGeometry = false;
+        return root->stepTrace(intersectedGeometry);
+    }
+
+    void traceRay(bool& didIntersectGeometry,
+            const unsigned& rayFlags,
+            const unsigned& cullMask,
+            const std::vector<float>& rayOrigin,
+            const std::vector<float>& rayDirection,
+            const float& rayTMin,
+            const float& rayTMax,
+            const bool& useSBT,
+            const unsigned offsetSBT = 0,
+            const unsigned strideSBT = 0,
+            const unsigned missIndex = 0) const {
 
         glm::vec4 convertedRayOrigin = glm::make_vec4(rayOrigin.data());
         convertedRayOrigin.w = 1.0f;
         glm::vec4 convertedRayDirection = glm::make_vec4(rayDirection.data());
         convertedRayDirection.w = 0.0f;
 
-        root->traceRay(rayFlags,
+        root->traceRay(didIntersectGeometry,
+                rayFlags,
                 cullMask,
+                convertedRayOrigin,
+                convertedRayDirection,
+                rayTMin,
+                rayTMax,
+                useSBT,
                 offsetSBT,
                 strideSBT,
-                missIndex,
-                convertedRayOrigin,
-                rayTMin,
-                convertedRayDirection,
-                rayTMax,
-                didIntersectGeometry);
+                missIndex);
     }
 
     // TODO:

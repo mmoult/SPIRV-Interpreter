@@ -964,6 +964,7 @@ bool Instruction::makeResult(
                 new Type(Type::accelerationStructure(std::vector<const Type*> {}, std::vector<std::string> {})));
         break;
     case spv::OpConvertUToAccelerationStructureKHR: // 4447
+    case spv::OpRayQueryProceedKHR: // 4477
     case spv::OpReportIntersectionKHR: // 5334
     case spv::OpRayQueryGetRayTMinKHR: // 6016
     case spv::OpRayQueryGetRayFlagsKHR: // 6017

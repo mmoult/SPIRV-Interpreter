@@ -241,16 +241,17 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // Only the 4 least-significant bits of SBT Stride are used in this instruction
         // Only the 16 least-significant bits of Miss Index are used in this instruction
         bool didIntersectGeometry;
-        as.traceRay(rayFlags,
+        as.traceRay(didIntersectGeometry,
+                rayFlags,
                 cullMask & 0xFF,
+                rayOrigin,
+                rayDirection,
+                rayTMin,
+                rayTMax,
+                true,
                 offsetSBT & 0xF,
                 strideSBT & 0xF,
-                missIndex & 0xFFFF,
-                rayOrigin,
-                rayTMin,
-                rayDirection,
-                rayTMax,
-                didIntersectGeometry);
+                missIndex & 0xFFFF);
 
         // Store the data into the payload
 
@@ -364,7 +365,7 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         float rayTMax = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
 
         // Initialize the ray query
-        rayQuery.initialize(as, rayFlags, cullMask, rayOrigin, rayTMin, rayDirection, rayTMax);
+        rayQuery.initialize(as, rayFlags, cullMask, rayOrigin, rayDirection, rayTMin, rayTMax);
 
         break;
     }
@@ -378,6 +379,23 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
         // --- Terminate the given ray query
         rayQuery.terminate();
+
+        break;
+    }
+    case spv::OpRayQueryProceedKHR: { // 4477
+        // --- Assertions
+        assert(getFromPointer(2, data) != nullptr &&
+                getFromPointer(2, data)->getType().getBase() == DataType::RAY_QUERY);
+
+        // --- Get the arguments
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        // Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        Primitive& result = static_cast<Primitive&>(*getValue(1, data));
+
+        // --- Step through traversal
+        result.data.b32 = rayQuery.proceed();
 
         break;
     }

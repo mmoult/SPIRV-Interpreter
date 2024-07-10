@@ -20,7 +20,7 @@ import value.accelerationStructure;
 
 export class RayQuery : public Value {
 private:
-    bool active;
+    bool active; // Can the ray query be traced (stepped through)?
 
     AccelerationStructureManager TLAS;
     unsigned rayFlags;
@@ -34,13 +34,22 @@ public:
     RayQuery(Type t) : Value(t), TLAS(t), active(false) {}
     ~RayQuery() {} // TODO
 
+    /// @brief TODO
+    /// @param as 
+    /// @param rayFlags 
+    /// @param cullMask 
+    /// @param origin 
+    /// @param direction 
+    /// @param tMin 
+    /// @param tMax 
     void initialize(const AccelerationStructureManager& as,
             const unsigned& rayFlags,
             const unsigned& cullMask,
             const std::vector<float>& origin,
-            const float& tMin,
             const std::vector<float>& direction,
+            const float& tMin,
             const float& tMax) {
+
         assert(origin.size() == 3);
         assert(direction.size() == 3);
 
@@ -53,6 +62,16 @@ public:
         rayTMax = tMax;
 
         active = true;
+        TLAS.initStepTraceRay(rayFlags, cullMask, origin, direction, rayTMin, rayTMax, false);
+    }
+
+    /// @brief Take one step in tracing the ray where each step reaches the next geometry.
+    /// @return True if there is more to trace, otherwise false.
+    bool proceed() {
+        if (active) {
+            active = TLAS.stepTraceRay();
+        }
+        return active;
     }
 
     /// @brief Make this ray query inactive.
@@ -78,9 +97,21 @@ public:
         return std::vector<float>{ rayOrigin.x, rayOrigin.y, rayOrigin.z };
     }
 
+    /// @brief Get the ray's world-space origin.
+    /// @return 3-D vector of 32-bit floats.
+    glm::vec3 getWorldRayOriginGLM() const {
+        return glm::vec3(rayOrigin);
+    }
+
     /// @brief Get the ray's world-space direction.
     /// @return 3-D vector of 32-bit floats.
     std::vector<float> getWorldRayDirection() const {
         return std::vector<float>{ rayDirection.x, rayDirection.y, rayDirection.z };
+    }
+
+    /// @brief Get the ray's world-space direction.
+    /// @return 3-D vector of 32-bit floats.
+    glm::vec3 getWorldRayDirectionGLM() const {
+        return glm::vec3(rayDirection);
     }
 };

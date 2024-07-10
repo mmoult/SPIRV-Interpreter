@@ -223,6 +223,7 @@ Instruction* Instruction::readOp(
     case spv::OpReturnValue: // 254
     case spv::OpConvertUToAccelerationStructureKHR: // 4447
     case spv::OpRayQueryTerminateKHR: // 4474
+    case spv::OpRayQueryProceedKHR: // 4477
     case spv::OpRayQueryGetRayTMinKHR: // 6016
     case spv::OpRayQueryGetRayFlagsKHR: // 6017
     case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
