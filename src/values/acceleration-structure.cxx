@@ -65,626 +65,17 @@ private:
         virtual std::string toString(const unsigned indent = 0, const std::string indentString = "") const = 0;
     };
 
-    const bool isTLAS;  // true: TLAS, false: BLAS
-    std::unique_ptr<Node> root;  // Start of this acceleration structure
-
-public:
-    const unsigned id;  // identifier
-
-    /// @brief TODO: description
-    /// @param id
-    /// @param structureInfo 
-    /// @param nodeCounts 
-    /// @param allAccelerationStructures 
-    /// @param numAccelerationStructures
-    AccelerationStructure(const unsigned id,
-            const Struct& structureInfo,
-            const Struct& nodeCounts,
-            std::vector<std::shared_ptr<AccelerationStructure>>& allAccelerationStructures,
-            const unsigned numAccelerationStructures)
-        : id(id),
-          isTLAS(static_cast<const Primitive&>(*(structureInfo[0])).data.b32) {
-
-        // Get node information
-        const unsigned numBoxNodes = static_cast<const Primitive&>(*(nodeCounts[0])).data.u32;
-        const unsigned numInstanceNodes = static_cast<const Primitive&>(*(nodeCounts[1])).data.u32;
-        const unsigned numTriangleNodes = static_cast<const Primitive&>(*(nodeCounts[2])).data.u32;
-        const unsigned numProceduralNodes = static_cast<const Primitive&>(*(nodeCounts[3])).data.u32;
-        
-        const unsigned numPrimitiveNodes = numTriangleNodes + numProceduralNodes;
-        assert((numInstanceNodes == 0 && numPrimitiveNodes > 0) || (numInstanceNodes > 0 && numPrimitiveNodes == 0));
-
-        // Construct the nodes bottom-up
-        const unsigned offset = 1;  // offset of struct fields to the start of nodes
-        const unsigned numNodes = numBoxNodes + numInstanceNodes + numPrimitiveNodes;
-        std::vector<std::unique_ptr<Node>> nodes; // temporarily holds ownership of nodes
-
-        // Procedural nodes
-        for (unsigned i = 0; i < numProceduralNodes; ++i) {
-            const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i]));
-
-            const bool opaque = static_cast<const Primitive&>(*(primitiveInfo[0])).data.b32;
-
-            const Array& minBoundsInfo = static_cast<const Array&>(*(primitiveInfo[1]));
-            const Array& maxBoundsInfo = static_cast<const Array&>(*(primitiveInfo[2]));
-            glm::vec4 minBounds;
-            glm::vec4 maxBounds;
-            assert(minBoundsInfo.getSize() == maxBoundsInfo.getSize());
-            for (unsigned j = 0; j < minBoundsInfo.getSize(); ++j) {
-                minBounds[j] = static_cast<const Primitive&>(*(minBoundsInfo[j])).data.fp32;
-                maxBounds[j] = static_cast<const Primitive&>(*(maxBoundsInfo[j])).data.fp32;
-            }
-            minBounds.w = 1.0f;
-            maxBounds.w = 1.0f;
-
-            nodes.push_back(std::make_unique<ProceduralNode>(opaque, minBounds, maxBounds));
-        }
-
-        // Triangle node
-        for (unsigned i = 0; i < numTriangleNodes; ++i) {
-            const Struct& primitiveInfo =
-                    static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numProceduralNodes]));
-
-            // Opaque
-            const bool opaque = static_cast<const Primitive&>(*(primitiveInfo[0])).data.b32;
-
-            // Vertices
-            std::vector<glm::vec3> vertices;
-            const Array& verticesInfo = static_cast<const Array&>(*(primitiveInfo[1]));
-            for (unsigned j = 0; j < verticesInfo.getSize(); ++j) {
-                glm::vec3 vertex;
-                const Array& vertexInfo = static_cast<const Array&>(*(verticesInfo[j]));
-                assert(vertexInfo.getSize() == 3);
-                for (unsigned k = 0; k < vertexInfo.getSize(); ++k) {
-                    vertex[k] = static_cast<const Primitive&>(*(vertexInfo[k])).data.fp32;
-                }
-                vertices.push_back(vertex);
-            }
-        
-            // Indices
-            std::vector<unsigned> indices;
-            const Array& indicesInfo = static_cast<const Array&>(*(primitiveInfo[2]));
-            for (unsigned j = 0; j < indicesInfo.getSize(); ++j) {
-                unsigned value = static_cast<const Primitive&>(*(indicesInfo[j])).data.u32;
-                indices.push_back(value);
-            }
-
-            nodes.push_back(std::make_unique<TriangleNode>(opaque,vertices, indices));
-        }
-
-        // Instance nodes
-        for (unsigned i = 0; i < numInstanceNodes; ++i) {
-            const Struct& instanceInfo =
-                    static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes]));
-
-            // Transformation matrix
-            glm::mat3x4 transformationMatrix;
-            const Array& transformationMatrixInfo = static_cast<const Array&>(*(instanceInfo[0]));
-            for (unsigned rowIndex = 0; rowIndex < transformationMatrixInfo.getSize(); ++rowIndex) {
-                const Array& rowInfo = static_cast<const Array&>(*(transformationMatrixInfo[rowIndex]));
-                for (unsigned colIndex = 0; colIndex < rowInfo.getSize(); ++colIndex) {
-                    float value = static_cast<const Primitive&>(*(rowInfo[colIndex])).data.fp32;
-                    transformationMatrix[rowIndex][colIndex] = value;
-                }
-            }
-
-            // Mask
-            unsigned mask = static_cast<const Primitive&>(*(instanceInfo[1])).data.u32;
-
-            // Get respective acceleration structure
-            unsigned accelerationStructureIndex = static_cast<const Primitive&>(*(instanceInfo[2])).data.u32;
-            unsigned index = numAccelerationStructures - 1 - accelerationStructureIndex;
-            std::shared_ptr<AccelerationStructure>& as = allAccelerationStructures[index];
-        
-            nodes.push_back(std::make_unique<InstanceNode>(transformationMatrix, mask, as));
-        }
-
-        // Box nodes
-        assert(numPrimitiveNodes == 0 || numInstanceNodes == 0);
-        for (unsigned i = 0; i < numBoxNodes; ++i) {
-            const Struct& boxInfo = static_cast<const Struct&>(
-                    *(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes - numInstanceNodes]));
-
-            const Array& minBoundsInfo = static_cast<const Array&>(*(boxInfo[0]));
-            const Array& maxBoundsInfo = static_cast<const Array&>(*(boxInfo[1]));
-            glm::vec4 minBounds;
-            glm::vec4 maxBounds;
-            assert(minBoundsInfo.getSize() == maxBoundsInfo.getSize());
-            for (unsigned j = 0; j < minBoundsInfo.getSize(); ++j) {
-                minBounds[j] = static_cast<const Primitive&>(*(minBoundsInfo[j])).data.fp32;
-                maxBounds[j] = static_cast<const Primitive&>(*(maxBoundsInfo[j])).data.fp32;
-            }
-            minBounds.w = 1.0f;
-            maxBounds.w = 1.0f;
-        
-            const Array& childrenIndicesInfo = static_cast<const Array&>(*(boxInfo[2]));
-            std::vector<unsigned> childrenIndices;
-            for (unsigned j = 0; j < childrenIndicesInfo.getSize(); ++j) {
-                unsigned childIndex = static_cast<const Primitive&>(*(childrenIndicesInfo[j])).data.u32;
-                childrenIndices.push_back(childIndex);
-            }
-
-            // Get the actual children
-            std::vector<std::unique_ptr<Node>> children;
-            for (const auto& childIndex : childrenIndices) {
-                assert(nodes[numNodes - 1 - childIndex] != nullptr);
-                children.push_back(std::move(nodes[numNodes - 1 - childIndex]));
-            }
-        
-            nodes.push_back(std::make_unique<BoxNode>(minBounds, maxBounds, children));
-        }
-
-        // Assertion to make sure nodes list is within expectation
-        unsigned rootIndex = numNodes - 1;
-        for (unsigned i = 0; i < nodes.size(); ++i)
-            assert((i != rootIndex && nodes[i] == nullptr) || (i == rootIndex && nodes[i] != nullptr));
-
-        // Set the root node
-        root = std::move(nodes[numNodes - 1]);
-
-        // All unique_ptr in "nodes" should be null, so the root should be null
-        assert(nodes[rootIndex] == nullptr);
-    };
-
-    ~AccelerationStructure() {};
-
-    // TODO: step through the acceleration structure for each call and return the node that was intersected.
-    const std::unique_ptr<Node>& stepTraceRay(const std::unique_ptr<Node>& start) const {
-        throw std::runtime_error("stepTraceRay() not implemented.");
-    }
-
-    /*
-    Typically, a BLAS corresponds to individual 3D models within a scene,
-    and a TLAS corresponds to an entire scene built by positioning
-    (with 3-by-4 transformation matrices) individual referenced BLASes.
-    */
-    // TODO
-    // TODO: change return type to a ray payload or something related
-    // TODO: change parameter types
-    // TODO: SBT once can do multiple shader invocations
-    // Modifies payload parameter
-    void traceRay(const unsigned rayFlags,
-            const unsigned cullMask,
-            const int offsetSBT,
-            const int strideSBT,
-            const int missIndex,
-            const glm::vec4 rayOrigin,
-            const float rayTMin,
-            const glm::vec4 rayDirection,
-            const float rayTMax,
-            bool& didIntersectGeometry) {
-
-        using NodeRef = std::unique_ptr<Node>*;  // Raw pointer that points to smart pointer
-
-        // Handle flags
-        bool rayFlagNone = (rayFlags | spv::RayFlagsMask::RayFlagsMaskNone) == 0; // TODO: reason to have this?
-        bool rayFlagOpaque = rayFlags & spv::RayFlagsMask::RayFlagsOpaqueKHRMask;
-        bool rayFlagNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsNoOpaqueKHRMask;
-        bool rayFlagTerminateOnFirstHit = rayFlags & spv::RayFlagsMask::RayFlagsTerminateOnFirstHitKHRMask;
-        bool rayFlagSkipClosestHitShader = rayFlags & spv::RayFlagsMask::RayFlagsSkipClosestHitShaderKHRMask;
-        bool rayFlagCullBackFacingTriangles = rayFlags & spv::RayFlagsMask::RayFlagsCullBackFacingTrianglesKHRMask;
-        bool rayFlagCullFrontFacingTriangles = rayFlags & spv::RayFlagsMask::RayFlagsCullFrontFacingTrianglesKHRMask;
-        bool rayFlagCullOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullOpaqueKHRMask;
-        bool rayFlagCullNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullNoOpaqueKHRMask;
-        bool rayFlagSkipTriangles = rayFlags & spv::RayFlagsMask::RayFlagsSkipTrianglesKHRMask;
-        bool rayFlagSkipAABBs = rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask; // skip procedurals
-
-        std::stack<NodeRef> frontier;
-        frontier.push(&root);
-
-        std::cout << "ray flags = " << rayFlags << std::endl;
-        std::cout << "AS id: " << id << std::endl;
-        std::cout << "~Ray origin: " << glm::to_string(rayOrigin) << std::endl;
-        std::cout << "~Ray direction: " << glm::to_string(rayDirection)<< std::endl;
-
-        while (!frontier.empty()) {
-            std::unique_ptr<Node>& currNodeRef = *(frontier.top());
-            frontier.pop();
-
-            Node* currNode = currNodeRef.release();  // Take ownership
-
-            std::cout << "Trace ray: node type: " << static_cast<unsigned>(currNode->type()) << std::endl;
-
-            switch(currNode->type()) {
-            default: {
-                std::stringstream err;
-                err << "Found unknown node type (" << static_cast<int>(currNode->type())
-                    << ") in \"traceRay()\" method of class "
-                       "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
-                throw std::runtime_error(err.str());
-            }
-            case NodeType::Box: {
-                // TODO
-                BoxNode* boxNode = static_cast<BoxNode*>(currNode); 
-                bool result = rayAABBIntersect(rayOrigin, rayDirection, rayTMin, rayTMax, boxNode->minBounds, boxNode->maxBounds);
-                if (result) {
-                    // Ray intersected; add it's children to be evaluated
-                    std::cout << "Ray intersected with AABB in box node" << std::endl;
-                    for (auto& child : boxNode->children) {
-                        frontier.push(&child);
-                    }
-                } else {
-                    // Ray didn't intersect
-                    std::cout << "Ray did not intersect with AABB" << std::endl;
-                }
-                break;
-            }
-            case NodeType::Instance: {
-                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
-
-                // TODO
-                // Do not process this instance if it's invisible to the ray
-                if ((instanceNode->instanceMask & cullMask) == 0) {
-                    std::cout << "\tInstance is invisible to ray" << std::endl;
-                    break;
-                }
-
-                bool foundGeometryIntersection = false;
-
-                // Transform the ray to match the instance's space
-                glm::mat4x4 objectToWorld(1.0f); // Turn 3x4 to 4x4 so we can invert it
-                for (int i = 0; i < 3; ++i) {
-                    for (int j = 0; j < 4; ++j) {
-                        objectToWorld[i][j] = instanceNode->objectToWorld[i][j];
-                    }
-                }
-
-                const glm::mat4x4 worldToObject = glm::inverse(objectToWorld);
-
-                glm::vec4 newRayOrigin = (rayOrigin * worldToObject);
-                glm::vec4 newRayDirection = (rayDirection * worldToObject);
-                
-                std::cout << "\tInstance node new ray origin and ray direction respectively: " << std::endl;
-                std::cout << "\t\tnew origin: " << glm::to_string(newRayOrigin) << std::endl;
-                std::cout << "\t\tnew direction: " << glm::to_string(newRayDirection) << std::endl;
-                std::cout << std::endl;
-
-                // Trace the ray in the respective acceleration structure
-                instanceNode->accelerationStructure->traceRay(rayFlags,
-                        cullMask,
-                        offsetSBT,
-                        strideSBT,
-                        missIndex,
-                        newRayOrigin,
-                        rayTMin,
-                        newRayDirection,
-                        rayTMax,
-                        foundGeometryIntersection);
-
-                // Handle the result of tracing the ray in the instance
-                if (foundGeometryIntersection) {
-                    // TODO: may want to terminate early if ray does intersect any primitive
-                    didIntersectGeometry = true;
-                    
-                    // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit) {
-                        return;
-                    }
-                } else {
-                    // Ray did not intersect
-                }
-
-                std::cout << "\t!!!!!!!!!!!!!!!!!!!!! Done! Now going back to AS id: " << id << std::endl;
-
-                break;
-            }
-            // TODO: could maybe combine triangle and procedural due to similarities?
-            case NodeType::Triangle: {
-                // Ignore triangle if this flag is true
-                if (rayFlagSkipTriangles) {
-                    std::cout << "SKIPPING THE TRIANGLES" << std::endl;
-                    break;
-                }
-                
-                TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
-                bool isOpaque = triangleNode->opaque;
-                assert(!(rayFlagOpaque && rayFlagNoOpaque));
-                if (rayFlagOpaque) {
-                    isOpaque = true;
-                } else if (rayFlagNoOpaque) {
-                    isOpaque = false;
-                }
-
-                if (rayFlagCullOpaque && isOpaque) {
-                    std::cout << "Culling opaque triangle" << std::endl;
-                    break;
-                }
-                if (rayFlagCullNoOpaque && !isOpaque) {
-                    std::cout << "Culling none opaque triangle" << std::endl;
-                    break;
-                }
-
-                // TODO: when multi-shader invocation is a thing, need to handle opacity
-
-                // Check if the ray intersects the triangle
-                float t, u, v;  // t : distance to intersection, (u,v) : uv coordinates/coordinates in triangle
-                bool result = rayTriangleIntersect(rayOrigin,
-                        rayDirection,
-                        rayTMin,
-                        rayTMax,
-                        triangleNode->vertices,
-                        rayFlagCullBackFacingTriangles,
-                        rayFlagCullFrontFacingTriangles,
-                        t,
-                        u,
-                        v);
-
-                if (result) {
-                    // Ray intersected
-                    std::cout << "+++ Ray intersected a triangle; (t, u, v) = (" << t << ", " << u << ", " << v << ")" << std::endl; 
-                    didIntersectGeometry = true;
-
-                    // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit) { 
-                        std::cout << "Terminated on first hit!" << std::endl;
-                        return;
-                    }
-                } else {
-                    // Ray did not intersect
-                }
-                break;
-            }
-            // TODO: Not correct until multiple shader invocation support.
-            // Currently, it returns an intersection if it intersects the 
-            // respective AABB for the procedural.
-            // TODO: add intersection shader invocation.
-            case NodeType::Procedural: {
-                std::cout << "WARNING: encountered procedural; multi-shader invocation not a feature; will return "
-                             "its AABB intersection result instead"
-                          << std::endl;
-
-                // Ignore procedural if this flag is true
-                if (rayFlagSkipAABBs) {
-                    std::cout << "SKIPPING THE PROCEDURALS" << std::endl;
-                    break;
-                }
-
-                ProceduralNode* proceduralNode = static_cast<ProceduralNode*>(currNode);
-                bool isOpaque = proceduralNode->opaque;
-                assert(!(rayFlagOpaque && rayFlagNoOpaque));
-                if (rayFlagOpaque) {
-                    isOpaque = true;
-                } else if (rayFlagNoOpaque) {
-                    isOpaque = false;
-                }
-
-                if (rayFlagCullOpaque && isOpaque) {
-                    std::cout << "Culling opaque procedural" << std::endl;
-                    break;
-                }
-                if (rayFlagCullNoOpaque && !isOpaque) {
-                    std::cout << "Culling none opaque procedural" << std::endl;
-                    break;
-                }
-
-                // TODO: when multi-shader invocation is a thing, need to handle opacity
-
-                bool result = rayAABBIntersect(rayOrigin,
-                        rayDirection,
-                        rayTMin,
-                        rayTMax,
-                        proceduralNode->minBounds,
-                        proceduralNode->maxBounds);
-
-                if (result) {
-                    // Procedural geometry was hit
-                    // Terminate on the first hit if the flag was risen
-                    std::cout << "+++ Ray intersected a procedural's AABB" << std::endl;
-                    didIntersectGeometry = true;
-
-                    if (rayFlagTerminateOnFirstHit) {
-                        std::cout << "Terminated on first hit!" << std::endl;
-                        return;
-                    }
-                } else {
-                    // Ray did not hit
-                }
-            }
-            }
-            
-            currNodeRef = std::unique_ptr<Node>(currNode);  // Give back ownership
-        }
-
-        // TODO: once multi-shader invocation is a thing, need to handle hit and miss shaders
-        // TODO: currently, the root acceleration structure has an id of 0 but maybe want to allow more flexibility
-        if (id != 0 || rayFlagSkipClosestHitShader) {
-            // TODO: Do not execute a closest hit shader.
-            std::cout << "Skip the closest hit shader" << std::endl;
-            return;
-            // didIntersectGeometry = false;
-        }
-
-        // Invoke a hit or miss shader here
-        std::cout << "Invoke closest hit shader / miss shader" << std::endl;
-    }
-
-private:
-    // Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004."
-    // found on Scratchapixel
-    // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html)
-    bool rayAABBIntersect(const glm::vec3& rayOrigin,
-            const glm::vec3& rayDirection,
-            const float& rayTMin,
-            const float& rayTMax,
-            const glm::vec3& minBounds,
-            const glm::vec3& maxBounds) const {
-
-        // Check if the ray if inside of the AABB; it is considered inside if right at the surface
-        bool insideAABB = rayOrigin.x >= minBounds.x && rayOrigin.y >= minBounds.y && rayOrigin.z >= minBounds.z &&
-                          rayOrigin.x <= maxBounds.x && rayOrigin.y <= maxBounds.y && rayOrigin.z <= maxBounds.z;
-        if (insideAABB)
-            return true;
-
-        // Otherwise, check if the ray intersects the surface of the AABB from the outside
-        // Check the x-plane
-        float tmin = (minBounds.x - rayOrigin.x) / rayDirection.x;
-        float tmax = (maxBounds.x - rayOrigin.x) / rayDirection.x;
-
-        if (tmin > tmax)
-            std::swap(tmin, tmax);
-
-        // Check the y-plane
-        float tymin = (minBounds.y - rayOrigin.y) / rayDirection.y;
-        float tymax = (maxBounds.y - rayOrigin.y) / rayDirection.y;
-
-        if (tymin > tymax)
-            std::swap(tymin, tymax);
-
-        if ((tmin > tymax) || (tymin > tmax))
-            return false;
-
-        if (tymin > tmin)
-            tmin = tymin;
-        if (tymax < tmax)
-            tmax = tymax;
-
-        // Check the z-plane
-        float tzmin = (minBounds.z - rayOrigin.z) / rayDirection.z;
-        float tzmax = (maxBounds.z - rayOrigin.z) / rayDirection.z;
-
-        if (tzmin > tzmax)
-            std::swap(tzmin, tzmax);
-
-        if ((tmin > tzmax) || (tzmin > tmax))
-            return false;
-
-        if (tzmin > tmin)
-            tmin = tzmin;
-        if (tzmax < tmax)
-            tmax = tzmax;
-
-        // Only check the entry point of the ray into the box
-        if (tmin < rayTMin || tmin > rayTMax)
-            return false;
-
-        return true;
-    }
-
-    // TODO: handle triangle face culling
-    // Moller-Trumbore ray/triangle intersection algorithm
-    bool rayTriangleIntersect(const glm::vec3 rayOrigin,
-            const glm::vec3 rayDirection,
-            const float rayTMin,
-            const float rayTMax,
-            const std::vector<glm::vec3> vertices,
-            const bool cullBackFace,
-            const bool cullFrontFace,
-            float& t,
-            float& u,
-            float& v) const {
-
-        // Immediately return if culling both faces; triangle is nonexistent
-        if (cullBackFace && cullFrontFace)
-            return false;
-
-        constexpr float epsilon = std::numeric_limits<float>::epsilon();
-
-        // Find vectors for 2 edges that share a vertex
-        glm::vec3 edge1 = vertices[1] - vertices[0];
-        glm::vec3 edge2 = vertices[2] - vertices[0];
-
-        glm::vec3 pvec = glm::cross(rayDirection, edge2);
-
-        // If positive determinant, then the ray hit the front face
-        // If negative determinant, then the ray hit the back face
-        // If determinant is close to zero, then the ray missed the triangle
-        float determinant = glm::dot(edge1, pvec);
-
-        if (cullBackFace) {
-            if (determinant < epsilon)
-                return false;
-        } else if (cullFrontFace) {
-            if (determinant > epsilon)
-                return false;
-        } else {
-            if (std::fabs(determinant) < epsilon)
-                return false;
-        }
-
-        float inverseDeterminant = 1.0f / determinant;
-
-        glm::vec3 tvec = rayOrigin - vertices[0];  // Distance from ray origin to shared vertex 
-
-        u = glm::dot(tvec, pvec) * inverseDeterminant;
-        if (u < 0 || u > 1)
-            return false;
-
-        glm::vec3 qvec = glm::cross(tvec, edge1);
-
-        v = glm::dot(rayDirection, qvec) * inverseDeterminant;
-        if (v < 0 || u + v > 1)
-            return false;
-
-        t = glm::dot(edge2, qvec) * inverseDeterminant;
-
-        if (t < rayTMin || t > rayTMax)
-            return false;
-
-        return true;
-    }
-
-public:
-    std::string toString(unsigned tabLevel = 0) {
-        std::stringstream result("");
-        const std::string tabString("|\t");
-
-        result << Util::repeatedString(tabLevel, tabString) << "acceleration_structure_id = " << id << std::endl;
-        result << Util::repeatedString(tabLevel + 1, tabString) << "is_TLAS = " << (isTLAS ? "true" : "false") << std::endl;
-        
-        using NodeRef = std::tuple<std::unique_ptr<Node>*, unsigned>;  // Raw pointer to smart pointers
-
-        std::stack<NodeRef> frontier;
-        frontier.push(std::make_tuple(&root, tabLevel + 1));
-
-        while (!frontier.empty()) {
-            NodeRef top = frontier.top();
-            std::unique_ptr<Node>& currNodeRef = *(get<0>(top));
-            const unsigned numTabs = get<1>(top);
-            frontier.pop();
-
-            // Borrow ownership
-            Node* currNode = currNodeRef.release();
-
-            // Append string form of node
-            result << currNode->toString(numTabs + 1, tabString);
-
-            // Traverse down the hierarchy as necessary
-            switch (currNode->type()) {
-            case NodeType::Box: {
-                BoxNode* boxNode = static_cast<BoxNode*>(currNode);
-                for (auto& child : boxNode->children) {
-                    frontier.push(std::make_tuple(&child, numTabs + 1));
-                }
-                break;
-            }
-            case NodeType::Instance: {
-                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
-                result << instanceNode->accelerationStructure->toString(numTabs + 2);
-                break;
-            }
-            default: // No paths after current node
-                break;
-            }
-
-            // Return ownership
-            currNodeRef = std::unique_ptr<Node>(currNode);
-        }
-
-        return result.str();
-    }
-
-private:
     // TODO: change classes to structs? Since not using private fields.
     class BoxNode : public Node {
     public:
         const glm::vec4 minBounds; // min x, y, z, w
         const glm::vec4 maxBounds; // max x, y, z, w
-        std::vector<std::unique_ptr<Node>> children;
+        std::vector<std::shared_ptr<Node>> children;
 
-        /// @brief Constructor for "BoxNode". IMPORTANT: Will transfer ownership of unique pointers.
+        /// @brief Constructor for "BoxNode".
         /// @param bounds TODO
         /// @param children TODO
-        BoxNode(const glm::vec4 minBounds, const glm::vec4 maxBounds, std::vector<std::unique_ptr<Node>>& children)
+        BoxNode(const glm::vec4 minBounds, const glm::vec4 maxBounds, std::vector<std::shared_ptr<Node>>& children)
             : minBounds(minBounds),
               maxBounds(maxBounds) {
             for (auto& child : children) {
@@ -834,6 +225,734 @@ private:
             return result.str();
         }
     };
+
+    const bool isTLAS;  // true: TLAS, false: BLAS
+    std::shared_ptr<Node> root;  // Start of this acceleration structure
+
+public:
+    const unsigned id;  // identifier
+
+    /// @brief TODO: description
+    /// @param id
+    /// @param structureInfo 
+    /// @param nodeCounts 
+    /// @param allAccelerationStructures 
+    /// @param numAccelerationStructures
+    AccelerationStructure(const unsigned id,
+            const Struct& structureInfo,
+            const Struct& nodeCounts,
+            std::vector<std::shared_ptr<AccelerationStructure>>& allAccelerationStructures,
+            const unsigned numAccelerationStructures)
+        : id(id),
+          isTLAS(static_cast<const Primitive&>(*(structureInfo[0])).data.b32) {
+
+        // Get node information
+        const unsigned numBoxNodes = static_cast<const Primitive&>(*(nodeCounts[0])).data.u32;
+        const unsigned numInstanceNodes = static_cast<const Primitive&>(*(nodeCounts[1])).data.u32;
+        const unsigned numTriangleNodes = static_cast<const Primitive&>(*(nodeCounts[2])).data.u32;
+        const unsigned numProceduralNodes = static_cast<const Primitive&>(*(nodeCounts[3])).data.u32;
+        
+        const unsigned numPrimitiveNodes = numTriangleNodes + numProceduralNodes;
+        assert((numInstanceNodes == 0 && numPrimitiveNodes > 0) || (numInstanceNodes > 0 && numPrimitiveNodes == 0));
+
+        // Construct the nodes bottom-up
+        const unsigned offset = 1;  // offset of struct fields to the start of nodes
+        const unsigned numNodes = numBoxNodes + numInstanceNodes + numPrimitiveNodes;
+        std::vector<std::shared_ptr<Node>> nodes;
+
+        // Procedural nodes
+        for (unsigned i = 0; i < numProceduralNodes; ++i) {
+            const Struct& primitiveInfo = static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i]));
+
+            const bool opaque = static_cast<const Primitive&>(*(primitiveInfo[0])).data.b32;
+
+            const Array& minBoundsInfo = static_cast<const Array&>(*(primitiveInfo[1]));
+            const Array& maxBoundsInfo = static_cast<const Array&>(*(primitiveInfo[2]));
+            glm::vec4 minBounds;
+            glm::vec4 maxBounds;
+            assert(minBoundsInfo.getSize() == maxBoundsInfo.getSize());
+            for (unsigned j = 0; j < minBoundsInfo.getSize(); ++j) {
+                minBounds[j] = static_cast<const Primitive&>(*(minBoundsInfo[j])).data.fp32;
+                maxBounds[j] = static_cast<const Primitive&>(*(maxBoundsInfo[j])).data.fp32;
+            }
+            minBounds.w = 1.0f;
+            maxBounds.w = 1.0f;
+
+            nodes.push_back(std::make_shared<ProceduralNode>(opaque, minBounds, maxBounds));
+        }
+
+        // Triangle node
+        for (unsigned i = 0; i < numTriangleNodes; ++i) {
+            const Struct& primitiveInfo =
+                    static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numProceduralNodes]));
+
+            // Opaque
+            const bool opaque = static_cast<const Primitive&>(*(primitiveInfo[0])).data.b32;
+
+            // Vertices
+            std::vector<glm::vec3> vertices;
+            const Array& verticesInfo = static_cast<const Array&>(*(primitiveInfo[1]));
+            for (unsigned j = 0; j < verticesInfo.getSize(); ++j) {
+                glm::vec3 vertex;
+                const Array& vertexInfo = static_cast<const Array&>(*(verticesInfo[j]));
+                assert(vertexInfo.getSize() == 3);
+                for (unsigned k = 0; k < vertexInfo.getSize(); ++k) {
+                    vertex[k] = static_cast<const Primitive&>(*(vertexInfo[k])).data.fp32;
+                }
+                vertices.push_back(vertex);
+            }
+        
+            // Indices
+            std::vector<unsigned> indices;
+            const Array& indicesInfo = static_cast<const Array&>(*(primitiveInfo[2]));
+            for (unsigned j = 0; j < indicesInfo.getSize(); ++j) {
+                unsigned value = static_cast<const Primitive&>(*(indicesInfo[j])).data.u32;
+                indices.push_back(value);
+            }
+
+            nodes.push_back(std::make_shared<TriangleNode>(opaque, vertices, indices));
+        }
+
+        // Instance nodes
+        for (unsigned i = 0; i < numInstanceNodes; ++i) {
+            const Struct& instanceInfo =
+                    static_cast<const Struct&>(*(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes]));
+
+            // Transformation matrix
+            glm::mat3x4 transformationMatrix;
+            const Array& transformationMatrixInfo = static_cast<const Array&>(*(instanceInfo[0]));
+            for (unsigned rowIndex = 0; rowIndex < transformationMatrixInfo.getSize(); ++rowIndex) {
+                const Array& rowInfo = static_cast<const Array&>(*(transformationMatrixInfo[rowIndex]));
+                for (unsigned colIndex = 0; colIndex < rowInfo.getSize(); ++colIndex) {
+                    float value = static_cast<const Primitive&>(*(rowInfo[colIndex])).data.fp32;
+                    transformationMatrix[rowIndex][colIndex] = value;
+                }
+            }
+
+            // Mask
+            unsigned mask = static_cast<const Primitive&>(*(instanceInfo[1])).data.u32;
+
+            // Get respective acceleration structure
+            unsigned accelerationStructureIndex = static_cast<const Primitive&>(*(instanceInfo[2])).data.u32;
+            unsigned index = numAccelerationStructures - 1 - accelerationStructureIndex;
+            std::shared_ptr<AccelerationStructure>& as = allAccelerationStructures[index];
+        
+            nodes.push_back(std::make_shared<InstanceNode>(transformationMatrix, mask, as));
+        }
+
+        // Box nodes
+        assert(numPrimitiveNodes == 0 || numInstanceNodes == 0);
+        for (unsigned i = 0; i < numBoxNodes; ++i) {
+            const Struct& boxInfo = static_cast<const Struct&>(
+                    *(structureInfo[numNodes + offset - 1 - i - numPrimitiveNodes - numInstanceNodes]));
+
+            const Array& minBoundsInfo = static_cast<const Array&>(*(boxInfo[0]));
+            const Array& maxBoundsInfo = static_cast<const Array&>(*(boxInfo[1]));
+            glm::vec4 minBounds;
+            glm::vec4 maxBounds;
+            assert(minBoundsInfo.getSize() == maxBoundsInfo.getSize());
+            for (unsigned j = 0; j < minBoundsInfo.getSize(); ++j) {
+                minBounds[j] = static_cast<const Primitive&>(*(minBoundsInfo[j])).data.fp32;
+                maxBounds[j] = static_cast<const Primitive&>(*(maxBoundsInfo[j])).data.fp32;
+            }
+            minBounds.w = 1.0f;
+            maxBounds.w = 1.0f;
+        
+            const Array& childrenIndicesInfo = static_cast<const Array&>(*(boxInfo[2]));
+            std::vector<unsigned> childrenIndices;
+            for (unsigned j = 0; j < childrenIndicesInfo.getSize(); ++j) {
+                unsigned childIndex = static_cast<const Primitive&>(*(childrenIndicesInfo[j])).data.u32;
+                childrenIndices.push_back(childIndex);
+            }
+
+            // Get the actual children
+            std::vector<std::shared_ptr<Node>> children;
+            for (const auto& childIndex : childrenIndices) {
+                assert(nodes[numNodes - 1 - childIndex] != nullptr);
+                children.push_back(std::move(nodes[numNodes - 1 - childIndex]));
+            }
+        
+            nodes.push_back(std::make_shared<BoxNode>(minBounds, maxBounds, children));
+        }
+
+        // Assertion to make sure nodes list is within expectation
+        unsigned rootIndex = numNodes - 1;
+        for (unsigned i = 0; i < nodes.size(); ++i)
+            assert((i != rootIndex && nodes[i] == nullptr) || (i == rootIndex && nodes[i] != nullptr));
+
+        // Set the root node
+        root = std::move(nodes[numNodes - 1]);
+
+        // All shared_ptr in "nodes" should be null, so the root should be null
+        assert(nodes[rootIndex] == nullptr);
+    };
+
+    ~AccelerationStructure() {};
+
+private: // TODO: traversal related stuff
+    using NodeRef = std::shared_ptr<Node>*;  // Raw pointer that points to smart pointer
+
+    std::stack<NodeRef> nodesToEval;
+
+    // Current ray information
+    unsigned rayFlags = 0;
+    unsigned cullMask = 0;
+    unsigned offsetSBT = 0;
+    unsigned strideSBT = 0;
+    unsigned missIndex = 0;
+    glm::vec4 rayOrigin{ 0.0f, 0.0f, 0.0f, 0.0f };
+    float rayTMin = 0.0f;
+    glm::vec4 rayDirection{ 0.0f, 0.0f, 0.0f, 0.0f };
+    float rayTMax = 0.0f;
+
+    // Current ray flags
+    bool rayFlagNone = false;
+    bool rayFlagOpaque = false;
+    bool rayFlagNoOpaque = false;
+    bool rayFlagTerminateOnFirstHit = false;
+    bool rayFlagSkipClosestHitShader = false;
+    bool rayFlagCullBackFacingTriangles = false;
+    bool rayFlagCullFrontFacingTriangles = false;
+    bool rayFlagCullOpaque = false;
+    bool rayFlagCullNoOpaque = false;
+    bool rayFlagSkipTriangles = false;
+    bool rayFlagSkipAABBs = false;
+
+    void setFlags() {
+        rayFlagNone = (rayFlags | spv::RayFlagsMask::RayFlagsMaskNone) == 0; // TODO: reason to have this?
+        rayFlagOpaque = rayFlags & spv::RayFlagsMask::RayFlagsOpaqueKHRMask;
+        rayFlagNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsNoOpaqueKHRMask;
+        rayFlagTerminateOnFirstHit = rayFlags & spv::RayFlagsMask::RayFlagsTerminateOnFirstHitKHRMask;
+        rayFlagSkipClosestHitShader = rayFlags & spv::RayFlagsMask::RayFlagsSkipClosestHitShaderKHRMask;
+        rayFlagCullBackFacingTriangles = rayFlags & spv::RayFlagsMask::RayFlagsCullBackFacingTrianglesKHRMask;
+        rayFlagCullFrontFacingTriangles = rayFlags & spv::RayFlagsMask::RayFlagsCullFrontFacingTrianglesKHRMask;
+        rayFlagCullOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullOpaqueKHRMask;
+        rayFlagCullNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullNoOpaqueKHRMask;
+        rayFlagSkipTriangles = rayFlags & spv::RayFlagsMask::RayFlagsSkipTrianglesKHRMask;
+        rayFlagSkipAABBs = rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask; // skip procedurals
+    }
+
+    void initTrace() {
+        nodesToEval.push(&root);
+    }
+
+public: // TODO: also traversal stuff
+
+    void initTrace(const unsigned& rayFlags,
+            const unsigned& cullMask,
+            const unsigned& offsetSBT,
+            const unsigned& strideSBT,
+            const unsigned& missIndex,
+            const std::vector<float>& rayOrigin,
+            const float& rayTMin,
+            const std::vector<float>& rayDirection,
+            const float& rayTMax) {
+        
+        assert(rayOrigin.size() == 3 && rayDirection.size() == 3);
+        glm::vec4 convertedRayOrigin = glm::make_vec4(rayOrigin.data());
+        convertedRayOrigin.w = 1.0f;
+        glm::vec4 convertedRayDirection = glm::make_vec4(rayDirection.data());
+        convertedRayDirection.w = 0.0f;
+
+        this->rayFlags = rayFlags;
+        this->cullMask = cullMask;
+        this->offsetSBT = offsetSBT;
+        this->strideSBT = strideSBT;
+        this->missIndex = missIndex;
+        this->rayOrigin = convertedRayOrigin;
+        this->rayTMin = rayTMin;
+        this->rayDirection = convertedRayDirection;
+        this->rayTMax = rayTMax;
+
+        setFlags();
+        initTrace();
+    }
+
+    void initTrace(const unsigned& rayFlags,
+            const unsigned& cullMask,
+            const unsigned& offsetSBT,
+            const unsigned& strideSBT,
+            const unsigned& missIndex,
+            const glm::vec4& rayOrigin,
+            const float& rayTMin,
+            const glm::vec4& rayDirection,
+            const float& rayTMax) {
+                
+        this->rayFlags = rayFlags;
+        this->cullMask = cullMask;
+        this->offsetSBT = offsetSBT;
+        this->strideSBT = strideSBT;
+        this->missIndex = missIndex;
+        this->rayOrigin = rayOrigin;
+        this->rayTMin = rayTMin;
+        this->rayDirection = rayDirection;
+        this->rayTMax = rayTMax;
+
+        setFlags();
+        initTrace();
+    }
+
+    void resetTrace() {
+        while (!nodesToEval.empty())
+            nodesToEval.pop();
+
+        initTrace();
+    }
+
+private:
+    bool didPopNodePreviously = true;
+
+public:
+    // TODO: step to the next primitive
+    // TODO: change instance node pop and push logic
+    bool stepTrace(bool& didIntersectGeometry) {
+        unsigned loopCount = 0;
+        bool foundPrimitive = false;
+
+        while (!foundPrimitive && (nodesToEval.size() > 0)) {
+            ++loopCount;
+
+            NodeRef currNodeRef = nodesToEval.top();
+            Node* currNode = currNodeRef->get();
+            nodesToEval.pop();
+
+            std::cout << "Trace ray: node type: " << static_cast<unsigned>(currNode->type()) << std::endl;
+
+            switch(currNode->type()) {
+            default: {
+                std::stringstream err;
+                err << "Found unknown node type (" << static_cast<int>(currNode->type())
+                    << ") in \"traceRay()\" method of class "
+                        "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
+                throw std::runtime_error(err.str());
+            }
+            case NodeType::Box: {
+                // TODO
+                BoxNode* boxNode = static_cast<BoxNode*>(currNode); 
+                bool result = rayAABBIntersect(rayOrigin, rayDirection, rayTMin, rayTMax, boxNode->minBounds, boxNode->maxBounds);
+                if (result) {
+                    // Ray intersected; add it's children to be evaluated
+                    std::cout << "Ray intersected with AABB in box node" << std::endl;
+                    for (auto& child : boxNode->children) {
+                        nodesToEval.push(&child);
+                    }
+                } else {
+                    // Ray didn't intersect
+                    std::cout << "Ray did not intersect with AABB" << std::endl;
+                }
+                break;
+            }
+            case NodeType::Instance: {
+                std::cout << "$$$ INSTANCE" << std::endl;
+                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
+
+                // TODO
+                // Do not process this instance if it's invisible to the ray
+                if ((instanceNode->instanceMask & cullMask) == 0) {
+                    std::cout << "\tInstance is invisible to ray" << std::endl;
+                    break;
+                }
+
+                bool foundGeometryIntersection = false;
+
+                // Transform the ray to match the instance's space
+                glm::mat4x4 objectToWorld(1.0f); // Turn 3x4 to 4x4 so we can invert it
+                for (int i = 0; i < 3; ++i) {
+                    for (int j = 0; j < 4; ++j) {
+                        objectToWorld[i][j] = instanceNode->objectToWorld[i][j];
+                    }
+                }
+
+                const glm::mat4x4 worldToObject = glm::inverse(objectToWorld);
+
+                glm::vec4 newRayOrigin = (rayOrigin * worldToObject);
+                glm::vec4 newRayDirection = (rayDirection * worldToObject);
+                
+                std::cout << "\tInstance node new ray origin and ray direction respectively: " << std::endl;
+                std::cout << "\t\tnew origin: " << glm::to_string(newRayOrigin) << std::endl;
+                std::cout << "\t\tnew direction: " << glm::to_string(newRayDirection) << std::endl;
+                std::cout << std::endl;
+
+                // Trace the ray in the respective acceleration structure.
+                // Do not pop the node if we can still step through the instance node's acceleration structure.
+                if (didPopNodePreviously) {
+                    // If we did pop the previous node, then this is the first time we are stepping through the instance
+                    // node's acceleration structure.
+                    instanceNode->accelerationStructure->initTrace(rayFlags,
+                            cullMask,
+                            offsetSBT,
+                            strideSBT,
+                            missIndex,
+                            newRayOrigin,
+                            rayTMin,
+                            newRayDirection,
+                            rayTMax);
+                }
+                didPopNodePreviously = !(instanceNode->accelerationStructure->stepTrace(foundGeometryIntersection));
+
+                // Handle the result of tracing the ray in the instance
+                if (foundGeometryIntersection) {
+                    // TODO: may want to terminate early if ray does intersect any primitive
+                    didIntersectGeometry = true;
+                    
+                    // Terminate on the first hit if the flag was risen
+                    if (rayFlagTerminateOnFirstHit) {
+                        std::cout << "********** Terminated on first hit from instance node: " << didIntersectGeometry << std::endl;
+                        return false;
+                    }
+                } else {
+                    // Ray did not intersect
+                }
+
+                if (!didPopNodePreviously) {
+                    nodesToEval.push(currNodeRef);
+                    foundPrimitive = true;
+                } else {
+                    didPopNodePreviously = true;
+                }
+
+                std::cout << "\t!!!!!!!!!!!!!!!!!!!!! Done! Now going back to AS id: " << id << std::endl;
+
+                break;
+            }
+            // TODO: could maybe combine triangle and procedural due to similarities?
+            case NodeType::Triangle: {
+                std::cout << "\t\t\tTesting triangle" << std::endl;
+                // Ignore triangle if this flag is true
+                if (rayFlagSkipTriangles) {
+                    std::cout << "SKIPPING THE TRIANGLES" << std::endl;
+                    break;
+                }
+                
+                TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
+                bool isOpaque = triangleNode->opaque;
+                assert(!(rayFlagOpaque && rayFlagNoOpaque));
+                if (rayFlagOpaque) {
+                    isOpaque = true;
+                } else if (rayFlagNoOpaque) {
+                    isOpaque = false;
+                }
+
+                if (rayFlagCullOpaque && isOpaque) {
+                    std::cout << "Culling opaque triangle" << std::endl;
+                    break;
+                }
+                if (rayFlagCullNoOpaque && !isOpaque) {
+                    std::cout << "Culling none opaque triangle" << std::endl;
+                    break;
+                }
+
+                // TODO: when multi-shader invocation is a thing, need to handle opacity
+
+                // Check if the ray intersects the triangle
+                float t, u, v;  // t : distance to intersection, (u,v) : uv coordinates/coordinates in triangle
+                bool result = rayTriangleIntersect(rayOrigin,
+                        rayDirection,
+                        rayTMin,
+                        rayTMax,
+                        triangleNode->vertices,
+                        rayFlagCullBackFacingTriangles,
+                        rayFlagCullFrontFacingTriangles,
+                        t,
+                        u,
+                        v);
+
+                if (result) {
+                    // Ray intersected
+                    std::cout << "+++ Ray intersected a triangle; (t, u, v) = (" << t << ", " << u << ", " << v << ")" << std::endl; 
+                    didIntersectGeometry = true;
+
+                    // Terminate on the first hit if the flag was risen
+                    if (rayFlagTerminateOnFirstHit) { 
+                        std::cout << "Terminated on first hit!" << std::endl;
+                        return false;
+                    }
+                } else {
+                    // Ray did not intersect
+                }
+                foundPrimitive = true;
+                break;
+            }
+            // TODO: Not correct until multiple shader invocation support.
+            // Currently, it returns an intersection if it intersects the 
+            // respective AABB for the procedural.
+            // TODO: add intersection shader invocation.
+            case NodeType::Procedural: {
+                std::cout << "WARNING: encountered procedural; multi-shader invocation not a feature; will return "
+                                "its AABB intersection result instead"
+                            << std::endl;
+
+                // Ignore procedural if this flag is true
+                if (rayFlagSkipAABBs) {
+                    std::cout << "SKIPPING THE PROCEDURALS" << std::endl;
+                    break;
+                }
+
+                ProceduralNode* proceduralNode = static_cast<ProceduralNode*>(currNode);
+                bool isOpaque = proceduralNode->opaque;
+                assert(!(rayFlagOpaque && rayFlagNoOpaque));
+                if (rayFlagOpaque) {
+                    isOpaque = true;
+                } else if (rayFlagNoOpaque) {
+                    isOpaque = false;
+                }
+
+                if (rayFlagCullOpaque && isOpaque) {
+                    std::cout << "Culling opaque procedural" << std::endl;
+                    break;
+                }
+                if (rayFlagCullNoOpaque && !isOpaque) {
+                    std::cout << "Culling none opaque procedural" << std::endl;
+                    break;
+                }
+
+                // TODO: when multi-shader invocation is a thing, need to handle opacity
+
+                bool result = rayAABBIntersect(rayOrigin,
+                        rayDirection,
+                        rayTMin,
+                        rayTMax,
+                        proceduralNode->minBounds,
+                        proceduralNode->maxBounds);
+
+                if (result) {
+                    // Procedural geometry was hit
+                    // Terminate on the first hit if the flag was risen
+                    std::cout << "+++ Ray intersected a procedural's AABB" << std::endl;
+                    didIntersectGeometry = true;
+
+                    if (rayFlagTerminateOnFirstHit) {
+                        std::cout << "Terminated on first hit!" << std::endl;
+                        return false;
+                    }
+                } else {
+                    // Ray did not hit
+                }
+                foundPrimitive = true;
+                break;
+            }
+            }
+        }
+
+        return !nodesToEval.empty();
+    }
+
+public:
+    /*
+    Typically, a BLAS corresponds to individual 3D models within a scene,
+    and a TLAS corresponds to an entire scene built by positioning
+    (with 3-by-4 transformation matrices) individual referenced BLASes.
+    */
+    // TODO
+    // TODO: change return type to a ray payload or something related
+    // TODO: change parameter types
+    // TODO: SBT once can do multiple shader invocations
+    // Modifies payload parameter
+    void traceRay(const unsigned rayFlags,
+            const unsigned cullMask,
+            const unsigned offsetSBT,
+            const unsigned strideSBT,
+            const unsigned missIndex,
+            const glm::vec4 rayOrigin,
+            const float rayTMin,
+            const glm::vec4 rayDirection,
+            const float rayTMax,
+            bool& didIntersectGeometry) {
+
+        initTrace(rayFlags, cullMask, offsetSBT, strideSBT, missIndex, rayOrigin, rayTMin, rayDirection, rayTMax);
+
+        bool intersect = false;
+        while (stepTrace(intersect)) {
+            if (intersect)
+                didIntersectGeometry = true;
+        }
+        if (intersect)
+            didIntersectGeometry = true;
+
+        // TODO: once multi-shader invocation is a thing, need to handle hit and miss shaders
+        // TODO: currently, the root acceleration structure has an id of 0 but maybe want to allow more flexibility
+        if (id != 0 || rayFlagSkipClosestHitShader) {
+            // TODO: Do not execute a closest hit shader.
+            std::cout << "Skip the closest hit shader" << std::endl;
+            return;
+            // didIntersectGeometry = false;
+        }
+
+        // Invoke a hit or miss shader here
+        std::cout << "Invoke closest hit shader / miss shader" << std::endl;
+    }
+
+private:
+    // Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004."
+    // found on Scratchapixel
+    // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html)
+    bool rayAABBIntersect(const glm::vec3& rayOrigin,
+            const glm::vec3& rayDirection,
+            const float& rayTMin,
+            const float& rayTMax,
+            const glm::vec3& minBounds,
+            const glm::vec3& maxBounds) const {
+
+        // Check if the ray if inside of the AABB; it is considered inside if right at the surface
+        bool insideAABB = rayOrigin.x >= minBounds.x && rayOrigin.y >= minBounds.y && rayOrigin.z >= minBounds.z &&
+                          rayOrigin.x <= maxBounds.x && rayOrigin.y <= maxBounds.y && rayOrigin.z <= maxBounds.z;
+        if (insideAABB)
+            return true;
+
+        // Otherwise, check if the ray intersects the surface of the AABB from the outside
+        // Check the x-plane
+        float tmin = (minBounds.x - rayOrigin.x) / rayDirection.x;
+        float tmax = (maxBounds.x - rayOrigin.x) / rayDirection.x;
+
+        if (tmin > tmax)
+            std::swap(tmin, tmax);
+
+        // Check the y-plane
+        float tymin = (minBounds.y - rayOrigin.y) / rayDirection.y;
+        float tymax = (maxBounds.y - rayOrigin.y) / rayDirection.y;
+
+        if (tymin > tymax)
+            std::swap(tymin, tymax);
+
+        if ((tmin > tymax) || (tymin > tmax))
+            return false;
+
+        if (tymin > tmin)
+            tmin = tymin;
+        if (tymax < tmax)
+            tmax = tymax;
+
+        // Check the z-plane
+        float tzmin = (minBounds.z - rayOrigin.z) / rayDirection.z;
+        float tzmax = (maxBounds.z - rayOrigin.z) / rayDirection.z;
+
+        if (tzmin > tzmax)
+            std::swap(tzmin, tzmax);
+
+        if ((tmin > tzmax) || (tzmin > tmax))
+            return false;
+
+        if (tzmin > tmin)
+            tmin = tzmin;
+        if (tzmax < tmax)
+            tmax = tzmax;
+
+        // Only check the entry point of the ray into the box
+        if (tmin < rayTMin || tmin > rayTMax)
+            return false;
+
+        return true;
+    }
+
+    // TODO: handle triangle face culling
+    // Moller-Trumbore ray/triangle intersection algorithm
+    bool rayTriangleIntersect(const glm::vec3 rayOrigin,
+            const glm::vec3 rayDirection,
+            const float rayTMin,
+            const float rayTMax,
+            const std::vector<glm::vec3> vertices,
+            const bool cullBackFace,
+            const bool cullFrontFace,
+            float& t,
+            float& u,
+            float& v) const {
+
+        // Immediately return if culling both faces; triangle is nonexistent
+        if (cullBackFace && cullFrontFace)
+            return false;
+
+        constexpr float epsilon = std::numeric_limits<float>::epsilon();
+
+        // Find vectors for 2 edges that share a vertex
+        glm::vec3 edge1 = vertices[1] - vertices[0];
+        glm::vec3 edge2 = vertices[2] - vertices[0];
+
+        glm::vec3 pvec = glm::cross(rayDirection, edge2);
+
+        // If positive determinant, then the ray hit the front face
+        // If negative determinant, then the ray hit the back face
+        // If determinant is close to zero, then the ray missed the triangle
+        float determinant = glm::dot(edge1, pvec);
+
+        if (cullBackFace) {
+            if (determinant < epsilon)
+                return false;
+        } else if (cullFrontFace) {
+            if (determinant > epsilon)
+                return false;
+        } else {
+            if (std::fabs(determinant) < epsilon)
+                return false;
+        }
+
+        float inverseDeterminant = 1.0f / determinant;
+
+        glm::vec3 tvec = rayOrigin - vertices[0];  // Distance from ray origin to shared vertex 
+
+        u = glm::dot(tvec, pvec) * inverseDeterminant;
+        if (u < 0 || u > 1)
+            return false;
+
+        glm::vec3 qvec = glm::cross(tvec, edge1);
+
+        v = glm::dot(rayDirection, qvec) * inverseDeterminant;
+        if (v < 0 || u + v > 1)
+            return false;
+
+        t = glm::dot(edge2, qvec) * inverseDeterminant;
+
+        if (t < rayTMin || t > rayTMax)
+            return false;
+
+        return true;
+    }
+
+public:
+    std::string toString(unsigned tabLevel = 0) {
+        std::stringstream result("");
+        const std::string tabString("|\t");
+
+        result << Util::repeatedString(tabLevel, tabString) << "acceleration_structure_id = " << id << std::endl;
+        result << Util::repeatedString(tabLevel + 1, tabString) << "is_TLAS = " << (isTLAS ? "true" : "false") << std::endl;
+        
+        using NodeRef = std::tuple<std::shared_ptr<Node>*, unsigned>;  // Raw pointer to smart pointers
+
+        std::stack<NodeRef> frontier;
+        frontier.push(std::make_tuple(&root, tabLevel + 1));
+
+        while (!frontier.empty()) {
+            NodeRef top = frontier.top();
+            std::shared_ptr<Node>& currNodeRef = *(get<0>(top));
+            const unsigned numTabs = get<1>(top);
+            frontier.pop();
+
+            // Borrow ownership
+            Node* currNode = currNodeRef.get();
+
+            // Append string form of node
+            result << currNode->toString(numTabs + 1, tabString);
+
+            // Traverse down the hierarchy as necessary
+            switch (currNode->type()) {
+            case NodeType::Box: {
+                BoxNode* boxNode = static_cast<BoxNode*>(currNode);
+                for (auto& child : boxNode->children) {
+                    frontier.push(std::make_tuple(&child, numTabs + 1));
+                }
+                break;
+            }
+            case NodeType::Instance: {
+                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
+                result << instanceNode->accelerationStructure->toString(numTabs + 2);
+                break;
+            }
+            default: // No paths after current node
+                break;
+            }
+        }
+
+        return result.str();
+    }
 };
 
 export class AccelerationStructureManager : public Value {
@@ -903,7 +1022,7 @@ public:
             unsigned offset = 1; // Offset to the first acceleration structure
             for (int i = numAccelerationStructures - 1; i >= 0; --i) {
                 accelerationStructures.push_back(
-                    std::make_unique<AccelerationStructure>(
+                    std::make_shared<AccelerationStructure>(
                         i,
                         static_cast<const Struct&>(*(structureInfoRef[i + offset])), 
                         static_cast<const Struct&>(*(accelerationStructuresInfo[i])), 
@@ -923,9 +1042,9 @@ public:
 
     void traceRay(const unsigned rayFlags,
             const unsigned cullMask,
-            const int offsetSBT,
-            const int strideSBT,
-            const int missIndex,
+            const unsigned offsetSBT,
+            const unsigned strideSBT,
+            const unsigned missIndex,
             const std::vector<float> rayOrigin,
             const float rayTMin,
             const std::vector<float> rayDirection,
