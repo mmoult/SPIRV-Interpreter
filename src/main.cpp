@@ -246,8 +246,8 @@ int main(int argc, char* argv[]) {
         std::stringstream ss;
         const auto& prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
-        if (unsigned indent_size = indent_arg.getValue(); indent_size > 0)
-            format2->setIndentSize(indent_size);
+        if (indent_arg.isPresent())
+            format2->setIndentSize(indent_arg.getValue());
         format2->setTemplate(!generate.enabled);
         format2->printFile(ss, prog_ins);
 
@@ -285,8 +285,8 @@ int main(int argc, char* argv[]) {
         std::string out = out_arg.getValue();
         if (out_set && out != "-") {
             ValueFormat* format2 = determine_format(out, format);
-            if (unsigned indent_size = indent_arg.getValue(); indent_size > 0)
-                format2->setIndentSize(indent_size);
+            if (indent_arg.isPresent())
+                format2->setIndentSize(indent_arg.getValue());
             format2->printFile(ss, prog_outs);
 
             std::ofstream outFile(out);

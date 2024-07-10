@@ -14,13 +14,3 @@ in_tex: { texture_samples: 1.24 }
 
 out_buf:
   adaptive_avg_pad: [ 0.0, 0.0, 0.0, 0.0 ]
-
-shared_samples:
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0

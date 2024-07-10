@@ -156,7 +156,6 @@ public:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
-        case SC::StorageClassWorkgroup:
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
             ins.push_back(id);
@@ -167,6 +166,7 @@ public:
             break;
         case SC::StorageClassPrivate:
         case SC::StorageClassFunction:
+        case SC::StorageClassWorkgroup:
         default:
             // these aren't used for public interfaces
             break;
