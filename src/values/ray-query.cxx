@@ -114,4 +114,11 @@ public:
     glm::vec3 getWorldRayDirectionGLM() const {
         return glm::vec3(rayDirection);
     }
+
+    /// @brief Get the committed or candidate intersection type
+    /// @param intersection 0:candidate, 1:committed
+    /// @return Enum represented as a 32-bit scalar integer
+    unsigned getIntersectionType(unsigned intersection) const {
+        throw std::runtime_error("getIntersectionType() has not been implemented yet.");
+    }
 };

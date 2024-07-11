@@ -399,6 +399,20 @@ void Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
         break;
     }
+    case spv::OpRayQueryGetIntersectionTypeKHR: { // 4479
+        RayQuery& rayQuery = static_cast<RayQuery&>(*getFromPointer(2, data));
+        unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32; // candidate(0) or committed()
+
+        std::cout << "intersection value = " << intersection << std::endl;
+
+        // Set up the return type
+        makeResult(data, 1, nullptr); // location and queue does not matter
+        Primitive& result = static_cast<Primitive&>(*getValue(1, data));
+
+        result.data.u32 = rayQuery.getIntersectionType(intersection);
+
+        break;
+    }
     case spv::OpReportIntersectionKHR: { // 5334
         // TODO: update once interpreter supports multi-shader invocation
         // Get intersection information

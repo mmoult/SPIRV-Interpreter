@@ -395,6 +395,14 @@ private: // TODO: traversal related stuff
     std::stack<NodeRef> nodesToEval;
     bool activeTrace = false;
 
+    // Intersection properties
+    enum class CommittedIntersectionType { None, Triangle, Generated };
+    enum class CandidateIntersectionType { Triangle, AABB, Invalid };
+    std::shared_ptr<InstanceNode> closestInstance;  // Closest instance to be hit if this acceleration structure is a TLAS
+    unsigned closestPrimitiveID;  // Closest primitive ID to be hit if this acceleration structure is a BLAS
+    CommittedIntersectionType committedIntersectionType = CommittedIntersectionType::None;  // Closest intersection type
+    CandidateIntersectionType candidateIntersectionType = CandidateIntersectionType::Invalid;  // Current potential primitive to be hit
+
     // Ray properties
     unsigned rayFlags = 0;
     unsigned cullMask = 0;
@@ -443,6 +451,10 @@ private: // TODO: traversal related stuff
     }
 
     void initTrace() {
+        closestInstance = nullptr;
+        closestPrimitiveID = 0;
+        committedIntersectionType = CommittedIntersectionType::None;
+        candidateIntersectionType = CandidateIntersectionType::Invalid;
         activeTrace = true;
         nodesToEval.push(&root);
     }
@@ -593,12 +605,14 @@ public:
                 std::cout << "\t\tnew direction: " << glm::to_string(newRayDirection) << std::endl;
                 std::cout << std::endl;
 
+                const auto& refAS = instanceNode->accelerationStructure;
+
                 // Trace the ray in the respective acceleration structure.
                 // Do not pop the node if we can still step through the instance node's acceleration structure.
                 if (didPopNodePreviously) {
                     // If we did pop the previous node, then this is the first time we are stepping through the instance
                     // node's acceleration structure.
-                    instanceNode->accelerationStructure->initTrace(rayFlags,
+                    refAS->initTrace(rayFlags,
                             cullMask,
                             newRayOrigin,
                             newRayDirection,
@@ -609,14 +623,13 @@ public:
                             strideSBT,
                             missIndex);
                 }
-                didPopNodePreviously = !(instanceNode->accelerationStructure->stepTrace(foundGeometryIntersection));
+                didPopNodePreviously = !(refAS->stepTrace(foundGeometryIntersection));
                 if (!didPopNodePreviously) {
                     nodesToEval.push(currNodeRef);
                 }
 
                 // Handle the result of tracing the ray in the instance
                 if (foundGeometryIntersection) {
-                    // TODO: may want to terminate early if ray does intersect any primitive
                     didIntersectGeometry = true;
                     
                     // Terminate on the first hit if the flag was risen
@@ -763,7 +776,6 @@ public:
         return !nodesToEval.empty();
     }
 
-public:
     /*
     Typically, a BLAS corresponds to individual 3D models within a scene,
     and a TLAS corresponds to an entire scene built by positioning

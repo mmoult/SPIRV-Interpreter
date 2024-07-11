@@ -197,6 +197,7 @@ Instruction* Instruction::readOp(
     case spv::OpDot: // 148
     case spv::OpLogicalOr: // 166
     case spv::OpLogicalAnd: // 167
+    case spv::OpIEqual: // 170
     case spv::OpSGreaterThan: // 173
     case spv::OpSGreaterThanEqual: // 175
     case spv::OpSLessThan: // 177
@@ -207,6 +208,7 @@ Instruction* Instruction::readOp(
     case spv::OpFOrdLessThanEqual: // 188
     case spv::OpFOrdGreaterThanEqual: // 190
     case spv::OpExecuteCallableKHR: // 4446
+    case spv::OpRayQueryGetIntersectionTypeKHR: // 4479
     case spv::OpReportIntersectionKHR: // 5334
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);

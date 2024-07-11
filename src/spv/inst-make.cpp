@@ -930,6 +930,9 @@ bool Instruction::makeResult(
         }
         break;
     }
+    case spv::OpIEqual: // 170
+        // TODO: integer could be scalar or vector (unsigned or signed)
+        TYPICAL_E_BIN_OP(INT, a->data.i32 == b->data.i32);
     case spv::OpSGreaterThan: // 173
         TYPICAL_E_BIN_OP(INT, a->data.i32 > b->data.i32);
     case spv::OpSGreaterThanEqual: // 175
@@ -965,6 +968,7 @@ bool Instruction::makeResult(
         break;
     case spv::OpConvertUToAccelerationStructureKHR: // 4447
     case spv::OpRayQueryProceedKHR: // 4477
+    case spv::OpRayQueryGetIntersectionTypeKHR: // 4479
     case spv::OpReportIntersectionKHR: // 5334
     case spv::OpRayQueryGetRayTMinKHR: // 6016
     case spv::OpRayQueryGetRayFlagsKHR: // 6017
