@@ -18,6 +18,7 @@ class DataManager;
 class DataView {
     // src must not be null. Only pointer (instead of reference) to prevent circular dependency
     DataManager* src;
+    DataView* prev = nullptr;
     std::map<unsigned, Data> data;
 
 public:
@@ -38,6 +39,10 @@ public:
     Data& operator[](unsigned index);
     const Data& operator[](unsigned index) const;
 
+    Data& local(unsigned index) {
+        return data[index];
+    }
+
     bool contains(unsigned index) const;
 
     unsigned getBound() const;
@@ -47,6 +52,13 @@ public:
     }
     inline DataManager* getSource() const {
         return src;
+    }
+
+    inline void setPrev(DataView* view) {
+        this->prev = view;
+    }
+    inline DataView* getPrev() const {
+        return prev;
     }
 };
 
@@ -81,8 +93,9 @@ public:
         this->max = max;
     }
 
-    inline DataView* makeView() {
+    inline DataView* makeView(DataView* prev = nullptr) {
         auto view = new DataView(this);
+        view->setPrev(prev);
         views.push_back(view);
         return view;
     }

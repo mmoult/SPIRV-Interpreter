@@ -8,8 +8,7 @@
 bool DataView::contains(unsigned index) const {
     if (data.contains(index))
         return true;
-    DataView& global = src->getGlobal();
-    return &global != this && global.contains(index);
+    return prev != nullptr && prev->contains(index);
 }
 
 Data& DataView::at(unsigned index) {
@@ -24,19 +23,23 @@ const Data& DataView::at(unsigned index) const {
 }
 
 Data& DataView::operator[](unsigned index) {
-    DataView& global = src->getGlobal();
-    if (&global != this && global.contains(index))
-        return global[index];
+    // Look for a local address first
+    if (data.contains(index))
+        return data[index];
 
-    // If there is no global (other than this) or global doesn't contain the entry, create the data locally
+    if (prev != nullptr && prev->contains(index))
+        return (*prev)[index];
+
+    // If the data cannot be found, create it locally
     return data[index];
 }
 const Data& DataView::operator[](unsigned index) const {
-    DataView& global = src->getGlobal();
-    if (&global != this && global.contains(index))
-        return global[index];
+    if (data.contains(index))
+        return data.at(index);
 
-    // If there is no global (other than this) or global doesn't contain the entry, create the data locally
+    if (prev != nullptr && prev->contains(index))
+        return (*prev)[index];
+
     return data.at(index);
 }
 

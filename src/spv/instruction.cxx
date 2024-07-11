@@ -52,6 +52,9 @@ export class Instruction {
     Function* getFunction(unsigned idx, DataView& data) const {
         return data[checkRef(idx, data.getBound())].getFunction();
     }
+    EntryPoint* getEntryPoint(unsigned idx, DataView& data) const {
+        return data[checkRef(idx, data.getBound())].getEntryPoint();
+    }
     Variable* getVariable(unsigned idx, DataView& data) const {
         return data[checkRef(idx, data.getBound())].getVariable();
     }
@@ -122,6 +125,17 @@ public:
         std::vector<unsigned>& outs,
         ValueMap& provided
     ) const noexcept(false) {
+        switch (opcode) {
+        case spv::OpSpecConstantTrue:
+        case spv::OpSpecConstantFalse:
+        case spv::OpSpecConstant:
+        case spv::OpSpecConstantComposite:
+        case spv::OpVariable:
+            break;
+        default:
+            return;
+        }
+
         const unsigned len = data.getBound();
         Variable* var = getVariable(1, data);
         unsigned id = std::get<unsigned>(operands[1].raw);
@@ -144,7 +158,6 @@ public:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
-        case SC::StorageClassWorkgroup:
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
         case SC::StorageClassHitAttributeKHR:  // TODO
@@ -159,43 +172,32 @@ public:
             break;
         case SC::StorageClassPrivate:
         case SC::StorageClassFunction:
+        case SC::StorageClassWorkgroup:
         default:
             // these aren't used for public interfaces
             break;
         }
     }
 
+    spv::BuiltIn getVarBuiltIn(DataView& data) const {
+        if (opcode != spv::OpVariable)
+            return spv::BuiltIn::BuiltInMax;
+        Variable* var = data[getResult()].getVariable();
+        return var->getBuiltIn();
+    }
+
     spv::Op getOpcode() const {
         return opcode;
     }
 
-    unsigned getEntryStart(DataView& data) const noexcept(false) {
+    const EntryPoint& getEntryPoint(DataView& data) const noexcept(false) {
         assert(opcode == spv::OpEntryPoint);
 
         // The entry function ref is operand 1
-        Function* fx = getFunction(1, data);
+        const EntryPoint* fx = getEntryPoint(1, data);
         if (fx == nullptr)
             throw std::runtime_error("Missing entry function in entry declaration!");
-        return fx->getLocation();
-    }
-
-    void setLocalSize(unsigned* local_size) {
-        assert(opcode == spv::OpExecutionMode);
-
-        if (std::get<unsigned>(operands[1].raw) == spv::ExecutionMode::ExecutionModeLocalSize) {
-            for (unsigned i = 2; i < 5; ++i) {
-                if (operands.size() > i) {
-                    unsigned sz = std::get<unsigned>(operands[i].raw);
-                    if (sz > 1) {
-                        std::stringstream err;
-                        err << "Execution Mode local sizes > 1 currently unsupported! Found: " << sz;
-                        throw std::runtime_error(err.str());
-                    }
-                    local_size[i - 2] = sz;
-                } else
-                    break;  // default size local component size is 1
-            }
-        }
+        return *fx;
     }
 
     // There may be many decorations, but there are very few instructions which are decorated.
@@ -226,9 +228,12 @@ public:
             return false;
         case spv::OpName: // 5
         case spv::OpMemberName: // 6
+        case spv::OpEntryPoint: // 15
+        case spv::OpExecutionMode: // 16
         case spv::OpDecorate: // 71
         case spv::OpMemberDecorate: // 72
-            unsigned to_decor = checkRef(0, data_size);
+        case spv::OpExecutionModeId: // 331
+            unsigned to_decor = checkRef((opcode == spv::OpEntryPoint)? 1 : 0, data_size);
             // Search through the queue to see if the ref already has a request
             unsigned i = 0;
             for (; i < queue.size(); ++i) {
@@ -264,7 +269,12 @@ public:
         return opcode == spv::OpFunction || opcode == spv::OpLabel || opcode == spv::OpVariable;
     }
 
-    void execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const;
+    /// @brief Executes the instruction with the provided data, frame stack, and verbosity setting.
+    /// @param data the data view at the current frame or the global if the frame stack is empty
+    /// @param frame_stack holds variables, arguments, return addresses, and program counters
+    /// @param verbose whether to print a verbose trace of execution
+    /// @return whether the instruction execution blocks the invocation (such as by a barrier)
+    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const;
 
     void print() const;
 

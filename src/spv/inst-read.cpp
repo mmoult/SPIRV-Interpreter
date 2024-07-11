@@ -189,6 +189,7 @@ Instruction* Instruction::readOp(
     case spv::OpIMul: // 132
     case spv::OpFMul: // 133
     case spv::OpFDiv: // 136
+    case spv::OpUMod: // 137
     case spv::OpVectorTimesScalar: // 142
     case spv::OpMatrixTimesScalar: // 143
     case spv::OpVectorTimesMatrix: // 144
@@ -198,15 +199,33 @@ Instruction* Instruction::readOp(
     case spv::OpLogicalOr: // 166
     case spv::OpLogicalAnd: // 167
     case spv::OpIEqual: // 170
+    case spv::OpINotEqual: // 171
+    case spv::OpUGreaterThan: // 172
     case spv::OpSGreaterThan: // 173
+    case spv::OpUGreaterThanEqual: // 174
     case spv::OpSGreaterThanEqual: // 175
+    case spv::OpULessThan: // 176
     case spv::OpSLessThan: // 177
+    case spv::OpULessThanEqual: // 178
     case spv::OpSLessThanEqual: // 179
     case spv::OpFOrdEqual: // 180
+    case spv::OpFUnordEqual: // 181
+    case spv::OpFOrdNotEqual: // 182
+    case spv::OpFUnordNotEqual: // 183
     case spv::OpFOrdLessThan: // 184
+    case spv::OpFUnordLessThan: // 185
     case spv::OpFOrdGreaterThan: // 186
+    case spv::OpFUnordGreaterThan: // 187
     case spv::OpFOrdLessThanEqual: // 188
+    case spv::OpFUnordLessThanEqual: // 189
     case spv::OpFOrdGreaterThanEqual: // 190
+    case spv::OpFUnordGreaterThanEqual: // 191
+    case spv::OpShiftRightLogical: // 194
+    case spv::OpShiftRightArithmetic: // 195
+    case spv::OpShiftLeftLogical: // 196
+    case spv::OpBitwiseOr: // 197
+    case spv::OpBitwiseXor: // 198
+    case spv::OpBitwiseAnd: // 199
     case spv::OpExecuteCallableKHR: // 4446
     case spv::OpRayQueryGetIntersectionTypeKHR: // 4479
     case spv::OpReportIntersectionKHR: // 5334
@@ -215,12 +234,17 @@ Instruction* Instruction::readOp(
         break;
     case spv::OpTypeRuntimeArray: // 29
     case spv::OpTranspose: // 84
+    case spv::OpConvertFToU: // 109
+    case spv::OpConvertFToS: // 110
     case spv::OpConvertSToF: // 111
     case spv::OpConvertUToF: // 112
     case spv::OpFNegate: // 127
+    case spv::OpAny: // 154
+    case spv::OpAll: // 155
     case spv::OpIsNan: // 156
     case spv::OpIsInf: // 157
     case spv::OpLogicalNot: // 168
+    case spv::OpNot: // 200
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
     case spv::OpConvertUToAccelerationStructureKHR: // 4447
@@ -292,6 +316,7 @@ Instruction* Instruction::readOp(
         repeating = true;
         break;
     case spv::OpSelect: // 169
+    case spv::OpControlBarrier: // 224
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
@@ -321,6 +346,11 @@ Instruction* Instruction::readOp(
         optional.push_back(Type::UINT);
         optional.push_back(Type::UINT);
         break;
+    case spv::OpExecutionModeId: // 331
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::CONST);
+        optional.push_back(Type::REF);
+        repeating = true;
     case spv::OpTraceRayKHR: // 4445
         for (int i = 0; i < 11; ++i)
             to_load.push_back(Type::REF);

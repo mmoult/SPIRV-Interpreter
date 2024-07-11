@@ -6,6 +6,7 @@
 module;
 #include <cassert>
 #include <cstdint>
+#include <set>
 #include <stdexcept>
 #include <vector>
 
@@ -18,9 +19,11 @@ import front.debug;
 import spv.data.data;
 import spv.frame;
 import spv.instruction;
+import value.primitive;
 
 export class Program {
     std::vector<Instruction> insts;
+    // Entry point information
     unsigned entry;
 
     DataManager data;
@@ -28,6 +31,8 @@ export class Program {
     // may keep ids, but never data objects directly!
     std::vector<unsigned> ins;
     std::vector<unsigned> outs;
+    // builtin variables we need to catch
+    unsigned localInvocIdx = 0;
 
     /// @brief For parsing the program from the binary words. Should identify whether the whole program is valid before
     ///        any instructions are executed.
@@ -134,19 +139,6 @@ if (!(COND)) \
         return ret;
     }
 
-    bool isIOGenCode(uint16_t opcode) const {
-        switch (opcode) {
-        case spv::OpSpecConstantTrue:
-        case spv::OpSpecConstantFalse:
-        case spv::OpSpecConstant:
-        case spv::OpSpecConstantComposite:
-        case spv::OpVariable:
-            return true;
-        default:
-            return false;
-        }
-    }
-
 public:
 
     void parse(uint8_t* buffer, int length) noexcept(false) {
@@ -184,7 +176,15 @@ public:
                 // If it has a static result, let it execute now on the data vector
                 if (!inst.queueDecoration(data.getBound(), location, decorations)) {
                     inst.makeResult(global, location, &decorations);
-                    if (isIOGenCode(opcode) && static_ctn)
+
+                    switch (inst.getVarBuiltIn(global)) {
+                    case spv::BuiltIn::BuiltInLocalInvocationIndex:
+                        localInvocIdx = inst.getResult();
+                        continue;  // prevent io gen since we don't want this added to the interface
+                    default:
+                        break;
+                    }
+                    if (static_ctn)
                         inst.ioGen(global, ins, outs, provided);
                 }
             }
@@ -310,16 +310,59 @@ public:
     }
 
     void execute(bool verbose, bool debug, ValueFormat& format) noexcept(false) {
-        Debugger debugger(insts, format);
         Instruction& entry_inst = insts[entry];
-        unsigned start = entry_inst.getEntryStart(data.getGlobal());
+        DataView& global = data.getGlobal();
+        const EntryPoint& ep = entry_inst.getEntryPoint(global);
 
-        // SPIR-V forbids recursion (either direct or indirect), so we don't have to keep a stack frame for locals
-        // However, we will simulate a stack frame for holding temporaries (args and returns) and pc
-        std::vector<Frame*> frame_stack;
+        unsigned num_invocations = ep.localX * ep.localY * ep.localZ;
+        Debugger debugger(insts, format, num_invocations);
+        // The stack frame holds variables, temporaries, program counter, return address, etc
+        // We have a stack frame for each invocation
+        std::vector<std::vector<Frame*>> frame_stacks(num_invocations);
+        std::vector<DataView*> invoc_globals;
+        invoc_globals.reserve(num_invocations);
+        std::set<unsigned> active_threads;
+        std::set<unsigned> live_threads;
+        // afaik, the entry point never takes any arguments
         std::vector<const Value*> entry_args;
-        frame_stack.push_back(new Frame(start, entry_args, 0, data));
-        while (!frame_stack.empty()) {
+
+        Variable* local_invoc_idx = nullptr;
+        if (localInvocIdx != 0)
+            local_invoc_idx = global[localInvocIdx].getVariable();
+
+        for (unsigned i = 0; i < num_invocations; ++i) {
+            DataView* invoc_global = data.makeView(&global);
+            invoc_globals.push_back(invoc_global);
+            active_threads.insert(i);
+            live_threads.insert(i);
+            // Copy over builtins from the global scope to the invocation's scope and populate with their values
+            if (local_invoc_idx != nullptr) {
+                Variable* v = new Variable(*local_invoc_idx);
+                const Primitive idx(i);
+                v->setVal(idx);
+                invoc_global->local(localInvocIdx).redefine(v);
+            }
+            frame_stacks[i].push_back(new Frame(ep.getLocation(), entry_args, 0, *invoc_global));
+        }
+
+        // Right now, do something like round robin scheduling. In the future, we will want to give other options
+        // through the command line
+        unsigned next_invoc = num_invocations - 1;
+        while (!live_threads.empty()) {
+            if (active_threads.empty()) {
+                // All active threads have hit a barrier. Unblock all.
+                for (unsigned live : live_threads)
+                    active_threads.insert(live);
+            }
+            ++next_invoc;
+            while (!active_threads.contains(next_invoc)) {
+                if (next_invoc >= num_invocations)
+                    next_invoc = 0;
+                else
+                    ++next_invoc;
+            }
+
+            auto& frame_stack = frame_stacks[next_invoc];
             auto& cur_frame = *frame_stack.back();
             DataView& cur_data = cur_frame.getData();
             unsigned i_at = cur_frame.getPC();
@@ -328,14 +371,15 @@ public:
 
             // Print the line and invoke the debugger, if enabled
             if (verbose)
-                debugger.printLine(i_at);
+                debugger.printLine(next_invoc, i_at);
             if (debug) {
                 if (debugger.invoke(i_at, cur_data, frame_stack))
                     break;
             }
 
             unsigned frame_depth = frame_stack.size();
-            insts[i_at].execute(cur_data, frame_stack, verbose);  // execute the line of code
+            if (insts[i_at].execute(cur_data, frame_stack, verbose))
+                active_threads.erase(next_invoc);
 
             // print the result if verbose
             if (unsigned result = insts[i_at].getResult();
@@ -345,6 +389,13 @@ public:
                     // - the instruction didn't add or remove a frame (in which case, the value may be undefined)
                     verbose && result > 0 && frame_stack.size() == frame_depth) {
                 debugger.print(result, cur_data);
+            }
+
+            // If the frame stack is empty, the thread has completed (and is no longer alive)
+            if (frame_stack.empty()) {
+                active_threads.erase(next_invoc);
+                live_threads.erase(next_invoc);
+                data.destroyView(invoc_globals[next_invoc]);
             }
         }
     }
