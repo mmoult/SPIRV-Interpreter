@@ -174,7 +174,11 @@ class Parser {
                 return false;
             arg = std::string(argv[*i]);
             // Check that the next argument fetched isn't a new option
-            if (!posOnly && arg.length() > 0 && arg[0] == '-')
+            // - !posOnly: if we only allow positional argument, there can be no flags
+            // - arg.empty(): precondition for next. Cannot check content if length is 0
+            // - args[0] == '-': if the argument begins with a -, it is likely a flag, not an argument
+            // - arg.length() != 1: however, "-" by itself can be an argument, tested by length == 1
+            if (!posOnly && arg.empty() || (arg[0] == '-' && arg.length() != 1))
                 return false;
             return true;
         };

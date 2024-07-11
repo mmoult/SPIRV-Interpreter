@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
     // Peform the rest of the option actions
     if (debug.enabled)
         verbose.enabled = true;
-    if (generate.enabled && template_arg.getValue().empty())
+    if (generate.enabled && !template_arg.hasValue())
         template_arg.setValue("-");
 
     ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
