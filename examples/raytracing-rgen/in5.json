@@ -65,8 +65,13 @@
                     [ 0.0, 1.0, 0.0, 2.8 ],
                     [ 0.0, 0.0, 1.0, -5.0 ]
                 ],
+                "id" : 0,
+                "customIndex" : 0,
+                "geometryIndex" : 0,
+                "primitiveIndex" : 0,
                 "mask" : 255, // 0xFF
-                "index" : 1
+                "shaderBindingTableRecordOffset" : 0,
+                "accelerationStructureIndex" : 1
             },
             "instance1" : { // Single triangle
                 "objectToWorldMatrix" : [ // Translate
@@ -74,8 +79,13 @@
                     [ 0.0, 1.0, 0.0, 1.74 ],
                     [ 0.0, 0.0, 1.0, -1.36 ]
                 ],
+                "id" : 1,
+                "customIndex" : 1,
+                "geometryIndex" : 0,
+                "primitiveIndex" : 1,
                 "mask" : 1, // 0x1
-                "index" : 2
+                "shaderBindingTableRecordOffset" : 0,
+                "accelerationStructureIndex" : 2
             },
             "instance2" : {
                 "objectToWorldMatrix" : [ // Translate to center -> Rotate by 45 degrees -> Scale by 2 -> Translate
@@ -83,8 +93,13 @@
                     [ 0.0, 2.0, 0.0, -2.04 ],
                     [ 1.4142, 0.0, 1.4142, 3.1929 ]
                 ],
+                "id" : 2,
+                "customIndex" : 2,
+                "geometryIndex" : 0,
+                "primitiveIndex" : 2,
                 "mask" : 255, // 0xFF
-                "index" : 3
+                "shaderBindingTableRecordOffset" : 0,
+                "accelerationStructureIndex" : 3
             },
             "instance3" : { // Single triangle
                 "objectToWorldMatrix" : [ // Translate
@@ -92,8 +107,13 @@
                     [ 0.0, 1.0, 0.0, -1.74 ],
                     [ 0.0, 0.0, 1.0, 1.36 ]
                 ],
+                "id" : 3,
+                "customIndex" : 3,
+                "geometryIndex" : 0,
+                "primitiveIndex" : 3,
                 "mask" : 1, // 0x1
-                "index" : 2
+                "shaderBindingTableRecordOffset" : 0,
+                "accelerationStructureIndex" : 2
             }
         },
         "accelerationStructure1" : {
@@ -114,21 +134,29 @@
                 "childrenIndices" : [ 5, 6 ]
             },
             "triangle0" : {
+                "geometryIndex" : 0,
+                "primitiveIndex" : 0,
                 "opaque" : true,
                 "vertices" : [ [ 0.0, 2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ 2.0, 0.0, 0.0 ] ],
                 "indices" : [ 0, 1, 2 ]
             },
             "triangle1" : {
+                "geometryIndex" : 0,
+                "primitiveIndex" : 1,
                 "opaque" : true,
                 "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 2.0, 0.0, 0.0 ], [ 0.0, 0.0, 0.0 ] ],
                 "indices" : [ 0, 1, 2 ]
             },
             "triangle2" : {
+                "geometryIndex" : 0,
+                "primitiveIndex" : 2,
                 "opaque" : true,
                 "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ -2.0, 0.0, 0.0 ] ],
                 "indices" : [ 0, 1, 2 ]
             },
             "procedural0" : {
+                "geometryIndex" : 1,
+                "primitiveIndex" : 0,
                 "opaque" : true,
                 "minBounds" : [ -2.5, 0.0, 0.0 ],
                 "maxBounds" : [ -3.5, -1.0, -1.0 ]
@@ -137,6 +165,8 @@
         "accelerationStructure2" : {
             "isTLAS" : false,
             "triangle0" : {
+                "geometryIndex" : 0,
+                "primitiveIndex" : 0,
                 "opaque" : false,
                 "vertices" : [ [ 0.0, 1.5, 0.0 ], [ -1.25, -1.25, 0.0 ], [ 1.5, 0.0, 0.0 ] ],
                 "indices" : [ 0, 1, 2 ]
@@ -150,11 +180,15 @@
                 "childrenIndices" : [ 1, 2 ]
             },
             "triangle0" : {
+                "geometryIndex" : 0,
+                "primitiveIndex" : 0,
                 "opaque" : true,
                 "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 1.0, 1.0, 0.0 ], [ 1.0, 0.0, 0.0 ] ],
                 "indices" : [ 0, 1, 2 ]
             },
             "triangle1" : {
+                "geometryIndex" : 0,
+                "primitiveIndex" : 1,
                 "opaque" : true,
                 "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 0.0, 1.0, 0.0 ], [ 1.0, 1.0, 0.0 ] ],
                 "indices" : [ 0, 1, 2 ]
