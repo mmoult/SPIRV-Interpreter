@@ -227,8 +227,21 @@ Instruction* Instruction::readOp(
     case spv::OpBitwiseXor: // 198
     case spv::OpBitwiseAnd: // 199
     case spv::OpExecuteCallableKHR: // 4446
+    case spv::OpRayQueryGenerateIntersectionKHR: // 4475
     case spv::OpRayQueryGetIntersectionTypeKHR: // 4479
     case spv::OpReportIntersectionKHR: // 5334
+    case spv::OpRayQueryGetIntersectionTKHR: // 6018
+    case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: // 6019
+    case spv::OpRayQueryGetIntersectionInstanceIdKHR: // 6020
+    case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: // 6021
+    case spv::OpRayQueryGetIntersectionGeometryIndexKHR: // 6022
+    case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: // 6023
+    case spv::OpRayQueryGetIntersectionBarycentricsKHR: // 6024
+    case spv::OpRayQueryGetIntersectionFrontFaceKHR: // 6025
+    case spv::OpRayQueryGetIntersectionObjectRayDirectionKHR: // 6027
+    case spv::OpRayQueryGetIntersectionObjectRayOriginKHR: // 6028
+    case spv::OpRayQueryGetIntersectionObjectToWorldKHR: // 6031
+    case spv::OpRayQueryGetIntersectionWorldToObjectKHR: // 6032
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
@@ -249,9 +262,11 @@ Instruction* Instruction::readOp(
     case spv::OpReturnValue: // 254
     case spv::OpConvertUToAccelerationStructureKHR: // 4447
     case spv::OpRayQueryTerminateKHR: // 4474
+    case spv::OpRayQueryConfirmIntersectionKHR: // 4476
     case spv::OpRayQueryProceedKHR: // 4477
     case spv::OpRayQueryGetRayTMinKHR: // 6016
     case spv::OpRayQueryGetRayFlagsKHR: // 6017
+    case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: // 6026
     case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
     case spv::OpRayQueryGetWorldRayOriginKHR: // 6030
         to_load.push_back(Type::REF);
@@ -405,9 +420,7 @@ Instruction* Instruction::readOp(
         };
 
         auto it = std::find(supported_ext.begin(), supported_ext.end(), ext_name);
-        if (it != supported_ext.end()) {
-            // TODO: do something if the extension is supported
-        } else {
+        if (it == supported_ext.end()) {
             std::stringstream err;
             err << "Unsupported extension: " << ext_name;
             throw std::runtime_error(err.str());

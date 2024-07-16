@@ -119,7 +119,8 @@ public:
         return Type(DataType::STRING, 0, nullptr);
     }
 
-    static inline Type accelerationStructure(std::vector<const Type*> sub_list, std::vector<std::string> name_list) {
+    static inline Type accelerationStructure(std::vector<const Type*> sub_list = std::vector<const Type*> {},
+            std::vector<std::string> name_list = std::vector<std::string> {}) {
         assert(sub_list.size() == name_list.size());
         return Type(DataType::RAY_TRACING_ACCELERATION_STRUCTURE, sub_list, name_list);
     }

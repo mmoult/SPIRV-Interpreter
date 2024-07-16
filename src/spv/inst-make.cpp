@@ -1215,10 +1215,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpTypeAccelerationStructureKHR: // 5341
-        // Will define the type in class "AccelerationStructureManager" in "acceleration-structure.cxx" in "copyFrom()"
-        // method. Passing in empty vectors instead.
-        data[result_at].redefine(
-                new Type(Type::accelerationStructure(std::vector<const Type*> {}, std::vector<std::string> {})));
+        data[result_at].redefine(new Type(Type::accelerationStructure()));
         break;
     case spv::OpConvertUToAccelerationStructureKHR: // 4447
     case spv::OpRayQueryProceedKHR: // 4477
@@ -1226,8 +1223,21 @@ bool Instruction::makeResult(
     case spv::OpReportIntersectionKHR: // 5334
     case spv::OpRayQueryGetRayTMinKHR: // 6016
     case spv::OpRayQueryGetRayFlagsKHR: // 6017
+    case spv::OpRayQueryGetIntersectionTKHR: // 6018
+    case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: // 6019
+    case spv::OpRayQueryGetIntersectionInstanceIdKHR: // 6020
+    case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: // 6021
+    case spv::OpRayQueryGetIntersectionGeometryIndexKHR: // 6022
+    case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: // 6023
+    case spv::OpRayQueryGetIntersectionBarycentricsKHR: // 6024
+    case spv::OpRayQueryGetIntersectionFrontFaceKHR: // 6025
+    case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: // 6026
+    case spv::OpRayQueryGetIntersectionObjectRayDirectionKHR: // 6027
+    case spv::OpRayQueryGetIntersectionObjectRayOriginKHR: // 6028
     case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
-    case spv::OpRayQueryGetWorldRayOriginKHR: { // 6030
+    case spv::OpRayQueryGetWorldRayOriginKHR: // 6030
+    case spv::OpRayQueryGetIntersectionObjectToWorldKHR: // 6031
+    case spv::OpRayQueryGetIntersectionWorldToObjectKHR: { // 6032
         assert(hasResultType);
         Type* ret_type = getType(0, data);
         data[result_at].redefine(ret_type->construct());
