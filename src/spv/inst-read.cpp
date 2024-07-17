@@ -139,6 +139,9 @@ Instruction* Instruction::readOp(
         to_load.push_back(Type::UINT);
         to_load.push_back(Type::UINT);
         break;
+    case spv::OpExtension: // 10
+        to_load.push_back(Type::STRING);
+        break;
     case spv::OpExtInst: // 12
         to_load.push_back(Type::REF);
         [[fallthrough]];
@@ -274,6 +277,7 @@ Instruction* Instruction::readOp(
     case spv::OpTypeStruct: // 30
     case spv::OpTypeFunction: // 33
     case spv::OpConstantComposite: // 44
+    case spv::OpSpecConstantComposite: // 51
     case spv::OpFunctionCall: // 57
     case spv::OpCompositeConstruct: // 80
         to_load.push_back(Type::REF);

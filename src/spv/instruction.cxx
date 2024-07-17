@@ -43,20 +43,23 @@ export class Instruction {
         return result_at;
     }
 
+    Data& getData(unsigned idx, DataView& data) const {
+        return data[checkRef(idx, data.getBound())];
+    }
     Type* getType(unsigned idx, DataView& data) const {
-        return data[checkRef(idx, data.getBound())].getType();
+        return getData(idx, data).getType();
     }
     Value* getValue(unsigned idx, DataView& data) const {
-        return data[checkRef(idx, data.getBound())].getValue();
+        return getData(idx, data).getValue();
     }
     Function* getFunction(unsigned idx, DataView& data) const {
-        return data[checkRef(idx, data.getBound())].getFunction();
+        return getData(idx, data).getFunction();
     }
     EntryPoint* getEntryPoint(unsigned idx, DataView& data) const {
-        return data[checkRef(idx, data.getBound())].getEntryPoint();
+        return getData(idx, data).getEntryPoint();
     }
     Variable* getVariable(unsigned idx, DataView& data) const {
-        return data[checkRef(idx, data.getBound())].getVariable();
+        return getData(idx, data).getVariable();
     }
 
     Value* getHeadValue(const Pointer& pointer, DataView& data) const noexcept(false) {
@@ -118,11 +121,13 @@ public:
     /// @param data list of data to access for determining the storage class of each variable
     /// @param ins a list of ref indices in data pointing to in variables
     /// @param outs a list of ref indices in data pointing to out variables
+    /// @param specs a list of ref indices in data pointing to specialization constants
     /// @param provided a map of input variables. Needed for spec constants
     void ioGen(
         DataView& data,
         std::vector<unsigned>& ins,
         std::vector<unsigned>& outs,
+        std::vector<unsigned>& specs,
         ValueMap& provided
     ) const noexcept(false) {
         switch (opcode) {
@@ -149,6 +154,8 @@ public:
                 std::string name = var->getName();
                 if (provided.contains(name))
                     var->setVal(*provided[name]);
+                specs.push_back(id);
+                break;
             }
             [[fallthrough]];
         case SC::StorageClassUniformConstant:
