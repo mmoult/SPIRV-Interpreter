@@ -1532,17 +1532,18 @@ public:
     AccelerationStructureManager(Type t): Value(t) {}
 
 private:
-    /// @brief Copy the type from "other".
-    /// @param other "Value" to copy the type from.
-    void copyType(const Value& other) {
-        // "other" is a "Struct" instead of "AccelerationStructureManager" at the very first copy of input
-        const Aggregate& other = other.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE
-                                     ? static_cast<const Aggregate&>(
-                                           *((static_cast<const AccelerationStructureManager*>(&other))->structureInfo)
-                                       )
-                                     : static_cast<const Aggregate&>(other);
+    /// @brief Copy the type from "new_val".
+    /// @param new_val "Value" to copy the type from.
+    void copyType(const Value& new_val) {
+        // "new_val" is a "Struct" instead of "AccelerationStructureManager" at the very first copy of input
+        const Aggregate& other =
+            new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE
+                ? static_cast<const Aggregate&>(
+                      *((static_cast<const AccelerationStructureManager*>(&new_val))->structureInfo)
+                  )
+                : static_cast<const Aggregate&>(new_val);
 
-        // Get data about the structure from the "other"
+        // Get data about the structure from the "new_val"
         std::vector<std::array<unsigned, 4>> structure_data;
         const Array& accel_struct_info = static_cast<const Array&>(*(other[0]));
         for (unsigned i = 0; i < accel_struct_info.getSize(); ++i) {
