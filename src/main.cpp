@@ -244,7 +244,7 @@ int main(int argc, char* argv[]) {
         std::string itemplate = template_arg.getValue();
         // Print out needed variables to file specified
         std::stringstream ss;
-        const auto& prog_ins = program.getInputs();
+        auto prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
         if (indent_arg.isPresent())
             format2->setIndentSize(indent_arg.getValue());

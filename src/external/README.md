@@ -5,8 +5,8 @@ There are two dependency header files authored by Khronos:
 - GLSL.std.450.h
 - spirv.hpp
 
-These files should be periodically updated from https://registry.khronos.org/SPIR-V/, which itself gets source files from
-https://github.com/KhronosGroup/SPIRV-Headers/tree/main/include/spirv/unified1
+These files should be periodically updated from https://registry.khronos.org/SPIR-V/, which itself gets source files
+from https://github.com/KhronosGroup/SPIRV-Headers/tree/main/include/spirv/unified1
 
 Small edits may need to be made to these external files. For each file changed, you should find a a change file with the
 same name but with a `-CHANGES` suffix. These change files have been created by doing:

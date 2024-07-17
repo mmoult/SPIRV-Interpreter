@@ -47,25 +47,34 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
         for (auto location : *decorations) {
             const Instruction& deco = queue->insts[location];
             switch (deco.opcode) {
+            case spv::OpName: { // 5
+                assert(deco.operands[1].type == Token::Type::STRING);
+                std::string name = std::get<std::string>(deco.operands[1].raw);
+                var.setName(name);
+                set_name = true;
+                break;
+            }
             case spv::OpDecorate: { // 71
                 uint32_t deco_type = std::get<uint32_t>(deco.operands[1].raw);
                 if (deco_type == spv::Decoration::DecorationBuiltIn)
                     var.setBuiltIn(static_cast<spv::BuiltIn>(std::get<uint32_t>(deco.operands[2].raw)));
                 break;
             }
-            case spv::OpName: { // 5
-                assert(deco.operands[1].type == Token::Type::STRING);
-                std::string name = std::get<std::string>(deco.operands[1].raw);
-                var.setName(name);
-                set_name = true;
-            }
             default:
                 break; // other decorations should not occur
             }
         }
     }
-    if (!set_name)
+    if (!set_name) {
+        // It is helpful to name the builtin after what it is, but this may collide with custom user variables with the
+        // same name. Currently, we make no effort to prevent that, so the code is disabled.
+#if 0
+        if (auto builtin = var.getBuiltIn(); builtin != spv::BuiltIn::BuiltInMax)
+            var.setName(spv::BuiltInToString(builtin));
+        else
+#endif
         var.setName(std::to_string(result_at));
+    }
 }
 
 /**
@@ -487,6 +496,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpConstantComposite: // 44
+    case spv::OpSpecConstantComposite: // 51
     case spv::OpCompositeConstruct: { // 80
         // Can create struct, array/vector, or matrix
         Type* ret = getType(0, data);
@@ -497,7 +507,14 @@ bool Instruction::makeResult(
             values.push_back(val);
         }
         auto* val = ret->construct(values);
-        data[result_at].redefine(val);
+
+        if (opcode != spv::OpSpecConstantComposite) {
+            data[result_at].redefine(val);
+        } else {
+            Variable* var = Variable::makeSpecConst(val);
+            applyVarDeco(queue, *var, result_at);
+            data[result_at].redefine(var);
+        }
         break;
     }
     case spv::OpConstantNull: { // 46

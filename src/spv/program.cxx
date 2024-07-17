@@ -31,6 +31,7 @@ export class Program {
     // may keep ids, but never data objects directly!
     std::vector<unsigned> ins;
     std::vector<unsigned> outs;
+    std::vector<unsigned> specs;
     // builtin variables we need to catch
     unsigned localInvocIdx = 0;
 
@@ -185,7 +186,7 @@ public:
                         break;
                     }
                     if (static_ctn)
-                        inst.ioGen(global, ins, outs, provided);
+                        inst.ioGen(global, ins, outs, specs, provided);
                 }
             }
         }
@@ -198,11 +199,16 @@ public:
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
         DataView& global = data.getGlobal();
-        for (const auto in : ins) {
-            auto var = global[in].getVariable();
+        for (const auto in : ins)
             // var already checked not null in ioGen
-            inputs.push_back(var);
-        }
+            inputs.push_back(global[in].getVariable());
+
+        // Spec constants are not mandatory in the input file!
+        // Although they had their values assigned earlier (and therefore, must not be assigned again), we check them
+        // here since their name-value pairs may appear in the input, we must recognize them as valid.
+        std::vector<Variable*> specConsts;
+        for (const auto spec : specs)
+            inputs.push_back(global[spec].getVariable());
 
         // Next go through variables defined and verify they match needed
         for (const auto& [name, val] : provided) {
@@ -212,22 +218,25 @@ public:
                 auto var = inputs[i];
                 if (var->getName() == name) {
                     found = true;
-                    // If this variable is a specialization constant, we do NOT want to set it now. It must be
-                    // clear that the spec const was set initially and is not set again (important in case we have
-                    // multiple data maps per program).
-                    if (!var->isSpecConst())
-                        var->setVal(*val);
+                    var->setVal(*val);
                     // Remove the interface from the check list
                     inputs.erase(inputs.begin() + i);
                     --i;
                     break;
-                } else
-                    continue; // this isn't a match, try next
+                }
+            }
+            if (!found) {
+                for (Variable* specConst : specConsts) {
+                    if (specConst->getName() == name) {
+                        found = true;
+                        break;
+                    }
+                }
             }
 
             if (!found) {
                 std::stringstream err;
-                err << "Input specifies variable \"" << name << "\" which doesn't exist in the program!";
+                err << "Input specifies variable \"" << name << "\" which doesn't exist in the program interface!";
                 throw std::runtime_error(err.str());
             }
         }
@@ -401,7 +410,10 @@ public:
     }
 
     ValueMap getInputs() const {
-        return getVariables(ins);
+        auto input_map = getVariables(ins);
+        auto spec_consts = getVariables(specs);
+        input_map.insert(spec_consts.begin(), spec_consts.end());
+        return input_map;
     }
     ValueMap getOutputs() const {
         return getVariables(outs);
