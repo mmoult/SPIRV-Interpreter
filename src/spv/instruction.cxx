@@ -153,21 +153,20 @@ public:
             [[fallthrough]];
         case SC::StorageClassUniformConstant:
         case SC::StorageClassInput:
-        case SC::StorageClassCallableDataKHR: // TODO
-        case SC::StorageClassShaderRecordBufferKHR:  // TODO
+        case SC::StorageClassCallableDataKHR:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
-        case SC::StorageClassHitAttributeKHR:  // TODO
-        case SC::StorageClassIncomingRayPayloadKHR:  // TODO
-        case SC::StorageClassIncomingCallableDataKHR: // TODO
+        case SC::StorageClassHitAttributeKHR:
+        case SC::StorageClassIncomingRayPayloadKHR:
+        case SC::StorageClassIncomingCallableDataKHR:
             ins.push_back(id);
             outs.push_back(id);
             break;
         case SC::StorageClassOutput:
-        case SC::StorageClassRayPayloadKHR:  // TODO
+        case SC::StorageClassRayPayloadKHR:
             outs.push_back(id);
             break;
         case SC::StorageClassPrivate:

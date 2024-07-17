@@ -6,8 +6,8 @@
 module;
 #include <algorithm>
 #include <array>
-#include <limits>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <stack>
 #include <string>
@@ -17,9 +17,8 @@ module;
 #include <iostream>
 
 // TODO: probably want to reduce GLM files to link
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
 #include <glm/ext.hpp>
+
 #include "../external/spirv.hpp"
 #include "type.hpp"
 #include "value.hpp"
@@ -29,31 +28,36 @@ import value.aggregate;
 import value.primitive;
 
 namespace Util {
-    std::string repeatedString(const unsigned num, const std::string str) {
-        std::stringstream result("");
-        for (unsigned i = 0; i < num; ++i)
-            result << str;
-        return result.str();
-    }
 
-    std::string glmVec3ToString(const glm::vec3 vec) {
-        std::stringstream result("");
-
-        result << "[ ";
-        for (unsigned i = 0; i < vec.length() - 1; ++i) {
-            result << vec[i] << ", ";
-        }
-        result << vec[vec.length() - 1] << " ]";
-
-        return result.str();
-    }
+/// @brief Get a repeated string.
+/// @param num number of times to repeat a string.
+/// @param str string to repeat.
+/// @return single string of the repeated string.
+std::string repeatedString(const unsigned num, const std::string& str) {
+    std::stringstream result;
+    for (unsigned i = 0; i < num; ++i)
+        result << str;
+    return result.str();
 }
 
-/*
-    TODO: convert raw pointers to smart pointers to deal with memory reclaimation
-    TODO: may want to change how to identify nodes or how nodes work
-    TODO: handle the effects of winding order on intersections; right now, front face is CCW
-*/
+/// @brief Get the a GLM vec3 as a string. This is an alternative to GLM's
+/// "to_string" function.
+/// @param vec vec3 to print.
+/// @return string version of the given 3-D vector.
+std::string glmVec3ToString(const glm::vec3& vec) {
+    std::stringstream result;
+
+    result << "[ ";
+    for (unsigned i = 0; i < vec.length() - 1; ++i)
+        result << vec[i] << ", ";
+    result << vec[vec.length() - 1] << " ]";
+
+    return result.str();
+}
+
+}  // namespace Util
+
+// TODO: handle the effects of winding order on intersections; currently, front face is CCW
 class AccelerationStructure {
 private:
     enum class NodeType { Box, Instance, Triangle, Procedural };
@@ -61,21 +65,23 @@ private:
     struct Node {
         virtual std::shared_ptr<Node> clone() const = 0;
         virtual NodeType type() const = 0;
-        virtual std::string toString(const unsigned indent = 0, const std::string indent_string = "") const = 0;
+        virtual std::string toString(const unsigned indent = 0, const std::string& indent_string = "") const = 0;
     };
 
     struct BoxNode : public Node {
-        const glm::vec4 minBounds; // min x, y, z, w
-        const glm::vec4 maxBounds; // max x, y, z, w
+        const glm::vec4 minBounds;
+        const glm::vec4 maxBounds;
         const std::vector<std::shared_ptr<Node>> children;
 
-        /// @brief TODO
-        /// @param min_bounds 
-        /// @param max_bounds 
-        /// @param children
-        BoxNode(const glm::vec4& min_bounds,
-                const glm::vec4& max_bounds,
-                const std::vector<std::shared_ptr<Node>>& children)
+        /// @brief BoxNode constructor.
+        /// @param min_bounds AABB minimum bounds as a 3-D point.
+        /// @param max_bounds AABB maximum bounds as a 3-D point.
+        /// @param children nodes that are witin the bounds of this BoxNode.
+        BoxNode(
+            const glm::vec4& min_bounds,
+            const glm::vec4& max_bounds,
+            const std::vector<std::shared_ptr<Node>>& children
+        )
             : minBounds(min_bounds),
               maxBounds(max_bounds),
               children([](const std::vector<std::shared_ptr<Node>>& children) -> std::vector<std::shared_ptr<Node>> {
@@ -86,19 +92,18 @@ private:
               }(children)) {}
 
         std::shared_ptr<Node> clone() const {
-            std::vector<std::shared_ptr<Node>> childrenCopies;
-            for (const auto& child : children) {
-                childrenCopies.push_back(child->clone());
-            }
-            return std::make_shared<BoxNode>(minBounds, maxBounds, childrenCopies);
+            std::vector<std::shared_ptr<Node>> children_copy;
+            for (const auto& child : children)
+                children_copy.push_back(child->clone());
+            return std::make_shared<BoxNode>(minBounds, maxBounds, children_copy);
         }
 
         NodeType type() const {
             return NodeType::Box;
         }
 
-        std::string toString(const unsigned indent = 0, const std::string indent_string = "") const {
-            std::stringstream result("");
+        std::string toString(const unsigned indent = 0, const std::string& indent_string = "") const {
+            std::stringstream result;
 
             result << Util::repeatedString(indent, indent_string) << "box_node" << std::endl;
 
@@ -116,24 +121,35 @@ private:
     };
 
     struct InstanceNode : public Node {
-        const glm::mat4x3 objectToWorld; // Column-major order
-        const glm::mat4x3 worldToObject; // Column-major order
-        const unsigned id; // Id relative to other instance nodes in the same acceleration structure
-        const unsigned customIndex; // For shading
-        const unsigned geometryIndex; // Geometry this node is a part of
-        const unsigned primitiveIndex; // Index of node in geometry
-        const unsigned mask;
-        const unsigned sbtRecordOffset; // Shader binding table record offset
+        const glm::mat4x3 objectToWorld;  // Column-major order
+        const glm::mat4x3 worldToObject;  // Column-major order
+        const unsigned id;  // Id relative to other instance nodes in the same acceleration structure
+        const unsigned customIndex;  // For shading
+        const unsigned geometryIndex;  // Geometry this node is a part of
+        const unsigned primitiveIndex;  // Index of node in geometry
+        const unsigned mask;  // Mask that can make the ray ignore this instance
+        const unsigned sbtRecordOffset;  // Shader binding table record offset (a.k.a. hit group id)
         const std::shared_ptr<AccelerationStructure> accelerationStructure;
 
-        InstanceNode(const glm::mat4x3& object_to_world,
-                const unsigned id,
-                const unsigned custom_index,
-                const unsigned geometry_index,
-                const unsigned primitive_index,
-                const unsigned mask,
-                const unsigned sbt_record_offset,
-                const std::shared_ptr<AccelerationStructure>& accel_struct)
+        /// @brief InstanceNode constructor.
+        /// @param object_to_world object-to-world matrix.
+        /// @param id identifier during construction.
+        /// @param custom_index identifier for shading.
+        /// @param geometry_index geometry it is a part of.
+        /// @param primitive_index Iindex in the geometry.
+        /// @param mask mask that determines if a ray will ignore thsi instance.
+        /// @param sbt_record_offset index of the hit group.
+        /// @param accel_struct acceleration structure this instance points to.
+        InstanceNode(
+            const glm::mat4x3& object_to_world,
+            const unsigned id,
+            const unsigned custom_index,
+            const unsigned geometry_index,
+            const unsigned primitive_index,
+            const unsigned mask,
+            const unsigned sbt_record_offset,
+            const std::shared_ptr<AccelerationStructure>& accel_struct
+        )
             : objectToWorld(object_to_world),
               worldToObject([](const glm::mat4x3& object_to_world) -> glm::mat4x3 {
                   glm::mat4x4 temp(1.0f);  // Turn 3x4 to 4x4 so we can invert it
@@ -148,53 +164,53 @@ private:
               primitiveIndex(primitive_index),
               mask(mask),
               sbtRecordOffset(sbt_record_offset),
-              accelerationStructure(std::make_shared<AccelerationStructure>(*accel_struct)) {};
+              accelerationStructure(accel_struct) {};
 
         std::shared_ptr<Node> clone() const {
-            return std::make_shared<InstanceNode>(objectToWorld,
-                    id,
-                    customIndex,
-                    geometryIndex,
-                    primitiveIndex,
-                    mask,
-                    sbtRecordOffset,
-                    accelerationStructure);
+            return std::make_shared<InstanceNode>(
+                objectToWorld,
+                id,
+                customIndex,
+                geometryIndex,
+                primitiveIndex,
+                mask,
+                sbtRecordOffset,
+                std::make_shared<AccelerationStructure>(*accelerationStructure)
+            );
         }
 
         NodeType type() const {
             return NodeType::Instance;
         }
 
-        std::string toString(const unsigned indent = 0, const std::string indent_string = "") const {
-            std::stringstream result("");
+        std::string toString(const unsigned indent = 0, const std::string& indent_string = "") const {
+            std::stringstream result;
 
             result << Util::repeatedString(indent, indent_string) << "instance_node" << std::endl;
 
             // Object-to-world
             result << Util::repeatedString(indent + 1, indent_string) << "object_to_world_matrix = [" << std::endl;
-            unsigned num_rows = objectToWorld.length();
-            assert(num_rows > 0);
-            unsigned num_cols = objectToWorld[0].length();
+            unsigned num_cols = objectToWorld.length();
+            unsigned num_rows = objectToWorld[0].length();
             for (unsigned row = 0; row < num_rows; ++row) {
                 result << Util::repeatedString(indent + 2, indent_string) << "[ ";
                 for (unsigned col = 0; col < num_cols - 1; ++col) {
-                    result << objectToWorld[row][col] << ", ";
+                    result << objectToWorld[col][row] << ", ";
                 }
-                result << objectToWorld[row][num_cols - 1] << " ]" << std::endl;
+                result << objectToWorld[num_cols - 1][row] << " ]" << std::endl;
             }
             result << Util::repeatedString(indent + 1, indent_string) << "]" << std::endl;
 
             // World-to-object
             result << Util::repeatedString(indent + 1, indent_string) << "world_to_object_matrix = [" << std::endl;
-            num_rows = worldToObject.length();
-            assert(num_rows > 0);
-            num_cols = worldToObject[0].length();
+            num_cols = worldToObject.length();
+            num_rows = worldToObject[0].length();
             for (unsigned row = 0; row < num_rows; ++row) {
                 result << Util::repeatedString(indent + 2, indent_string) << "[ ";
                 for (unsigned col = 0; col < num_cols - 1; ++col) {
-                    result << worldToObject[row][col] << ", ";
+                    result << worldToObject[col][row] << ", ";
                 }
-                result << worldToObject[row][num_cols - 1] << " ]" << std::endl;
+                result << worldToObject[num_cols - 1][row] << " ]" << std::endl;
             }
             result << Util::repeatedString(indent + 1, indent_string) << "]" << std::endl;
 
@@ -228,17 +244,25 @@ private:
     };
 
     struct TriangleNode : public Node {
-        const unsigned geometryIndex; // Geometry this node is a part of
-        const unsigned primitiveIndex; // Index of node in geometry
-        const bool opaque;
+        const unsigned geometryIndex;  // Geometry this node is a part of
+        const unsigned primitiveIndex;  // Index of node in geometry
+        const bool opaque;  // Whether this triangle is opaque
         const std::vector<glm::vec3> vertices;
         const std::vector<unsigned> indices;
 
-        TriangleNode(const unsigned geometry_index,
-                const unsigned primitive_index,
-                const bool opaque,
-                const std::vector<glm::vec3>& vertices,
-                const std::vector<unsigned>& indices)
+        /// @brief TriangleNode constructor.
+        /// @param geometry_index geometry it is a part of.
+        /// @param primitive_index index in the geometry.
+        /// @param opaque whether this triangle is opaque.
+        /// @param vertices vertices data.
+        /// @param indices indices data.
+        TriangleNode(
+            const unsigned geometry_index,
+            const unsigned primitive_index,
+            const bool opaque,
+            const std::vector<glm::vec3>& vertices,
+            const std::vector<unsigned>& indices
+        )
             : geometryIndex(geometry_index),
               primitiveIndex(primitive_index),
               opaque(opaque),
@@ -253,8 +277,8 @@ private:
             return NodeType::Triangle;
         }
 
-        std::string toString(const unsigned indent = 0, const std::string indent_string = "") const {
-            std::stringstream result("");
+        std::string toString(const unsigned indent = 0, const std::string& indent_string = "") const {
+            std::stringstream result;
 
             result << Util::repeatedString(indent, indent_string) << "triangle_node" << std::endl;
 
@@ -292,17 +316,25 @@ private:
     };
 
     struct ProceduralNode : public Node {
-        const unsigned geometryIndex; // Geometry this node is a part of
-        const unsigned primitiveIndex; // Index of node in geometry
-        const bool opaque;
+        const unsigned geometryIndex;  // Geometry this node is a part of
+        const unsigned primitiveIndex;  // Index of node in geometry
+        const bool opaque;  // Whether this procedural is opaque
         const glm::vec4 minBounds;
         const glm::vec4 maxBounds;
 
-        ProceduralNode(const unsigned geometry_index,
-                const unsigned primitive_index,
-                const bool opaque,
-                const glm::vec4& min_bounds,
-                const glm::vec4& max_bounds)
+        /// @brief ProceduralNode constructor.
+        /// @param geometry_index geometry it is a part of.
+        /// @param primitive_index index in the geometry.
+        /// @param opaque whether this procedural is opaque.
+        /// @param min_bounds AABB minimum bounds as a 3-D point.
+        /// @param max_bounds AABB maximum bounds as a 3-D point.
+        ProceduralNode(
+            const unsigned geometry_index,
+            const unsigned primitive_index,
+            const bool opaque,
+            const glm::vec4& min_bounds,
+            const glm::vec4& max_bounds
+        )
             : geometryIndex(geometry_index),
               primitiveIndex(primitive_index),
               opaque(opaque),
@@ -317,8 +349,8 @@ private:
             return NodeType::Procedural;
         }
 
-        std::string toString(const unsigned indent = 0, const std::string indent_string = "") const {
-            std::stringstream result("");
+        std::string toString(const unsigned indent = 0, const std::string& indent_string = "") const {
+            std::stringstream result;
 
             result << Util::repeatedString(indent, indent_string) << "procedural_node" << std::endl;
 
@@ -346,23 +378,24 @@ private:
         }
     };
 
-    const bool isTLAS;  // true: TLAS, false: BLAS
-    std::shared_ptr<Node> root;  // Start of this acceleration structure
+    const unsigned id;
+    const bool isTLAS;  // Whether the acceleration structure is top-level
+    std::shared_ptr<Node> root;  // Start of the acceleration structure
 
 public:
-    const unsigned id;
-
-    /// @brief TODO: description
-    /// @param id
-    /// @param structure_info 
-    /// @param node_counts 
-    /// @param all_accel_structs 
-    /// @param num_accel_structs
-    AccelerationStructure(const unsigned id,
-            const Struct& structure_info,
-            const Struct& node_counts,
-            std::vector<std::shared_ptr<AccelerationStructure>>& all_accel_structs,
-            const unsigned num_accel_structs)
+    /// @brief AccelerationStructure constructor.
+    /// @param id identifier of when it was constructed relative to other acceleration structures.
+    /// @param structure_info acceleration structure information.
+    /// @param node_counts number of each type of node.
+    /// @param all_accel_structs all constructed acceleration structures.
+    /// @param num_accel_structs total expected number of acceleration structures after construction.
+    AccelerationStructure(
+        const unsigned id,
+        const Struct& structure_info,
+        const Struct& node_counts,
+        std::vector<std::shared_ptr<AccelerationStructure>>& all_accel_structs,
+        const unsigned num_accel_structs
+    )
         : id(id),
           isTLAS(static_cast<const Primitive&>(*(structure_info[0])).data.b32) {
 
@@ -371,9 +404,12 @@ public:
         const unsigned num_instance_nodes = static_cast<const Primitive&>(*(node_counts[1])).data.u32;
         const unsigned num_triangle_nodes = static_cast<const Primitive&>(*(node_counts[2])).data.u32;
         const unsigned num_procedural_nodes = static_cast<const Primitive&>(*(node_counts[3])).data.u32;
-        
+
         const unsigned num_non_instance_nodes = num_triangle_nodes + num_procedural_nodes;
-        assert((num_instance_nodes == 0 && num_non_instance_nodes > 0) || (num_instance_nodes > 0 && num_non_instance_nodes == 0));
+        assert(
+            (num_instance_nodes == 0 && num_non_instance_nodes > 0) ||
+            (num_instance_nodes > 0 && num_non_instance_nodes == 0)
+        );
 
         // Construct the nodes bottom-up
         const unsigned offset = 1;  // offset of struct fields to the start of nodes
@@ -407,13 +443,14 @@ public:
             max_bounds.w = 1.0f;
 
             nodes.push_back(
-                    std::make_shared<ProceduralNode>(geometry_index, primitive_index, opaque, min_bounds, max_bounds));
+                std::make_shared<ProceduralNode>(geometry_index, primitive_index, opaque, min_bounds, max_bounds)
+            );
         }
 
         // Triangle node
         for (unsigned i = 0; i < num_triangle_nodes; ++i) {
             const Struct& primitive_info =
-                    static_cast<const Struct&>(*(structure_info[num_nodes + offset - 1 - i - num_procedural_nodes]));
+                static_cast<const Struct&>(*(structure_info[num_nodes + offset - 1 - i - num_procedural_nodes]));
 
             // Geometry index
             const unsigned geometry_index = static_cast<const Primitive&>(*(primitive_info[0])).data.u32;
@@ -426,10 +463,10 @@ public:
 
             // Vertices
             std::vector<glm::vec3> vertices;
-            const Array& verticesInfo = static_cast<const Array&>(*(primitive_info[3]));
-            for (unsigned j = 0; j < verticesInfo.getSize(); ++j) {
+            const Array& vertices_info = static_cast<const Array&>(*(primitive_info[3]));
+            for (unsigned j = 0; j < vertices_info.getSize(); ++j) {
                 glm::vec3 vertex;
-                const Array& vertexInfo = static_cast<const Array&>(*(verticesInfo[j]));
+                const Array& vertexInfo = static_cast<const Array&>(*(vertices_info[j]));
                 assert(vertexInfo.getSize() == 3);
                 for (unsigned k = 0; k < vertexInfo.getSize(); ++k) {
                     vertex[k] = static_cast<const Primitive&>(*(vertexInfo[k])).data.fp32;
@@ -439,9 +476,9 @@ public:
 
             // Indices
             std::vector<unsigned> indices;
-            const Array& indicesInfo = static_cast<const Array&>(*(primitive_info[4]));
-            for (unsigned j = 0; j < indicesInfo.getSize(); ++j) {
-                unsigned value = static_cast<const Primitive&>(*(indicesInfo[j])).data.u32;
+            const Array& indices_info = static_cast<const Array&>(*(primitive_info[4]));
+            for (unsigned j = 0; j < indices_info.getSize(); ++j) {
+                unsigned value = static_cast<const Primitive&>(*(indices_info[j])).data.u32;
                 indices.push_back(value);
             }
 
@@ -450,58 +487,60 @@ public:
 
         // Instance nodes
         for (unsigned i = 0; i < num_instance_nodes; ++i) {
-            const Struct& instanceInfo =
-                    static_cast<const Struct&>(*(structure_info[num_nodes + offset - 1 - i - num_non_instance_nodes]));
+            const Struct& instance_info =
+                static_cast<const Struct&>(*(structure_info[num_nodes + offset - 1 - i - num_non_instance_nodes]));
 
             // Object-to-world matrix
             glm::mat4x3 object_to_world_matrix;  // GLM stores in column-major order
-            const Array& object_to_world_matrix_info = static_cast<const Array&>(*(instanceInfo[0]));
-            for (unsigned rowIndex = 0; rowIndex < object_to_world_matrix_info.getSize(); ++rowIndex) {
-                const Array& rowInfo = static_cast<const Array&>(*(object_to_world_matrix_info[rowIndex]));
-                for (unsigned colIndex = 0; colIndex < rowInfo.getSize(); ++colIndex) {
-                    float value = static_cast<const Primitive&>(*(rowInfo[colIndex])).data.fp32;
-                    object_to_world_matrix[colIndex][rowIndex] = value;
+            const Array& object_to_world_matrix_info = static_cast<const Array&>(*(instance_info[0]));
+            for (unsigned row = 0; row < object_to_world_matrix_info.getSize(); ++row) {
+                const Array& row_info = static_cast<const Array&>(*(object_to_world_matrix_info[row]));
+                for (unsigned col = 0; col < row_info.getSize(); ++col) {
+                    object_to_world_matrix[col][row] = static_cast<const Primitive&>(*(row_info[col])).data.fp32;
                 }
             }
 
             // Id
-            const unsigned id = static_cast<const Primitive&>(*(instanceInfo[1])).data.u32;
+            const unsigned id = static_cast<const Primitive&>(*(instance_info[1])).data.u32;
 
             // Custom index
-            const unsigned custom_index = static_cast<const Primitive&>(*(instanceInfo[2])).data.u32;
+            const unsigned custom_index = static_cast<const Primitive&>(*(instance_info[2])).data.u32;
 
             // Geometry index
-            const unsigned geometry_index = static_cast<const Primitive&>(*(instanceInfo[3])).data.u32;
+            const unsigned geometry_index = static_cast<const Primitive&>(*(instance_info[3])).data.u32;
 
             // Primitive index
-            const unsigned primitive_index = static_cast<const Primitive&>(*(instanceInfo[4])).data.u32;
+            const unsigned primitive_index = static_cast<const Primitive&>(*(instance_info[4])).data.u32;
 
             // Mask
-            const unsigned mask = static_cast<const Primitive&>(*(instanceInfo[5])).data.u32;
+            const unsigned mask = static_cast<const Primitive&>(*(instance_info[5])).data.u32;
 
             // Shader binding table record offset
-            const unsigned sbt_record_offset = static_cast<const Primitive&>(*(instanceInfo[6])).data.u32;
+            const unsigned sbt_record_offset = static_cast<const Primitive&>(*(instance_info[6])).data.u32;
 
             // Get respective acceleration structure
-            const unsigned accel_struct_index = static_cast<const Primitive&>(*(instanceInfo[7])).data.u32;
+            const unsigned accel_struct_index = static_cast<const Primitive&>(*(instance_info[7])).data.u32;
             const unsigned index = num_accel_structs - 1 - accel_struct_index;
             std::shared_ptr<AccelerationStructure>& as = all_accel_structs[index];
 
-            nodes.push_back(std::make_shared<InstanceNode>(object_to_world_matrix,
-                    id,
-                    custom_index,
-                    geometry_index,
-                    primitive_index,
-                    mask,
-                    sbt_record_offset,
-                    as));
+            nodes.push_back(std::make_shared<InstanceNode>(
+                object_to_world_matrix,
+                id,
+                custom_index,
+                geometry_index,
+                primitive_index,
+                mask,
+                sbt_record_offset,
+                as
+            ));
         }
 
         // Box nodes
         assert(num_non_instance_nodes == 0 || num_instance_nodes == 0);
         for (unsigned i = 0; i < num_box_nodes; ++i) {
             const Struct& box_info = static_cast<const Struct&>(
-                    *(structure_info[num_nodes + offset - 1 - i - num_non_instance_nodes - num_instance_nodes]));
+                *(structure_info[num_nodes + offset - 1 - i - num_non_instance_nodes - num_instance_nodes])
+            );
 
             const Array& min_bounds_info = static_cast<const Array&>(*(box_info[0]));
             const Array& max_bounds_info = static_cast<const Array&>(*(box_info[1]));
@@ -514,7 +553,7 @@ public:
             }
             min_bounds.w = 1.0f;
             max_bounds.w = 1.0f;
-        
+
             const Array& children_indices_info = static_cast<const Array&>(*(box_info[2]));
             std::vector<unsigned> children_indices;
             for (unsigned j = 0; j < children_indices_info.getSize(); ++j) {
@@ -522,13 +561,13 @@ public:
                 children_indices.push_back(child_index);
             }
 
-            // Get the actual children
+            // Get the children
             std::vector<std::shared_ptr<Node>> children;
             for (const auto& child_index : children_indices) {
                 assert(nodes[num_nodes - 1 - child_index] != nullptr);
                 children.push_back(std::move(nodes[num_nodes - 1 - child_index]));
             }
-        
+
             nodes.push_back(std::make_shared<BoxNode>(min_bounds, max_bounds, children));
         }
 
@@ -567,8 +606,6 @@ public:
         setFlags();
     }
 
-    ~AccelerationStructure() {};
-
 private:
     using ConstNodeRef = const std::shared_ptr<Node>*;
 
@@ -580,7 +617,7 @@ private:
     enum class CandidateIntersectionType { Triangle = 0, AABB = 1 };
 
     struct IntersectionProperties {
-        std::shared_ptr<InstanceNode> instance = nullptr;
+        std::shared_ptr<InstanceNode> instance = nullptr;  // Instance the intersection occured in
         int geometryIndex = -1;
         int primitiveIndex = -1;
         float hitT = std::numeric_limits<float>::max();
@@ -588,6 +625,7 @@ private:
         bool isOpaque = true;
         bool enteredTriangleFrontFace = false;
 
+        /// @brief Resets the properties to its default values.
         void reset() {
             instance = nullptr;
             geometryIndex = -1;
@@ -606,19 +644,22 @@ private:
             barycentrics = other.barycentrics;
             isOpaque = other.isOpaque;
             enteredTriangleFrontFace = other.enteredTriangleFrontFace;
-
             return *this;
         }
     };
     struct CandidateIntersection {
         CandidateIntersectionType type = CandidateIntersectionType::Triangle;
-        IntersectionProperties properties{};
+        IntersectionProperties properties {};
 
+        /// @brief Resets the intersection to its default values.
         void reset() {
             type = CandidateIntersectionType::Triangle;
             properties.reset();
         }
 
+        /// @brief Update the candidate to the most recent intersection.
+        /// @param is_triangle whether this is a triangle intersection.
+        /// @param new_properties new candidate's properties.
         void update(const bool is_triangle, const IntersectionProperties& new_properties) {
             type = is_triangle ? CandidateIntersectionType::Triangle : CandidateIntersectionType::AABB;
             properties = new_properties;
@@ -627,19 +668,22 @@ private:
         CandidateIntersection& operator=(const CandidateIntersection& other) {
             type = other.type;
             properties = other.properties;
-
             return *this;
         }
     };
     struct CommittedIntersection {
         CommittedIntersectionType type = CommittedIntersectionType::None;
-        IntersectionProperties properties{};
+        IntersectionProperties properties {};
 
+        /// @brief Resets the intersection to its default values.
         void reset() {
             type = CommittedIntersectionType::None;
             properties.reset();
         }
 
+        /// @brief Update the committed to match the given candidate.
+        /// @param is_triangle whether this is a triangle intersection.
+        /// @param candidate_intersection candidate to commit.
         void update(const bool is_triangle, const CandidateIntersection& candidate_intersection) {
             type = is_triangle ? CommittedIntersectionType::Triangle : CommittedIntersectionType::Generated;
             properties = candidate_intersection.properties;
@@ -648,19 +692,18 @@ private:
         CommittedIntersection& operator=(const CommittedIntersection& other) {
             type = other.type;
             properties = other.properties;
-
             return *this;
         }
     };
 
-    CommittedIntersection committedIntersection;
-    CandidateIntersection candidateIntersection;
+    CommittedIntersection committedIntersection;  // Current committed intersection from stepping the ray
+    CandidateIntersection candidateIntersection;  // Current candidate intersection from stepping the ray
 
     // Ray properties
     unsigned rayFlags = 0;
     unsigned cullMask = 0;
-    glm::vec4 rayOrigin{ 0.0f, 0.0f, 0.0f, 0.0f };
-    glm::vec4 rayDirection{ 0.0f, 0.0f, 0.0f, 0.0f };
+    glm::vec4 rayOrigin {0.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec4 rayDirection {0.0f, 0.0f, 0.0f, 0.0f};
     float rayTMin = 0.0f;
     float rayTMax = 0.0f;
 
@@ -683,8 +726,9 @@ private:
     bool rayFlagSkipTriangles = false;
     bool rayFlagSkipAABBs = false;
 
+    /// @brief Set the flags based on the rayFlags given when initializing the trace.
     void setFlags() {
-        rayFlagNone = (rayFlags | spv::RayFlagsMask::RayFlagsMaskNone) == 0; // TODO: reason to have this?
+        rayFlagNone = (rayFlags | spv::RayFlagsMask::RayFlagsMaskNone) == 0;
         rayFlagOpaque = rayFlags & spv::RayFlagsMask::RayFlagsOpaqueKHRMask;
         rayFlagNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsNoOpaqueKHRMask;
         rayFlagTerminateOnFirstHit = rayFlags & spv::RayFlagsMask::RayFlagsTerminateOnFirstHitKHRMask;
@@ -694,15 +738,16 @@ private:
         rayFlagCullOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullOpaqueKHRMask;
         rayFlagCullNoOpaque = rayFlags & spv::RayFlagsMask::RayFlagsCullNoOpaqueKHRMask;
         rayFlagSkipTriangles = rayFlags & spv::RayFlagsMask::RayFlagsSkipTrianglesKHRMask;
-        rayFlagSkipAABBs = rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask; // skip procedurals
+        rayFlagSkipAABBs = rayFlags & spv::RayFlagsMask::RayFlagsSkipAABBsKHRMask;  // skip procedurals
     }
 
+    /// @brief Make the trace empty.
     void clearTrace() {
-        while (!nodesToEval.empty()) {
+        while (!nodesToEval.empty())
             nodesToEval.pop();
-        }
     }
 
+    /// @brief Initialize the trace; the acceleration structure can now be stepped through.
     void initTrace() {
         committedIntersection.reset();
         candidateIntersection.reset();
@@ -711,57 +756,81 @@ private:
     }
 
 public:
-
+    /// @brief Resets the trace to the beginning.
     void resetTrace() {
         activeTrace = false;
         clearTrace();
         initTrace();
     }
-    
-    void initTrace(const unsigned& rayFlags,
-            const unsigned& cullMask,
-            const std::vector<float>& rayOrigin,
-            const std::vector<float>& rayDirection,            
-            const float& rayTMin,
-            const float& rayTMax,
-            const bool& useSBT,
-            const unsigned offsetSBT = 0,
-            const unsigned strideSBT = 0,
-            const unsigned missIndex = 0) {
-        
-        assert(rayOrigin.size() == 3 && rayDirection.size() == 3);
-        glm::vec4 convertedRayOrigin = glm::make_vec4(rayOrigin.data());
-        convertedRayOrigin.w = 1.0f;
-        glm::vec4 convertedRayDirection = glm::make_vec4(rayDirection.data());
-        convertedRayDirection.w = 0.0f;
 
-        this->rayFlags = rayFlags;
-        this->cullMask = cullMask;
-        this->rayOrigin = convertedRayOrigin;
-        this->rayDirection = convertedRayDirection;
-        this->rayTMin = rayTMin;
-        this->rayTMax = rayTMax;
+    /// @brief Initialize the trace.
+    /// @param ray_flags ray flags.
+    /// @param cull_mask cull mask; culls respective instances.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min closest a ray will allow for an intersection.
+    /// @param ray_t_max farthest a ray will allow for an intersection.
+    /// @param use_sbt whether to use the shader binding table when tracing.
+    /// @param offset_sbt shader binding table offset.
+    /// @param stride_sbt shader binding table stride.
+    /// @param miss_index shader binding table miss index.
+    void initTrace(
+        const unsigned ray_flags,
+        const unsigned cull_mask,
+        const std::vector<float>& ray_origin,
+        const std::vector<float>& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const bool use_sbt,
+        const unsigned offset_sbt = 0,
+        const unsigned stride_sbt = 0,
+        const unsigned miss_index = 0
+    ) {
+        assert(ray_origin.size() == 3 && ray_direction.size() == 3);
+        glm::vec4 ray_origin_glm = glm::make_vec4(ray_origin.data());
+        ray_origin_glm.w = 1.0f;
+        glm::vec4 ray_direction_glm = glm::make_vec4(ray_direction.data());
+        ray_direction_glm.w = 0.0f;
 
-        this->useSBT = useSBT;
-        this->offsetSBT = offsetSBT;
-        this->strideSBT = strideSBT;
-        this->missIndex = missIndex;
+        this->rayFlags = ray_flags;
+        this->cullMask = cull_mask;
+        this->rayOrigin = ray_origin_glm;
+        this->rayDirection = ray_direction_glm;
+        this->rayTMin = ray_t_min;
+        this->rayTMax = ray_t_max;
+
+        this->useSBT = use_sbt;
+        this->offsetSBT = offset_sbt;
+        this->strideSBT = stride_sbt;
+        this->missIndex = miss_index;
 
         setFlags();
         resetTrace();
     }
 
-    void initTrace(const unsigned ray_flags,
-            const unsigned cull_mask,
-            const glm::vec3& ray_origin,
-            const glm::vec3& ray_direction,
-            const float ray_t_min,
-            const float ray_t_max,
-            const bool use_sbt,
-            const unsigned offset_sbt = 0,
-            const unsigned stride_sbt = 0,
-            const unsigned miss_index = 0) {
-                
+    /// @brief Initialize the trace.
+    /// @param ray_flags ray flags.
+    /// @param cull_mask cull mask; culls respective instances.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min closest a ray will allow for an intersection.
+    /// @param ray_t_max farthest a ray will allow for an intersection.
+    /// @param use_sbt whether to use the shader binding table when tracing.
+    /// @param offset_sbt shader binding table offset.
+    /// @param stride_sbt shader binding table stride.
+    /// @param miss_index shader binding table miss index.
+    void initTrace(
+        const unsigned ray_flags,
+        const unsigned cull_mask,
+        const glm::vec3& ray_origin,
+        const glm::vec3& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const bool use_sbt,
+        const unsigned offset_sbt = 0,
+        const unsigned stride_sbt = 0,
+        const unsigned miss_index = 0
+    ) {
         this->rayFlags = ray_flags;
         this->cullMask = cull_mask;
         this->rayOrigin = glm::vec4(ray_origin.x, ray_origin.y, ray_origin.z, 1.0f);
@@ -778,276 +847,248 @@ public:
         resetTrace();
     }
 
-    void initTrace(const unsigned& rayFlags,
-            const unsigned& cullMask,
-            const glm::vec4& rayOrigin,
-            const glm::vec4& rayDirection,
-            const float& rayTMin,
-            const float& rayTMax,
-            const bool& useSBT,
-            const unsigned offsetSBT = 0,
-            const unsigned strideSBT = 0,
-            const unsigned missIndex = 0) {
-                
-        this->rayFlags = rayFlags;
-        this->cullMask = cullMask;
-        this->rayOrigin = rayOrigin;
-        this->rayDirection = rayDirection;
-        this->rayTMin = rayTMin;
-        this->rayTMax = rayTMax;
+    /// @brief Initialize the trace.
+    /// @param ray_flags ray flags.
+    /// @param cull_mask cull mask; culls respective instances.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min closest a ray will allow for an intersection.
+    /// @param ray_t_max farthest a ray will allow for an intersection.
+    /// @param use_sbt whether to use the shader binding table when tracing.
+    /// @param offset_sbt shader binding table offset.
+    /// @param stride_sbt shader binding table stride.
+    /// @param miss_index shader binding table miss index.
+    void initTrace(
+        const unsigned ray_flags,
+        const unsigned cull_mask,
+        const glm::vec4& ray_origin,
+        const glm::vec4& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const bool use_sbt,
+        const unsigned offset_sbt = 0,
+        const unsigned stride_sbt = 0,
+        const unsigned miss_index = 0
+    ) {
+        this->rayFlags = ray_flags;
+        this->cullMask = cull_mask;
+        this->rayOrigin = ray_origin;
+        this->rayDirection = ray_direction;
+        this->rayTMin = ray_t_min;
+        this->rayTMax = ray_t_max;
 
-        this->useSBT = useSBT;
-        this->offsetSBT = offsetSBT;
-        this->strideSBT = strideSBT;
-        this->missIndex = missIndex;
+        this->useSBT = use_sbt;
+        this->offsetSBT = offset_sbt;
+        this->strideSBT = stride_sbt;
+        this->missIndex = miss_index;
 
         setFlags();
         resetTrace();
     }
 
 private:
-    bool didPopNodePreviously = true;
+    bool didPopNodePreviously = true;  // Used in the stepTrace() method
 
 public:
-    // TODO: step to the next primitive
-    // TODO: change instance node pop and push logic
-    bool stepTrace(bool& didIntersectGeometry) {
-        if (!activeTrace) {
-            std::cout << "Out of paths to trace ray for acceleration structure id = (" << id << ")." << std::endl
-                      << "Please (re-)initialize (or reset) the trace." << std::endl;
-            return false;
-        }
+    /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.
+    /// @return tuple containing (1) whether there is more to trace and (2) if a triangle or procedural was intersected
+    /// respectively.
+    std::tuple<bool, bool> stepTrace() {
+        // Do not trace if the trace is inactive.
+        if (!activeTrace)
+            return std::make_tuple(false, false);
 
-        bool foundPrimitive = false;
+        // Traverse the acceleration structure until it reaches the next non-instance primitive.
+        bool intersect_geometry = false;  // Refers to triangles and procedurals.
+        bool found_primitive = false;
+        while (!found_primitive && (nodesToEval.size() > 0)) {
 
-        while (!foundPrimitive && (nodesToEval.size() > 0)) {
-
-            ConstNodeRef currNodeRef = nodesToEval.top();
-            Node* currNode = currNodeRef->get();
+            ConstNodeRef curr_node_ref = nodesToEval.top();
+            Node* curr_node = curr_node_ref->get();
             nodesToEval.pop();
 
-            std::cout << "Trace ray: node type: " << static_cast<unsigned>(currNode->type()) << std::endl;
-
-            switch(currNode->type()) {
+            switch (curr_node->type()) {
             default: {
                 std::stringstream err;
-                err << "Found unknown node type (" << static_cast<int>(currNode->type())
+                err << "Found unknown node type (" << static_cast<int>(curr_node->type())
                     << ") in \"traceRay()\" method of class "
-                        "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
+                       "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
                 throw std::runtime_error(err.str());
             }
             case NodeType::Box: {
-                // TODO
-                BoxNode* boxNode = static_cast<BoxNode*>(currNode); 
-                bool result = rayAABBIntersect(rayOrigin, rayDirection, rayTMin, rayTMax, boxNode->minBounds, boxNode->maxBounds);
-                if (result) {
-                    // Ray intersected; add it's children to be evaluated
-                    std::cout << "Ray intersected with AABB in box node" << std::endl;
-                    for (const auto& child : boxNode->children) {
+                BoxNode* box_node = static_cast<BoxNode*>(curr_node);
+                const bool result = rayAABBIntersect(
+                    rayOrigin,
+                    rayDirection,
+                    rayTMin,
+                    rayTMax,
+                    box_node->minBounds,
+                    box_node->maxBounds
+                );
+                // If the ray intersects the bounding box, then add it's children to be evaluated.
+                if (result)
+                    for (const auto& child : box_node->children)
                         nodesToEval.push(&child);
-                    }
-                } else {
-                    // Ray didn't intersect
-                    std::cout << "Ray did not intersect with AABB" << std::endl;
-                }
                 break;
             }
             case NodeType::Instance: {
-                std::cout << "$$$ INSTANCE" << std::endl;
-                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
+                InstanceNode* instance_node = static_cast<InstanceNode*>(curr_node);
 
-                // TODO
-                // Do not process this instance if it's invisible to the ray
-                if ((instanceNode->mask & cullMask) == 0) {
-                    std::cout << "\tInstance is invisible to ray" << std::endl;
+                // Do not process this instance if it's invisible to the ray.
+                if ((instance_node->mask & cullMask) == 0)
                     break;
-                }
 
-                bool foundGeometryIntersection = false;
+                // Transform the ray to match the instance's object-space.
+                glm::vec3 object_ray_origin = instance_node->worldToObject * rayOrigin;
+                glm::vec3 object_ray_direction = instance_node->worldToObject * rayDirection;
 
-                // Transform the ray to match the instance's object-space
-                glm::vec3 newRayOrigin = instanceNode->worldToObject * rayOrigin;
-                glm::vec3 newRayDirection = instanceNode->worldToObject * rayDirection;
-                
-                std::cout << "\tInstance node new ray origin and ray direction respectively: " << std::endl;
-                std::cout << "\t\tnew origin: " << glm::to_string(newRayOrigin) << std::endl;
-                std::cout << "\t\tnew direction: " << glm::to_string(newRayDirection) << std::endl;
-                std::cout << std::endl;
-
-                const auto& ref_accel_struct = instanceNode->accelerationStructure;
+                const auto& ref_accel_struct = instance_node->accelerationStructure;
 
                 // Trace the ray in the respective acceleration structure.
                 // Do not pop the node if we can still step through the instance node's acceleration structure.
                 if (didPopNodePreviously) {
                     // If we did pop the previous node, then this is the first time we are stepping through the instance
                     // node's acceleration structure.
-                    ref_accel_struct->initTrace(rayFlags,
-                            cullMask,
-                            newRayOrigin,
-                            newRayDirection,
-                            rayTMin,
-                            rayTMax,
-                            useSBT,
-                            offsetSBT,
-                            strideSBT,
-                            missIndex);
+                    ref_accel_struct->initTrace(
+                        rayFlags,
+                        cullMask,
+                        object_ray_origin,
+                        object_ray_direction,
+                        rayTMin,
+                        rayTMax,
+                        useSBT,
+                        offsetSBT,
+                        strideSBT,
+                        missIndex
+                    );
                 }
-                didPopNodePreviously = !(ref_accel_struct->stepTrace(foundGeometryIntersection));
-                if (!didPopNodePreviously) {
-                    nodesToEval.push(currNodeRef);
-                }
+                const std::tuple<bool, bool> result = ref_accel_struct->stepTrace();
+                const bool more_to_trace = get<0>(result);
+                intersect_geometry = get<1>(result);
+                didPopNodePreviously = !more_to_trace;
 
-                // Handle the result of tracing the ray in the instance
-                if (foundGeometryIntersection) {
-                    didIntersectGeometry = true;
-                    
+                // If can continue tracing, push the node back onto the stack.
+                if (more_to_trace)
+                    nodesToEval.push(curr_node_ref);
+
+                // Handle the result of tracing the ray in the instance.
+                if (intersect_geometry) {
                     // Update candidate
                     candidateIntersection = ref_accel_struct->candidateIntersection;
-                    std::cout << "~~~~~~~~~~~~~~~~~updating candidate, just finished copying, now doing instance pointer casting" << std::endl;
-                    candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*currNodeRef);
-                    std::cout << "~~~~~~~~~~~~~~~~~successfully casted instance pointer stuff." << std::endl;
+                    candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*curr_node_ref);
 
                     // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit) {
-                        std::cout << "********** Terminated on first hit from instance node: " << didIntersectGeometry << std::endl;
-                        return false;
-                    }
-                } else {
-                    // Ray did not intersect
+                    if (rayFlagTerminateOnFirstHit)
+                        return std::make_tuple(false, true);
                 }
 
-                // Instance node's acceleration structure will either reach a primitive mid-search or the final primitive.
-                // Therefore, it will always reach a primitive.
-                foundPrimitive = true;
-
-                std::cout << "\t!!!!!!!!!!!!!!!!!!!!! Done! Now going back to AS id: " << id << std::endl;
+                // Either it will find a geometry mid-trace where it returns more to trace and intersected a geometry,
+                // or find the last geometry where it returns no more to trace and intersected a geometry.
+                // Therefore, a geometry will always be found when entering this switch case.
+                found_primitive = true;
 
                 break;
             }
             case NodeType::Triangle: {
-                std::cout << "\t\t\tTesting triangle" << std::endl;
-                // Ignore triangle if this flag is true
-                if (rayFlagSkipTriangles) {
-                    std::cout << "SKIPPING THE TRIANGLES" << std::endl;
+                // Check skip triangle ray flag.
+                if (rayFlagSkipTriangles)
                     break;
-                }
-                
-                TriangleNode* triangleNode = static_cast<TriangleNode*>(currNode);
-                bool isOpaque = triangleNode->opaque;
-                assert(!(rayFlagOpaque && rayFlagNoOpaque));
-                if (rayFlagOpaque) {
-                    isOpaque = true;
-                } else if (rayFlagNoOpaque) {
-                    isOpaque = false;
-                }
 
-                if (rayFlagCullOpaque && isOpaque) {
-                    std::cout << "Culling opaque triangle" << std::endl;
-                    break;
-                }
-                if (rayFlagCullNoOpaque && !isOpaque) {
-                    std::cout << "Culling none opaque triangle" << std::endl;
-                    break;
-                }
+                TriangleNode* triangle_node = static_cast<TriangleNode*>(curr_node);
 
-                // TODO: when multi-shader invocation is a thing, need to handle opacity
+                // Check opaque related ray flags.
+                bool is_opaque = triangle_node->opaque;
+                assert(!(rayFlagOpaque && rayFlagNoOpaque));  // Cannot be both opaque and not opaque.
+                if (rayFlagOpaque)
+                    is_opaque = true;
+                else if (rayFlagNoOpaque)
+                    is_opaque = false;
+
+                if ((rayFlagCullOpaque && is_opaque) || (rayFlagCullNoOpaque && !is_opaque))
+                    break;
 
                 // Check if the ray intersects the triangle
-                float t, u, v;  // t : distance to intersection, (u,v) : uv coordinates/coordinates in triangle
-                bool enteredFront = false;
-                bool result = rayTriangleIntersect(rayOrigin,
-                        rayDirection,
-                        rayTMin,
-                        rayTMax,
-                        triangleNode->vertices,
-                        rayFlagCullBackFacingTriangles,
-                        rayFlagCullFrontFacingTriangles,
-                        t,
-                        u,
-                        v,
-                        enteredFront);
+                std::tuple<bool, float, float, float, bool> result = rayTriangleIntersect(
+                    rayOrigin,
+                    rayDirection,
+                    rayTMin,
+                    rayTMax,
+                    triangle_node->vertices,
+                    rayFlagCullBackFacingTriangles,
+                    rayFlagCullFrontFacingTriangles
+                );
 
-                if (result) {  // Ray intersected
-                    std::cout << "+++ Ray intersected a triangle; (t, u, v) = (" << t << ", " << u << ", " << v << ")" << std::endl; 
-                    didIntersectGeometry = true;
+                intersect_geometry = get<0>(result);
+
+                if (intersect_geometry) {
+                    // Get triangle intersection data
+                    float t = get<1>(result);  // Distance to intersection
+                    float u = get<2>(result);  // Barycentric coordinate u
+                    float v = get<3>(result);  // Barycentric coordinate v
+                    bool entered_front = get<4>(result);  // Interested a triangle from the front
 
                     // Update candidate
                     IntersectionProperties properties;
                     properties.hitT = t;
                     properties.barycentrics = glm::vec2(u, v);
-                    properties.isOpaque = triangleNode->opaque;
-                    properties.enteredTriangleFrontFace = enteredFront;
+                    properties.isOpaque = triangle_node->opaque;
+                    properties.enteredTriangleFrontFace = entered_front;
                     candidateIntersection.update(true, properties);
 
                     // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit) { 
-                        std::cout << "Terminated on first hit!" << std::endl;
-                        return false;
-                    }
+                    if (rayFlagTerminateOnFirstHit)
+                        return std::make_tuple(false, true);
                 }
-                foundPrimitive = true;
+                found_primitive = true;
+
                 break;
             }
             case NodeType::Procedural: {
-                // TODO: Not correct until multiple shader invocation support.
-                // Currently, it returns an intersection if it intersects the 
+                // TODO: Not correct until shader binding table support.
+                // Currently, it returns an intersection if it intersects the
                 // respective AABB for the procedural.
-                // TODO: add intersection shader invocation.
                 std::cout << "WARNING: encountered procedural; multi-shader invocation not a feature; will return "
-                                "its AABB intersection result instead"
-                            << std::endl;
+                             "its AABB intersection result instead"
+                          << std::endl;
 
-                // Ignore procedural if this flag is true
-                if (rayFlagSkipAABBs) {
-                    std::cout << "SKIPPING THE PROCEDURALS" << std::endl;
+                // Check skip AABBs (procedurals) flag
+                if (rayFlagSkipAABBs)
                     break;
-                }
 
-                ProceduralNode* proceduralNode = static_cast<ProceduralNode*>(currNode);
-                bool isOpaque = proceduralNode->opaque;
+                ProceduralNode* procedural_node = static_cast<ProceduralNode*>(curr_node);
+
+                // Check opaque related ray flags.
+                bool is_opaque = procedural_node->opaque;
                 assert(!(rayFlagOpaque && rayFlagNoOpaque));
-                if (rayFlagOpaque) {
-                    isOpaque = true;
-                } else if (rayFlagNoOpaque) {
-                    isOpaque = false;
-                }
+                if (rayFlagOpaque)
+                    is_opaque = true;
+                else if (rayFlagNoOpaque)
+                    is_opaque = false;
 
-                if (rayFlagCullOpaque && isOpaque) {
-                    std::cout << "Culling opaque procedural" << std::endl;
+                if ((rayFlagCullOpaque && is_opaque) || (rayFlagCullNoOpaque && !is_opaque))
                     break;
-                }
-                if (rayFlagCullNoOpaque && !isOpaque) {
-                    std::cout << "Culling none opaque procedural" << std::endl;
-                    break;
-                }
 
-                // TODO: when multi-shader invocation is a thing, need to handle opacity
+                intersect_geometry = rayAABBIntersect(
+                    rayOrigin,
+                    rayDirection,
+                    rayTMin,
+                    rayTMax,
+                    procedural_node->minBounds,
+                    procedural_node->maxBounds
+                );
 
-                bool result = rayAABBIntersect(rayOrigin,
-                        rayDirection,
-                        rayTMin,
-                        rayTMax,
-                        proceduralNode->minBounds,
-                        proceduralNode->maxBounds);
-
-                if (result) {
-                    // Procedural geometry was hit
-                    // Terminate on the first hit if the flag was risen
-                    std::cout << "+++ Ray intersected a procedural's AABB" << std::endl;
-                    didIntersectGeometry = true;
-
+                if (intersect_geometry) {
                     // Update candidate
                     IntersectionProperties properties;
-                    properties.isOpaque = proceduralNode->opaque;
+                    properties.isOpaque = procedural_node->opaque;
                     candidateIntersection.update(false, properties);
 
                     // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit) {
-                        std::cout << "Terminated on first hit!" << std::endl;
-                        return false;
-                    }
+                    if (rayFlagTerminateOnFirstHit)
+                        return std::make_tuple(false, true);
                 }
-                foundPrimitive = true;
+                found_primitive = true;
+
                 break;
             }
             }
@@ -1056,12 +1097,12 @@ public:
         if (nodesToEval.empty())
             activeTrace = false;
 
-        return !nodesToEval.empty();
+        return std::make_tuple(!nodesToEval.empty(), intersect_geometry);
     }
 
     /// @brief Include the current AABB/procedural intersection in determining the closest hit.
-    /// The candidate intersection must be of type AABB
-    /// @param hit_t 
+    /// The candidate intersection must be of type AABB.
+    /// @param hit_t distance from the ray to the intersection.
     void generateIntersection(float hit_t) {
         assert(candidateIntersection.type == CandidateIntersectionType::AABB);
 
@@ -1085,37 +1126,55 @@ public:
     }
 
     /// @brief Get the current committed intersection type.
-    /// @return Enum of committed intersection type.
+    /// @return committed intersection type.
     CommittedIntersectionType getCommittedIntersectionType() const {
         return committedIntersection.type;
     }
 
     /// @brief Get the current candidate intersection type.
-    /// @return Enum of candidate intersection type.
+    /// @return candidate intersection type.
     CandidateIntersectionType getCandidateIntersectionType() const {
         return candidateIntersection.type;
     }
 
+
+    /// @brief Get the distance from the ray to the current intersection.
+    /// @param get_committed Type of intersection: committed or candidate.
+    /// @return distance between the ray and intersection.
     float getIntersectionT(bool get_committed) const {
         return get_committed ? committedIntersection.properties.hitT : candidateIntersection.properties.hitT;
     }
 
+    /// @brief Get the current intersection instance's custom index.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return custom index if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceCustomIndex(bool get_committed) const {
         const auto& committed_instance = committedIntersection.properties.instance;
         const auto& candidate_instance = candidateIntersection.properties.instance;
-        assert((committed_instance != nullptr) || (candidate_instance != nullptr));
+
+        if (committed_instance == nullptr && candidate_instance == nullptr)
+            return -1;
 
         return get_committed ? committed_instance->customIndex : candidate_instance->customIndex;
     }
 
+    /// @brief Get the current intersection instance's id.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return id if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceId(bool get_committed) const {
         const auto& committed_instance = committedIntersection.properties.instance;
         const auto& candidate_instance = candidateIntersection.properties.instance;
-        assert((committed_instance != nullptr) || (candidate_instance != nullptr));
+
+        if (committed_instance == nullptr && candidate_instance == nullptr)
+            return -1;
 
         return get_committed ? committed_instance->id : candidate_instance->id;
     }
 
+    /// @brief Get the current intersection instance's shader binding table record offset.
+    /// The instance must exist; not be null.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return SBT record offset
     unsigned getIntersectionInstanceShaderBindingTableRecordOffset(bool get_committed) const {
         const auto& committed_instance = committedIntersection.properties.instance;
         const auto& candidate_instance = candidateIntersection.properties.instance;
@@ -1124,42 +1183,66 @@ public:
         return get_committed ? committed_instance->sbtRecordOffset : candidate_instance->sbtRecordOffset;
     }
 
+    /// @brief Get the current intersection's geometry index.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return geometry index.
     int getIntersectionGeometryIndex(bool get_committed) const {
         return get_committed ? committedIntersection.properties.geometryIndex
                              : candidateIntersection.properties.geometryIndex;
     }
 
+    /// @brief Get the current intersection's primitive index.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return primitive index.
     int getIntersectionPrimitiveIndex(bool get_committed) const {
         return get_committed ? committedIntersection.properties.primitiveIndex
                              : candidateIntersection.properties.primitiveIndex;
     }
 
+    /// @brief Get the current intersection's barycentric coordinates.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return barycentrics.
     glm::vec2 getIntersectionBarycentrics(bool get_committed) const {
         return get_committed ? committedIntersection.properties.barycentrics
                              : candidateIntersection.properties.barycentrics;
     }
 
+    /// @brief Get whether the ray entered the front face of a triangle.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return whether the intersection was entered from the front face of a triangle.
     bool getIntersectionFrontFace(bool get_committed) const {
         return get_committed ? committedIntersection.type == CommittedIntersectionType::Triangle &&
-                                       committedIntersection.properties.enteredTriangleFrontFace
+                                   committedIntersection.properties.enteredTriangleFrontFace
                              : candidateIntersection.type == CandidateIntersectionType::Triangle &&
-                                       candidateIntersection.properties.enteredTriangleFrontFace;
+                                   candidateIntersection.properties.enteredTriangleFrontFace;
     }
 
+    /// @brief Get whether the intersection is an opaque procedural.
+    /// @return whether the intersection was an opaque procedural.
     bool getIntersectionCandidateAABBOpaque() const {
-        return candidateIntersection.type == CandidateIntersectionType::AABB && candidateIntersection.properties.isOpaque;
+        return candidateIntersection.type == CandidateIntersectionType::AABB &&
+               candidateIntersection.properties.isOpaque;
     }
 
+    /// @brief Get the object-space ray direction depending on the instance intersected.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return object-space ray direction.
     glm::vec3 getIntersectionObjectRayDirection(bool get_committed) const {
         return get_committed ? (committedIntersection.properties.instance->worldToObject * rayDirection)
                              : (candidateIntersection.properties.instance->worldToObject * rayDirection);
     }
 
+    /// @brief Get the object-space ray origin depending on the instance intersected.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return object-space ray origin.
     glm::vec3 getIntersectionObjectRayOrigin(bool get_committed) const {
         return get_committed ? (committedIntersection.properties.instance->worldToObject * rayOrigin)
                              : (candidateIntersection.properties.instance->worldToObject * rayOrigin);
     }
 
+    /// @brief Get the object-to-world matrix of the intersected instance.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return object-to-world matrix.
     glm::mat4x3 getIntersectionObjectToWorld(bool get_committed) const {
         const auto& committed_instance = committedIntersection.properties.instance;
         const auto& candidate_instance = candidateIntersection.properties.instance;
@@ -1168,6 +1251,9 @@ public:
         return get_committed ? committed_instance->objectToWorld : candidate_instance->objectToWorld;
     }
 
+    /// @brief Get the world-to-object matrix of the intersected instance.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return world-to-object matrix.
     glm::mat4x3 getIntersectionWorldToObject(bool get_committed) const {
         const auto& committed_instance = committedIntersection.properties.instance;
         const auto& candidate_instance = candidateIntersection.properties.instance;
@@ -1176,208 +1262,259 @@ public:
         return get_committed ? committed_instance->worldToObject : candidate_instance->worldToObject;
     }
 
-    void traceRay(bool& didIntersectGeometry,
-            const unsigned rayFlags,
-            const unsigned cullMask,
-            const glm::vec4 rayOrigin,
-            const glm::vec4 rayDirection,
-            const float rayTMin,
-            const float rayTMax,
-            const bool& useSBT,
-            const unsigned offsetSBT = 0,
-            const unsigned strideSBT = 0,
-            const unsigned missIndex = 0) {
+    /// @brief Completely trace through the acceleration structure.
+    /// @param ray_flags ray flags.
+    /// @param cull_mask cull mask; culls respective instances.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min closest a ray will allow for an intersection.
+    /// @param ray_t_max farthest a ray will allow for an intersection.
+    /// @param use_sbt whether to use the shader binding table when tracing.
+    /// @param offset_sbt shader binding table offset.
+    /// @param stride_sbt shader binding table stride.
+    /// @param miss_index shader binding table miss index.
+    /// @return whether the trace intersected a geometry.
+    bool traceRay(
+        const unsigned ray_flags,
+        const unsigned cull_mask,
+        const glm::vec4& ray_origin,
+        const glm::vec4& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const bool use_sbt,
+        const unsigned offset_sbt = 0,
+        const unsigned stride_sbt = 0,
+        const unsigned miss_index = 0
+    ) {
 
-        initTrace(rayFlags, cullMask, rayOrigin, rayDirection, rayTMin, rayTMax, useSBT, offsetSBT, strideSBT, missIndex);
+        initTrace(
+            ray_flags,
+            cull_mask,
+            ray_origin,
+            ray_direction,
+            ray_t_min,
+            ray_t_max,
+            use_sbt,
+            offset_sbt,
+            stride_sbt,
+            miss_index
+        );
 
         bool intersect = false;
-        while (stepTrace(intersect)) {
+        bool intersect_once = false;
+        bool continue_trace = false;
+        do {
+            std::tuple<bool, bool> result = stepTrace();
+            continue_trace = get<0>(result);
+            intersect = get<1>(result);
             if (intersect)
-                didIntersectGeometry = true;
-        }
-        if (intersect)
-            didIntersectGeometry = true;
+                intersect_once = true;
+        } while (continue_trace);
 
-        // TODO: once multi-shader invocation is a thing, need to handle hit and miss shaders
-        // TODO: currently, the root acceleration structure has an id of 0 but maybe want to allow more flexibility
+        // TODO: Need to handle hit and miss shaders.
+        // Root acceleration structure has an id of 0; shouldn't be calling the closest hit shader because it is a TLAS.
         if (id != 0 || rayFlagSkipClosestHitShader) {
-            // TODO: Do not execute a closest hit shader.
+            // Do not execute the closest hit shader.
             std::cout << "Skip the closest hit shader" << std::endl;
-            return;
-            // didIntersectGeometry = false;
+            return intersect_once;
         }
 
         // Invoke a hit or miss shader here
         std::cout << "Invoke closest hit shader / miss shader" << std::endl;
+        return intersect_once;
     }
 
 private:
-    // Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004."
-    // found on Scratchapixel
-    // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html)
-    bool rayAABBIntersect(const glm::vec3& rayOrigin,
-            const glm::vec3& rayDirection,
-            const float& rayTMin,
-            const float& rayTMax,
-            const glm::vec3& minBounds,
-            const glm::vec3& maxBounds) const {
-
+    /// TODO:
+    /// Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004."
+    /// found on Scratchapixel
+    /// (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html).
+    ///
+    /// @brief Check if a ray intersects an axis-aligned bounding box (AABB). If the ray is inside the box, it will be
+    /// considered an intersection.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min ray minimum distance to intersection.
+    /// @param ray_t_max ray maximum distance to intersection.
+    /// @param min_bounds AABB minimum bounds as a 3-D point.
+    /// @param max_bounds AABB maximum bounds as a 3-D point.
+    /// @return whether the ray intersected an AABB or is inside of it.
+    bool rayAABBIntersect(
+        const glm::vec3& ray_origin,
+        const glm::vec3& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const glm::vec3& min_bounds,
+        const glm::vec3& max_bounds
+    ) const {
         // Check if the ray if inside of the AABB; it is considered inside if right at the surface
-        bool insideAABB = rayOrigin.x >= minBounds.x && rayOrigin.y >= minBounds.y && rayOrigin.z >= minBounds.z &&
-                          rayOrigin.x <= maxBounds.x && rayOrigin.y <= maxBounds.y && rayOrigin.z <= maxBounds.z;
-        if (insideAABB)
+        bool inside_aabb = ray_origin.x >= min_bounds.x && ray_origin.y >= min_bounds.y &&
+                           ray_origin.z >= min_bounds.z && ray_origin.x <= max_bounds.x &&
+                           ray_origin.y <= max_bounds.y && ray_origin.z <= max_bounds.z;
+        if (inside_aabb)
             return true;
 
         // Otherwise, check if the ray intersects the surface of the AABB from the outside
         // Check the x-plane
-        float tmin = (minBounds.x - rayOrigin.x) / rayDirection.x;
-        float tmax = (maxBounds.x - rayOrigin.x) / rayDirection.x;
+        float t_min = (min_bounds.x - ray_origin.x) / ray_direction.x;
+        float t_max = (max_bounds.x - ray_origin.x) / ray_direction.x;
 
-        if (tmin > tmax)
-            std::swap(tmin, tmax);
+        if (t_min > t_max)
+            std::swap(t_min, t_max);
 
         // Check the y-plane
-        float tymin = (minBounds.y - rayOrigin.y) / rayDirection.y;
-        float tymax = (maxBounds.y - rayOrigin.y) / rayDirection.y;
+        float ty_min = (min_bounds.y - ray_origin.y) / ray_direction.y;
+        float ty_max = (max_bounds.y - ray_origin.y) / ray_direction.y;
 
-        if (tymin > tymax)
-            std::swap(tymin, tymax);
+        if (ty_min > ty_max)
+            std::swap(ty_min, ty_max);
 
-        if ((tmin > tymax) || (tymin > tmax))
+        if ((t_min > ty_max) || (ty_min > t_max))
             return false;
 
-        if (tymin > tmin)
-            tmin = tymin;
-        if (tymax < tmax)
-            tmax = tymax;
+        if (ty_min > t_min)
+            t_min = ty_min;
+        if (ty_max < t_max)
+            t_max = ty_max;
 
         // Check the z-plane
-        float tzmin = (minBounds.z - rayOrigin.z) / rayDirection.z;
-        float tzmax = (maxBounds.z - rayOrigin.z) / rayDirection.z;
+        float tz_min = (min_bounds.z - ray_origin.z) / ray_direction.z;
+        float tz_max = (max_bounds.z - ray_origin.z) / ray_direction.z;
 
-        if (tzmin > tzmax)
-            std::swap(tzmin, tzmax);
+        if (tz_min > tz_max)
+            std::swap(tz_min, tz_max);
 
-        if ((tmin > tzmax) || (tzmin > tmax))
+        if ((t_min > tz_max) || (tz_min > t_max))
             return false;
 
-        if (tzmin > tmin)
-            tmin = tzmin;
-        if (tzmax < tmax)
-            tmax = tzmax;
+        if (tz_min > t_min)
+            t_min = tz_min;
+        if (tz_max < t_max)
+            t_max = tz_max;
 
         // Only check the entry point of the ray into the box
-        if (tmin < rayTMin || tmin > rayTMax)
+        if (t_min < ray_t_min || t_min > ray_t_max)
             return false;
 
         return true;
     }
 
-    // TODO: handle triangle face culling
-    // Moller-Trumbore ray/triangle intersection algorithm
-    bool rayTriangleIntersect(const glm::vec3 rayOrigin,
-            const glm::vec3 rayDirection,
-            const float rayTMin,
-            const float rayTMax,
-            const std::vector<glm::vec3> vertices,
-            const bool cullBackFace,
-            const bool cullFrontFace,
-            float& t,
-            float& u,
-            float& v,
-            bool& enteredFront) const {
-
-        // Immediately return if culling both faces; triangle is nonexistent
-        if (cullBackFace && cullFrontFace)
-            return false;
+    /// TODO:
+    /// Moller-Trumbore ray/triangle intersection algorithm
+    /// return: triangle intersected, t, u, v, entered front
+    ///
+    /// @brief Check if the ray intersects a triangle.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min ray minimum distance to intersection.
+    /// @param ray_t_max ray maximum distance to intersection.
+    /// @param vertices triangle's vertices.
+    /// @param cull_back_face whether to cull to back face of the triangle.
+    /// @param cull_front_face whether to cull the front face of the triangle.
+    /// @return tuple containing: (1) whether the triangle was intersected, (2) distance to intersection, (3)
+    /// barycentric u, (4) barycentric v, and (5) whether the ray entered the through the triangle's front face.
+    std::tuple<bool, float, float, float, bool> rayTriangleIntersect(
+        const glm::vec3& ray_origin,
+        const glm::vec3& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const std::vector<glm::vec3>& vertices,
+        const bool cull_back_face,
+        const bool cull_front_face
+    ) const {
+        // Immediately return if culling both faces
+        if (cull_back_face && cull_front_face)
+            return std::make_tuple(false, 0.0f, 0.0f, 0.0f, false);
 
         constexpr float epsilon = std::numeric_limits<float>::epsilon();
 
         // Find vectors for 2 edges that share a vertex
-        glm::vec3 edge1 = vertices[1] - vertices[0];
-        glm::vec3 edge2 = vertices[2] - vertices[0];
+        glm::vec3 edge_1 = vertices[1] - vertices[0];
+        glm::vec3 edge_2 = vertices[2] - vertices[0];
 
-        glm::vec3 pvec = glm::cross(rayDirection, edge2);
+        glm::vec3 pvec = glm::cross(ray_direction, edge_2);
 
         // If positive determinant, then the ray hit the front face
         // If negative determinant, then the ray hit the back face
         // If determinant is close to zero, then the ray missed the triangle
-        float determinant = glm::dot(edge1, pvec);
-        enteredFront = determinant < epsilon ? false : true;
+        float determinant = glm::dot(edge_1, pvec);
+        bool intersect_front = determinant < epsilon ? false : true;
 
-        if (cullBackFace) {
+        if (cull_back_face) {
             if (determinant < epsilon)
-                return false;
-        } else if (cullFrontFace) {
+                return std::make_tuple(false, 0.0f, 0.0f, 0.0f, intersect_front);
+        } else if (cull_front_face) {
             if (determinant > epsilon)
-                return false;
+                return std::make_tuple(false, 0.0f, 0.0f, 0.0f, intersect_front);
         } else {
             if (std::fabs(determinant) < epsilon)
-                return false;
+                return std::make_tuple(false, 0.0f, 0.0f, 0.0f, intersect_front);
         }
 
-        float inverseDeterminant = 1.0f / determinant;
+        float inverse_determinant = 1.0f / determinant;
 
-        glm::vec3 tvec = rayOrigin - vertices[0];  // Distance from ray origin to shared vertex 
+        glm::vec3 tvec = ray_origin - vertices[0];  // Distance from ray origin to shared vertex
 
-        u = glm::dot(tvec, pvec) * inverseDeterminant;
+        float u = glm::dot(tvec, pvec) * inverse_determinant;
         if (u < 0 || u > 1)
-            return false;
+            return std::make_tuple(false, 0.0f, u, 0.0f, intersect_front);
 
-        glm::vec3 qvec = glm::cross(tvec, edge1);
+        glm::vec3 qvec = glm::cross(tvec, edge_1);
 
-        v = glm::dot(rayDirection, qvec) * inverseDeterminant;
+        float v = glm::dot(ray_direction, qvec) * inverse_determinant;
         if (v < 0 || u + v > 1)
-            return false;
+            return std::make_tuple(false, 0.0f, u, v, intersect_front);
 
-        t = glm::dot(edge2, qvec) * inverseDeterminant;
+        float t = glm::dot(edge_2, qvec) * inverse_determinant;
+        if (t < ray_t_min || t > ray_t_max)
+            return std::make_tuple(false, t, u, v, intersect_front);
 
-        if (t < rayTMin || t > rayTMax)
-            return false;
-
-        return true;
+        return std::make_tuple(true, t, u, v, intersect_front);
     }
 
 public:
-    std::string toString(unsigned tabLevel = 0) {
-        std::stringstream result("");
-        const std::string tabString("|\t");
+    /// @brief Get the string representation of the acceleration structure.
+    /// @param tab_level number of tabs to indent each line with.
+    /// @return string of the acceleration structure.
+    std::string toString(unsigned tab_level = 0) {
+        std::stringstream result;
+        const std::string tab_string("|\t");
 
-        result << Util::repeatedString(tabLevel, tabString) << "acceleration_structure_id = " << id << std::endl;
-        result << Util::repeatedString(tabLevel + 1, tabString) << "is_TLAS = " << (isTLAS ? "true" : "false") << std::endl;
-        
-        using NodeInfo = std::tuple<ConstNodeRef, unsigned>;  // Raw pointer to smart pointers
+        result << Util::repeatedString(tab_level, tab_string) << "acceleration_structure_id = " << id << std::endl;
+        result << Util::repeatedString(tab_level + 1, tab_string) << "is_TLAS = " << (isTLAS ? "true" : "false")
+               << std::endl;
 
-        std::stack<NodeInfo> frontier;
-        frontier.push(std::make_tuple(&root, tabLevel));
+        using NodeRefAndNumTabs = std::tuple<ConstNodeRef, unsigned>;
+
+        std::stack<NodeRefAndNumTabs> frontier;
+        frontier.push(std::make_tuple(&root, tab_level));
 
         while (!frontier.empty()) {
-            NodeInfo top = frontier.top();
-            const std::shared_ptr<Node>& currNodeRef = *(get<0>(top));
-            const unsigned numTabs = get<1>(top);
+            NodeRefAndNumTabs top = frontier.top();
+            const std::shared_ptr<Node>& curr_node_ref = *(get<0>(top));
+            const unsigned num_tabs = get<1>(top);
             frontier.pop();
 
-            // Borrow ownership
-            Node* currNode = currNodeRef.get();
+            Node* curr_node = curr_node_ref.get();
 
-            // Append string form of node
-            result << currNode->toString(numTabs + 1, tabString);
+            // Append string representation of node
+            result << curr_node->toString(num_tabs + 1, tab_string);
 
             // Traverse down the hierarchy as necessary
-            switch (currNode->type()) {
+            switch (curr_node->type()) {
             case NodeType::Box: {
-                BoxNode* boxNode = static_cast<BoxNode*>(currNode);
-                for (const auto& child : boxNode->children) {
-                    frontier.push(std::make_tuple(&child, numTabs + 1));
-                }
+                BoxNode* box_node = static_cast<BoxNode*>(curr_node);
+                const auto& children = box_node->children;
+                for (int i = children.size() - 1; i >= 0; --i)
+                    frontier.push(std::make_tuple(&(children[i]), num_tabs + 1));
                 break;
             }
             case NodeType::Instance: {
-                InstanceNode* instanceNode = static_cast<InstanceNode*>(currNode);
-                result << instanceNode->accelerationStructure->toString(numTabs + 2);
+                InstanceNode* instance_node = static_cast<InstanceNode*>(curr_node);
+                result << instance_node->accelerationStructure->toString(num_tabs + 2);
                 break;
             }
-            default: // No paths after current node
+            default:  // No paths after current node
                 break;
             }
         }
@@ -1388,79 +1525,72 @@ public:
 
 export class AccelerationStructureManager : public Value {
 private:
-    std::shared_ptr<AccelerationStructure> root = nullptr; // Start of all acceleration structures TODO: make unique?
-    Struct* structureInfo; // TODO: change to smart pointer?
+    std::shared_ptr<AccelerationStructure> root;
+    std::unique_ptr<Struct> structureInfo;
 
 public:
     AccelerationStructureManager(Type t): Value(t) {}
-    ~AccelerationStructureManager() {
-        delete structureInfo;
-    }
 
 private:
-    void copyType(const Value& new_val) {
-        // "new_val" is a "Struct" instead of "AccelerationStructureManager" at the initial copy of input
-        const Aggregate& other =
-                new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE
-                        ? static_cast<const Aggregate&>(
-                                *((static_cast<const AccelerationStructureManager*>(&new_val))->structureInfo))
-                        : static_cast<const Aggregate&>(new_val);
+    /// @brief Copy the type from "other".
+    /// @param other "Value" to copy the type from.
+    void copyType(const Value& other) {
+        // "other" is a "Struct" instead of "AccelerationStructureManager" at the very first copy of input
+        const Aggregate& other = other.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE
+                                     ? static_cast<const Aggregate&>(
+                                           *((static_cast<const AccelerationStructureManager*>(&other))->structureInfo)
+                                       )
+                                     : static_cast<const Aggregate&>(other);
 
-        // Get data about the structure from the "new_val"
-        std::vector<std::array<unsigned, 4>> structureData;
-        const Array& accelerationStructuresInfo = static_cast<const Array&>(*(other[0]));
-        for (unsigned i = 0; i < accelerationStructuresInfo.getSize(); ++i) {
-            const Struct& currAccelerationStructureInfo = static_cast<const Struct&>(*(accelerationStructuresInfo[i]));
+        // Get data about the structure from the "other"
+        std::vector<std::array<unsigned, 4>> structure_data;
+        const Array& accel_struct_info = static_cast<const Array&>(*(other[0]));
+        for (unsigned i = 0; i < accel_struct_info.getSize(); ++i) {
+            const Struct& curr_accel_struct_info = static_cast<const Struct&>(*(accel_struct_info[i]));
 
-            const unsigned numBoxNodes =
-                    static_cast<const Primitive&>(*(currAccelerationStructureInfo[0])).data.u32;
-            const unsigned numInstanceNodes =
-                    static_cast<const Primitive&>(*(currAccelerationStructureInfo[1])).data.u32;
-            const unsigned numTriangleNodes =
-                    static_cast<const Primitive&>(*(currAccelerationStructureInfo[2])).data.u32;
-            const unsigned numProceduralNodes =
-                    static_cast<const Primitive&>(*(currAccelerationStructureInfo[3])).data.u32;
+            const unsigned num_box = static_cast<const Primitive&>(*(curr_accel_struct_info[0])).data.u32;
+            const unsigned num_instance = static_cast<const Primitive&>(*(curr_accel_struct_info[1])).data.u32;
+            const unsigned num_triangle = static_cast<const Primitive&>(*(curr_accel_struct_info[2])).data.u32;
+            const unsigned num_procedural = static_cast<const Primitive&>(*(curr_accel_struct_info[3])).data.u32;
 
-            structureData.push_back(
-                    std::array<unsigned, 4> {numBoxNodes, numInstanceNodes, numTriangleNodes, numProceduralNodes});
+            structure_data.push_back(std::array<unsigned, 4> {num_box, num_instance, num_triangle, num_procedural});
         }
 
         // Change the current type to match
-        auto info = getStructureFormat(&structureData);
+        auto info = getStructureFormat(&structure_data);
         type = Type::accelerationStructure(get<1>(info), get<0>(info));
 
-        // Actual copy
-        structureInfo = new Struct(type);
-        (static_cast<Aggregate*>(structureInfo))->dummyFill();
-        (static_cast<Aggregate*>(structureInfo))->copyFrom(other);
+        // Start copying the type
+        structureInfo = std::make_unique<Struct>(type);
+        structureInfo->dummyFill();
+        structureInfo->copyFrom(other);
     }
 
+    /// @brief Build the acceleration structures. Works correctly if "structureInfo" is correctly filled.
     void buildAccelerationStructures() {
         assert(structureInfo != nullptr);
 
         // Note: different instance nodes can point to the same acceleration structure
-        std::vector<std::shared_ptr<AccelerationStructure>> accelerationStructures;
-        const Struct& structureInfoRef = *structureInfo;
-        const Array& accelerationStructuresInfo = static_cast<const Array&>(*(structureInfoRef[0]));
-        unsigned numAccelerationStructures = accelerationStructuresInfo.getSize();
+        std::vector<std::shared_ptr<AccelerationStructure>> accel_structs;
+        const Struct& structure_info_ref = *structureInfo;
+        const Array& accel_structs_info = static_cast<const Array&>(*(structure_info_ref[0]));
+        const unsigned num_accel_structs = accel_structs_info.getSize();
 
         // Construct each acceleration structure bottom-up
-        unsigned offset = 1; // Offset to the first acceleration structure
-        for (int i = numAccelerationStructures - 1; i >= 0; --i) {
-            accelerationStructures.push_back(
-                std::make_shared<AccelerationStructure>(
-                    i,
-                    static_cast<const Struct&>(*(structureInfoRef[i + offset])), 
-                    static_cast<const Struct&>(*(accelerationStructuresInfo[i])), 
-                    accelerationStructures,
-                    numAccelerationStructures
-                )
-            );
+        const unsigned offset = 1;  // Offset to the start of all acceleration sturctures
+        for (int i = num_accel_structs - 1; i >= 0; --i) {
+            accel_structs.push_back(std::make_shared<AccelerationStructure>(
+                i,
+                static_cast<const Struct&>(*(structure_info_ref[i + offset])),
+                static_cast<const Struct&>(*(accel_structs_info[i])),
+                accel_structs,
+                num_accel_structs
+            ));
         }
 
-        // Set the root acceleration structure 
-        root = std::move(accelerationStructures[numAccelerationStructures - 1]);
-        assert(accelerationStructures[numAccelerationStructures - 1] == nullptr);
+        // Set the root acceleration structure
+        root = std::move(accel_structs[num_accel_structs - 1]);
+        assert(accel_structs[num_accel_structs - 1] == nullptr);
     }
 
 public:
@@ -1474,236 +1604,310 @@ public:
         return *this;
     }
 
-    void copyFrom(const Value& new_val) noexcept(false) override {
-        // Copy the type of "new_val"
-        copyType(new_val);
+    void copyFrom(const Value& other) noexcept(false) override {
+        // Copy the type of "other"
+        copyType(other);
 
         // Build the acceleration structures
         buildAccelerationStructures();
     }
 
-    void initStepTraceRay(const unsigned& rayFlags,
-            const unsigned& cullMask,
-            const std::vector<float>& rayOrigin,
-            const std::vector<float>& rayDirection,
-            const float& rayTMin,
-            const float& rayTMax,
-            const bool& useSBT,
-            const unsigned offsetSBT = 0,
-            const unsigned strideSBT = 0,
-            const unsigned missIndex = 0) {
-
-        root->initTrace(rayFlags,
-                cullMask,
-                rayOrigin,
-                rayDirection,
-                rayTMin,
-                rayTMax,
-                useSBT,
-                offsetSBT,
-                strideSBT,
-                missIndex);
+    /// @brief Initialize the step trace.
+    /// @param ray_flags ray flags.
+    /// @param cull_mask cull mask; culls respective instances.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min closest a ray will allow for an intersection.
+    /// @param ray_t_max farthest a ray will allow for an intersection.
+    /// @param use_sbt whether to use the shader binding table when tracing.
+    /// @param offset_sbt shader binding table offset.
+    /// @param stride_sbt shader binding table stride.
+    /// @param miss_index shader binding table miss index.
+    void initStepTraceRay(
+        const unsigned ray_flags,
+        const unsigned cull_mask,
+        const std::vector<float>& ray_origin,
+        const std::vector<float>& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const bool use_sbt,
+        const unsigned offset_sbt = 0,
+        const unsigned stride_sbt = 0,
+        const unsigned miss_index = 0
+    ) {
+        root->initTrace(
+            ray_flags,
+            cull_mask,
+            ray_origin,
+            ray_direction,
+            ray_t_min,
+            ray_t_max,
+            use_sbt,
+            offset_sbt,
+            stride_sbt,
+            miss_index
+        );
     }
 
+    /// @brief Take a step in the trace.
+    /// @return whether there is more to trace.
     bool stepTraceRay() {
-        // TODO: do something with intersected geometry argument
-        bool intersectedGeometry = false;
-        return root->stepTrace(intersectedGeometry);
+        std::tuple<bool, bool> result = root->stepTrace();
+        return get<0>(result);
     }
 
-    void traceRay(bool& didIntersectGeometry,
-            const unsigned& rayFlags,
-            const unsigned& cullMask,
-            const std::vector<float>& rayOrigin,
-            const std::vector<float>& rayDirection,
-            const float& rayTMin,
-            const float& rayTMax,
-            const bool& useSBT,
-            const unsigned offsetSBT = 0,
-            const unsigned strideSBT = 0,
-            const unsigned missIndex = 0) const {
+    /// @brief Completely trace the acceleration structure.
+    /// @param ray_flags ray flags.
+    /// @param cull_mask cull mask; culls respective instances.
+    /// @param ray_origin ray origin.
+    /// @param ray_direction ray direction.
+    /// @param ray_t_min closest a ray will allow for an intersection.
+    /// @param ray_t_max farthest a ray will allow for an intersection.
+    /// @param use_sbt whether to use the shader binding table when tracing.
+    /// @param offset_sbt shader binding table offset.
+    /// @param stride_sbt shader binding table stride.
+    /// @param miss_index shader binding table miss index.
+    /// @return whether a geometry was intersected.
+    bool traceRay(
+        const unsigned ray_flags,
+        const unsigned cull_mask,
+        const std::vector<float>& ray_origin,
+        const std::vector<float>& ray_direction,
+        const float ray_t_min,
+        const float ray_t_max,
+        const bool use_sbt,
+        const unsigned offset_sbt = 0,
+        const unsigned stride_sbt = 0,
+        const unsigned miss_index = 0
+    ) const {
+        glm::vec4 ray_origin_glm = glm::make_vec4(ray_origin.data());
+        ray_origin_glm.w = 1.0f;
+        glm::vec4 ray_direction_glm = glm::make_vec4(ray_direction.data());
+        ray_direction_glm.w = 0.0f;
 
-        glm::vec4 convertedRayOrigin = glm::make_vec4(rayOrigin.data());
-        convertedRayOrigin.w = 1.0f;
-        glm::vec4 convertedRayDirection = glm::make_vec4(rayDirection.data());
-        convertedRayDirection.w = 0.0f;
-
-        root->traceRay(didIntersectGeometry,
-                rayFlags,
-                cullMask,
-                convertedRayOrigin,
-                convertedRayDirection,
-                rayTMin,
-                rayTMax,
-                useSBT,
-                offsetSBT,
-                strideSBT,
-                missIndex);
+        return root->traceRay(
+            ray_flags,
+            cull_mask,
+            ray_origin_glm,
+            ray_direction_glm,
+            ray_t_min,
+            ray_t_max,
+            use_sbt,
+            offset_sbt,
+            stride_sbt,
+            miss_index
+        );
     }
 
+    /// @brief Include the current AABB/procedural intersection in determining the closest hit.
+    /// The candidate intersection must be of type AABB.
+    /// @param hit_t distance from the ray to the intersection.
     void generateIntersection(float hit_t) const {
         root->generateIntersection(hit_t);
     }
 
+    /// @brief Include the current triangle intersection in determining the closest hit.
+    /// The candidate intersection must be of type triangle.
     void confirmIntersection() const {
         root->confirmIntersection();
     }
 
-    /// @brief Get the intersection type of the current iteration of tracing a ray.
-    /// @param getCommitted Determine if the method should return the committed or candidate intersection type.
-    /// @return Intersection type.
+    /// @brief Get the intersection type.
+    /// @param get_committed Type of intersection: committed or candidate.
+    /// @return intersection type.
     unsigned getIntersectionType(bool get_committed) const {
         return get_committed ? static_cast<unsigned>(root->getCommittedIntersectionType())
                              : static_cast<unsigned>(root->getCandidateIntersectionType());
     }
 
-    /// @brief Get the current ray to intersection distance.
-    /// @param getCommitted Determine if the method should return the committed or candidate intersection type.
-    /// @return Intersection distance.
+    /// @brief Get the distance from the ray to the current intersection.
+    /// @param get_committed Type of intersection: committed or candidate.
+    /// @return distance between the ray and intersection.
     float getIntersectionT(bool get_committed) const {
         return root->getIntersectionT(get_committed);
     }
 
+    /// @brief Get the current intersection instance's custom index.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return custom index if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceCustomIndex(bool get_committed) const {
         return root->getIntersectionInstanceCustomIndex(get_committed);
     }
 
+    /// @brief Get the current intersection instance's id.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return id if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceId(bool get_committed) const {
         return root->getIntersectionInstanceId(get_committed);
     }
 
+    /// @brief Get the current intersection instance's shader binding table record offset.
+    /// The instance must exist; not be null.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return SBT record offset
     unsigned getIntersectionInstanceShaderBindingTableRecordOffset(bool get_committed) const {
         return root->getIntersectionInstanceShaderBindingTableRecordOffset(get_committed);
     }
 
+    /// @brief Get the current intersection's geometry index.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return geometry index.
     int getIntersectionGeometryIndex(bool get_committed) const {
         return root->getIntersectionGeometryIndex(get_committed);
     }
 
+    /// @brief Get the current intersection's primitive index.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return primitive index.
     int getIntersectionPrimitiveIndex(bool get_committed) const {
         return root->getIntersectionPrimitiveIndex(get_committed);
     }
 
+    /// @brief Get the current intersection's barycentric coordinates.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return barycentrics.
     glm::vec2 getIntersectionBarycentrics(bool get_committed) const {
         return root->getIntersectionBarycentrics(get_committed);
     }
 
+    /// @brief Get whether the ray entered the front face of a triangle.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return whether the intersection was entered from the front face of a triangle.
     bool getIntersectionFrontFace(bool get_committed) const {
         return root->getIntersectionFrontFace(get_committed);
     }
 
+    /// @brief Get whether the intersection is an opaque procedural.
+    /// @return whether the intersection was an opaque procedural.
     bool getIntersectionCandidateAABBOpaque() const {
         return root->getIntersectionCandidateAABBOpaque();
     }
 
+    /// @brief Get the object-space ray direction depending on the instance intersected.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return object-space ray direction.
     glm::vec3 getIntersectionObjectRayDirection(bool get_committed) const {
         return root->getIntersectionObjectRayDirection(get_committed);
     }
 
+    /// @brief Get the object-space ray origin depending on the instance intersected.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return object-space ray origin.
     glm::vec3 getIntersectionObjectRayOrigin(bool get_committed) const {
         return root->getIntersectionObjectRayOrigin(get_committed);
     }
 
+    /// @brief Get the object-to-world matrix of the intersected instance.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return object-to-world matrix.
     glm::mat4x3 getIntersectionObjectToWorld(bool get_committed) const {
         return root->getIntersectionObjectToWorld(get_committed);
     }
 
+    /// @brief Get the world-to-object matrix of the intersected instance.
+    /// @param get_committed type of intersection: committed or candidate.
+    /// @return world-to-object matrix.
     glm::mat4x3 getIntersectionWorldToObject(bool get_committed) const {
-        return root->getIntersectionWorldToObject(get_committed);    
+        return root->getIntersectionWorldToObject(get_committed);
     }
 
-    // TODO:
-    void fillPayloadWithBool(Value* payloadInfo, const bool intersected) const {
+    /// @brief (TODO: change "payload_info" to not be a pseudo-return, TODO: change once SBTs are implemented)
+    /// Fills the payload will whether a geometry was intersected.
+    /// @param payload_info payload to modify.
+    /// @param intersected whether a geometry was intersected.
+    void fillPayloadWithBool(Value* payload_info, const bool intersected) const {
         std::stack<Value*> frontier;
-        frontier.push(payloadInfo);
+        frontier.push(payload_info);
 
         while (!frontier.empty()) {
             Value* curr = frontier.top();
             frontier.pop();
 
             switch (curr->getType().getBase()) {
-                default: {
-                    std::stringstream err;
-                    err << "Encountered unsupported data type in fill payload: " << curr->getType().getBase();
-                    throw std::runtime_error(err.str());
-                }
-                case DataType::FLOAT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<float>(intersected)));
-                    break;
-                }
-                case DataType::UINT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<unsigned>(intersected)));
-                    break;
-                }
-                case DataType::INT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<int>(intersected)));
-                    break;
-                }
-                case DataType::BOOL: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(intersected));
-                    break;
-                }
-                case DataType::ARRAY:
-                case DataType::STRUCT: {
-                    const Aggregate& agg = static_cast<const Aggregate&>(*curr);
-                    for (auto it = agg.begin(); it != agg.end(); ++it) {
-                        frontier.push(*it);
-                    }
-                    break;
-                }
+            default: {
+                std::stringstream err;
+                err << "Encountered unsupported data type in fill payload: " << curr->getType().getBase();
+                throw std::runtime_error(err.str());
+            }
+            case DataType::FLOAT: {
+                Primitive& val = static_cast<Primitive&>(*curr);
+                val.copyFrom(Primitive(static_cast<float>(intersected)));
+                break;
+            }
+            case DataType::UINT: {
+                Primitive& val = static_cast<Primitive&>(*curr);
+                val.copyFrom(Primitive(static_cast<unsigned>(intersected)));
+                break;
+            }
+            case DataType::INT: {
+                Primitive& val = static_cast<Primitive&>(*curr);
+                val.copyFrom(Primitive(static_cast<int>(intersected)));
+                break;
+            }
+            case DataType::BOOL: {
+                Primitive& val = static_cast<Primitive&>(*curr);
+                val.copyFrom(Primitive(intersected));
+                break;
+            }
+            case DataType::ARRAY:
+            case DataType::STRUCT: {
+                const Aggregate& agg = static_cast<const Aggregate&>(*curr);
+                for (auto it = agg.begin(); it != agg.end(); ++it)
+                    frontier.push(*it);
+                break;
+            }
             }
         }
     }
 
 private:
-    std::string getPrimitiveValueAsString(const Value& value) const {
-        std::stringstream result("");
-        const DataType& dataType = value.getType().getBase();
+    /// @brief Get "Primitive" as a string.
+    /// @param primitive value to get a string representation.
+    /// @return string representation of primitive.
+    std::string getPrimitiveValueAsString(const Value& primitive) const {
+        std::stringstream result;
+        const DataType& data_type = primitive.getType().getBase();
 
-        switch (dataType) {
-            default: {
-                std::stringstream err;
-                err << "Unsupported data type; cannot convert to primitive string: " << dataType;
-                throw std::runtime_error(err.str());
-            }
-            case DataType::FLOAT: {
-                result << static_cast<const Primitive&>(value).data.fp32;
-                break;
-            }
-            case DataType::UINT: {
-                result << static_cast<const Primitive&>(value).data.u32;
-                break;
-            }
-            case DataType::INT: {
-                result << static_cast<const Primitive&>(value).data.i32;
-                break;
-            }
-            case DataType::BOOL: {
-                result << (static_cast<const Primitive&>(value).data.b32 ? "true" : "false");
-                break;
-            }
+        switch (data_type) {
+        default: {
+            std::stringstream err;
+            err << "Unsupported data type; cannot convert to primitive string: " << data_type;
+            throw std::runtime_error(err.str());
+        }
+        case DataType::FLOAT: {
+            result << static_cast<const Primitive&>(primitive).data.fp32;
+            break;
+        }
+        case DataType::UINT: {
+            result << static_cast<const Primitive&>(primitive).data.u32;
+            break;
+        }
+        case DataType::INT: {
+            result << static_cast<const Primitive&>(primitive).data.i32;
+            break;
+        }
+        case DataType::BOOL: {
+            result << (static_cast<const Primitive&>(primitive).data.b32 ? "true" : "false");
+            break;
+        }
         }
 
         return result.str();
     }
 
 public:
-    /// @brief TODO: description
-    /// @return 
+    /// @brief Get the string representation of the acceleration structures input that was provided.
+    /// @return string representation of acceleration structures input.
     std::string toString() const {
-        std::stringstream result("");
-        const std::string tabString("|\t");
+        std::stringstream result;
+        const std::string tab_string("|\t");
 
         // Contains the name, value, and number of tabs
         using NameAndValue = std::tuple<const std::string, const Value*, const unsigned>;
 
         std::stack<NameAndValue> frontier;
-        const Value customStringValue = Value(Type::string());
-        frontier.push(std::make_tuple(std::string("Structure for acceleration structures"), structureInfo, 0));
+        const Value custom_string = Value(Type::string());
+        frontier.push(std::make_tuple(std::string("Structure for acceleration structures"), structureInfo.get(), 0));
 
         while (!frontier.empty()) {
             const NameAndValue top = frontier.top();
@@ -1711,70 +1915,71 @@ public:
 
             const std::string& name = get<0>(top);
             const Value* value = get<1>(top);
-            const unsigned& numTabs = get<2>(top);
-            const DataType& dataType = value->getType().getBase();
-            const std::string arrayElementIndicator("");
+            const unsigned& num_tabs = get<2>(top);
+            const DataType& data_type = value->getType().getBase();
+            const std::string array_element_marker("");
 
-            switch (dataType) {
-                default: {
-                    std::stringstream err;
-                    err << "Unsupported data type; cannot convert to string: " << dataType;
-                    throw std::runtime_error(err.str());
+            switch (data_type) {
+            default: {
+                std::stringstream err;
+                err << "Unsupported data type; cannot convert to string: " << data_type;
+                throw std::runtime_error(err.str());
+            }
+            case DataType::FLOAT:
+            case DataType::UINT:
+            case DataType::INT:
+            case DataType::BOOL: {
+                result << Util::repeatedString(num_tabs, tab_string) << name << " = "
+                       << getPrimitiveValueAsString(*value) << std::endl;
+                break;
+            }
+            case DataType::STRUCT:
+            case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
+                result << Util::repeatedString(num_tabs, tab_string) << name << " {" << std::endl;
+                frontier.push(std::make_tuple(" }", &custom_string, num_tabs));
+
+                const Struct& info = static_cast<const Struct&>(*value);
+
+                // Add the children to the stack
+                const std::vector<std::string>& names = info.getType().getNames();
+                assert(names.size() == info.getSize());
+
+                for (int i = names.size() - 1; i >= 0; --i) {
+                    std::stringstream message;
+                    message << names[i];
+                    frontier.push(std::make_tuple(message.str(), info[i], num_tabs + 1));
                 }
-                case DataType::FLOAT:
-                case DataType::UINT:
-                case DataType::INT:
-                case DataType::BOOL: {
-                    result << Util::repeatedString(numTabs, tabString) << name << " = " << getPrimitiveValueAsString(*value) << std::endl;
-                    break;
-                }
-                case DataType::STRUCT:
-                case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
-                    result << Util::repeatedString(numTabs, tabString) << name << " {" << std::endl;
-                    frontier.push(std::make_tuple(" }", &customStringValue, numTabs));
 
-                    const Struct& info = static_cast<const Struct&>(*value);
+                break;
+            }
+            case DataType::ARRAY: {
+                result << Util::repeatedString(num_tabs, tab_string) << name;
 
-                    // Add the children to the stack
-                    const std::vector<std::string>& names = info.getType().getNames();
-                    assert(names.size() == info.getSize());
+                const Array& info = static_cast<const Array&>(*value);
+                const DataType child_data_type = info.getSize() > 0 ? info[0]->getType().getBase() : DataType::VOID;
 
-                    for (int i = names.size() - 1; i >= 0; --i) {
-                        std::stringstream message;
-                        message << names[i];
-                        frontier.push(std::make_tuple(message.str(), info[i], numTabs + 1));
+                // Add the children to the stack if some kind of structure
+                if (child_data_type == DataType::STRUCT || child_data_type == DataType::ARRAY ||
+                    child_data_type == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) {
+                    result << " [" << std::endl;
+                    frontier.push(std::make_tuple(" ]", &custom_string, num_tabs));
+                    for (int i = info.getSize() - 1; i >= 0; --i) {
+                        frontier.push(std::make_tuple(array_element_marker, info[i], num_tabs + 1));
                     }
-
-                    break;
-                }
-                case DataType::ARRAY: {
-                    result << Util::repeatedString(numTabs, tabString) << name;
-
-                    const Array& info = static_cast<const Array&>(*value);
-                    const DataType childDataType = info.getSize() > 0 ? info[0]->getType().getBase() : DataType::VOID;
-
-                    // Add the children to the stack if some kind of structure
-                    if (childDataType == DataType::STRUCT || childDataType == DataType::ARRAY ||
-                            childDataType == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) {
-                        result << " [" << std::endl;
-                        frontier.push(std::make_tuple(" ]", &customStringValue, numTabs));
-                        for (int i = info.getSize() - 1; i >= 0; --i) {
-                            frontier.push(std::make_tuple(arrayElementIndicator, info[i], numTabs + 1));
-                        }
-                    } else {
-                        result << " [ ";
-                        for (unsigned i = 0; i < info.getSize() - 1; ++i) {
-                            result << getPrimitiveValueAsString(*(info[i])) << ", ";
-                        }
-                        result << getPrimitiveValueAsString(*(info[info.getSize() - 1])) << " ]" << std::endl;
+                } else {
+                    result << " [ ";
+                    for (unsigned i = 0; i < info.getSize() - 1; ++i) {
+                        result << getPrimitiveValueAsString(*(info[i])) << ", ";
                     }
+                    result << getPrimitiveValueAsString(*(info[info.getSize() - 1])) << " ]" << std::endl;
+                }
 
-                    break;
-                }
-                case DataType::STRING: {
-                    result << Util::repeatedString(numTabs, tabString) << name << std::endl;
-                    break;
-                }
+                break;
+            }
+            case DataType::STRING: {
+                result << Util::repeatedString(num_tabs, tab_string) << name << std::endl;
+                break;
+            }
             }
         }
 
@@ -1782,10 +1987,10 @@ public:
     }
 
     /// @brief Gives the fields and field names of the structure for acceleration structures.
-    /// @param data Number of nodes in each acceleration structure.
-    /// @return Field names as strings and fields as types.
-    static std::tuple<std::vector<std::string>, std::vector<const Type*>> getStructureFormat(
-            std::vector<std::array<unsigned, 4>>* data = nullptr) {
+    /// @param data number of nodes in each acceleration structure.
+    /// @return field names as strings and fields as types.
+    static std::tuple<std::vector<std::string>, std::vector<const Type*>>
+    getStructureFormat(const std::vector<std::array<unsigned, 4>>* data = nullptr) {
 
         using Names = std::vector<std::string>;
         using Fields = std::vector<const Type*>;
@@ -1796,10 +2001,12 @@ public:
         // Note: "--- <field name>" means which field we are populating with the code below it
 
         // --- accelerationStructuresInfo
-        const Names acceleration_structures_info_names {"numBoxNodes",
-                "numInstanceNodes",
-                "numTriangleNodes",
-                "numProceduralNodes"};
+        const Names acceleration_structures_info_names {
+            "numBoxNodes",
+            "numInstanceNodes",
+            "numTriangleNodes",
+            "numProceduralNodes"
+        };
         Fields acceleration_structures_info_fields;
         {
             // --- numBoxNodes
@@ -1815,7 +2022,7 @@ public:
             acceleration_structures_info_fields.push_back(new Type(Type::primitive(DataType::UINT)));
         }
         Type* acceleration_structures_info_struct =
-                new Type(Type::structure(acceleration_structures_info_fields, acceleration_structures_info_names));
+            new Type(Type::structure(acceleration_structures_info_fields, acceleration_structures_info_names));
         Type* acceleration_structures_info_array = new Type(Type::array(0, *acceleration_structures_info_struct));
         fields.push_back(acceleration_structures_info_array);
 
@@ -1866,14 +2073,16 @@ public:
 
                     // --- instanceNodes
                     if (num_instance_nodes > 0) {
-                        Names instance_node_field_names {"objectToWorld",
-                                "id",
-                                "customIndex",
-                                "geometryIndex",
-                                "primitiveIndex",
-                                "mask",
-                                "shaderBindingTableRecordOffset",
-                                "accelerationStructureIndex"};
+                        Names instance_node_field_names {
+                            "objectToWorld",
+                            "id",
+                            "customIndex",
+                            "geometryIndex",
+                            "primitiveIndex",
+                            "mask",
+                            "shaderBindingTableRecordOffset",
+                            "accelerationStructureIndex"
+                        };
                         Fields instance_node_fields;
                         {
                             // --- objectToWorld
@@ -1906,7 +2115,7 @@ public:
                             instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
                         }
                         Type* instance_node =
-                                new Type(Type::structure(instance_node_fields, instance_node_field_names));
+                            new Type(Type::structure(instance_node_fields, instance_node_field_names));
 
                         for (int j = 0; j < num_instance_nodes; ++j) {
                             std::stringstream instance_node_name;
@@ -1918,11 +2127,13 @@ public:
 
                     // --- triangleNodes
                     if (num_triangle_nodes > 0) {
-                        Names triangle_node_field_names {"geometryIndex",
-                                "primitiveIndex",
-                                "opaque",
-                                "vertices",
-                                "indices"};
+                        Names triangle_node_field_names {
+                            "geometryIndex",
+                            "primitiveIndex",
+                            "opaque",
+                            "vertices",
+                            "indices"
+                        };
                         Fields triangle_node_fields;
                         {
                             // --- geometryIndex
@@ -1944,7 +2155,7 @@ public:
                             triangle_node_fields.push_back(new Type(Type::array(0, *indices)));
                         }
                         Type* triangle_node =
-                                new Type(Type::structure(triangle_node_fields, triangle_node_field_names));
+                            new Type(Type::structure(triangle_node_fields, triangle_node_field_names));
 
                         for (int j = 0; j < num_triangle_nodes; ++j) {
                             std::stringstream triangle_node_name;
@@ -1956,11 +2167,13 @@ public:
 
                     // --- proceduralNodes
                     if (num_procedural_nodes > 0) {
-                        Names procedural_node_field_names {"geometryIndex",
-                                "primitiveIndex",
-                                "opaque",
-                                "minBounds",
-                                "maxBounds"};
+                        Names procedural_node_field_names {
+                            "geometryIndex",
+                            "primitiveIndex",
+                            "opaque",
+                            "minBounds",
+                            "maxBounds"
+                        };
                         Fields procedural_node_fields;
                         {
                             // --- geometryIndex
@@ -1980,7 +2193,7 @@ public:
                             procedural_node_fields.push_back(new Type(Type::array(3, *bounds)));
                         }
                         Type* proceduralNode =
-                                new Type(Type::structure(procedural_node_fields, procedural_node_field_names));
+                            new Type(Type::structure(procedural_node_fields, procedural_node_field_names));
 
                         for (int j = 0; j < num_procedural_nodes; ++j) {
                             std::stringstream procedural_node_name;
@@ -1992,7 +2205,7 @@ public:
                 }
 
                 Type* acceleration_structure =
-                        new Type(Type::structure(acceleration_structure_fields, acceleration_structure_field_names));
+                    new Type(Type::structure(acceleration_structure_fields, acceleration_structure_field_names));
                 std::stringstream acceleration_structure_name;
                 acceleration_structure_name << "accelerationStructure" << i;
                 names.push_back(acceleration_structure_name.str());

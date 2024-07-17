@@ -29,14 +29,13 @@ public:
     /// @param new_val the value to copy from
     virtual void copyFrom(const Value& new_val) noexcept(false) {
         // STRUCT and RAY_TRACING_ACCELERATION_STRUCTURE are the same here
-        // TODO: better way to show equivalency?
-        bool isStructAndAccelerationStructure =
-                (new_val.getType().getBase() == DataType::STRUCT &&
-                        getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) ||
-                (new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE &&
-                        getType().getBase() == DataType::STRUCT);
-        
-        if (!new_val.getType().sameBase(getType()) && !isStructAndAccelerationStructure)
+        bool is_struct_and_accel_struct =
+            (new_val.getType().getBase() == DataType::STRUCT &&
+             getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) ||
+            (new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE &&
+             getType().getBase() == DataType::STRUCT);
+
+        if (!new_val.getType().sameBase(getType()) && !is_struct_and_accel_struct)
             throw std::runtime_error("Cannot copy from value of different type!");
     }
 
