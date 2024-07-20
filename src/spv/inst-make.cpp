@@ -610,9 +610,9 @@ bool Instruction::makeResult(
                 switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
                 case spv::ExecutionMode::ExecutionModeLocalSize:
                     assert(deco->operands.size() == 5);
-                    ep->localX = std::get<uint32_t>(deco->operands[2].raw);
-                    ep->localY = std::get<uint32_t>(deco->operands[3].raw);
-                    ep->localZ = std::get<uint32_t>(deco->operands[4].raw);
+                    ep->sizeX = std::get<uint32_t>(deco->operands[2].raw);
+                    ep->sizeY = std::get<uint32_t>(deco->operands[3].raw);
+                    ep->sizeZ = std::get<uint32_t>(deco->operands[4].raw);
                     break;
                 default:
                     break;
@@ -625,9 +625,9 @@ bool Instruction::makeResult(
                 switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
                 case spv::ExecutionMode::ExecutionModeLocalSizeId:
                     assert(deco->operands.size() == 5);
-                    ep->localX = static_cast<const Primitive*>(getValue(2, data))->data.u32;
-                    ep->localY = static_cast<const Primitive*>(getValue(3, data))->data.u32;
-                    ep->localZ = static_cast<const Primitive*>(getValue(4, data))->data.u32;
+                    ep->sizeX = static_cast<const Primitive*>(getValue(2, data))->data.u32;
+                    ep->sizeY = static_cast<const Primitive*>(getValue(3, data))->data.u32;
+                    ep->sizeZ = static_cast<const Primitive*>(getValue(4, data))->data.u32;
                     break;
                 default:
                     break;

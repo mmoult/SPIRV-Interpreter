@@ -181,9 +181,10 @@ public:
     }
 
     spv::BuiltIn getVarBuiltIn(DataView& data) const {
-        if (opcode != spv::OpVariable)
-            return spv::BuiltIn::BuiltInMax;
+        // The source of the variable could be OpVariable or some spec const variant.
         Variable* var = data[getResult()].getVariable();
+        if (var == nullptr)
+            return spv::BuiltIn::BuiltInMax;
         return var->getBuiltIn();
     }
 
@@ -196,6 +197,15 @@ public:
 
         // The entry function ref is operand 1
         const EntryPoint* fx = getEntryPoint(1, data);
+        if (fx == nullptr)
+            throw std::runtime_error("Missing entry function in entry declaration!");
+        return *fx;
+    }
+    EntryPoint& getEntryPoint(DataView& data) {
+        assert(opcode == spv::OpEntryPoint);
+
+        // The entry function ref is operand 1
+        EntryPoint* fx = getEntryPoint(1, data);
         if (fx == nullptr)
             throw std::runtime_error("Missing entry function in entry declaration!");
         return *fx;

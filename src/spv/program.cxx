@@ -19,6 +19,7 @@ import front.debug;
 import spv.data.data;
 import spv.frame;
 import spv.instruction;
+import value.aggregate;
 import value.primitive;
 
 export class Program {
@@ -34,6 +35,8 @@ export class Program {
     std::vector<unsigned> specs;
     // builtin variables we need to catch
     unsigned localInvocIdx = 0;
+    unsigned globalInvocId = 0;
+    unsigned workGroupSize = 0;
 
     /// @brief For parsing the program from the binary words. Should identify whether the whole program is valid before
     ///        any instructions are executed.
@@ -178,13 +181,22 @@ public:
                 if (!inst.queueDecoration(data.getBound(), location, decorations)) {
                     inst.makeResult(global, location, &decorations);
 
+                    // Some builtins need to be removed from the interface, in which case they continue,
+                    // others just need to report results, in which they can be saved and break.
                     switch (inst.getVarBuiltIn(global)) {
                     case spv::BuiltIn::BuiltInLocalInvocationIndex:
                         localInvocIdx = inst.getResult();
-                        continue;  // prevent io gen since we don't want this added to the interface
+                        continue;
+                    case spv::BuiltIn::BuiltInGlobalInvocationId:
+                        globalInvocId = inst.getResult();
+                        continue;
+                    case spv::BuiltIn::BuiltInWorkgroupSize:
+                        workGroupSize = inst.getResult();
+                        break;
                     default:
                         break;
                     }
+
                     if (static_ctn)
                         inst.ioGen(global, ins, outs, specs, provided);
                 }
@@ -196,19 +208,19 @@ public:
     }
 
     void checkInputs(ValueMap& provided) noexcept(false) {
+        DataView& global = data.getGlobal();
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
-        DataView& global = data.getGlobal();
         for (const auto in : ins)
             // var already checked not null in ioGen
             inputs.push_back(global[in].getVariable());
 
         // Spec constants are not mandatory in the input file!
         // Although they had their values assigned earlier (and therefore, must not be assigned again), we check them
-        // here since their name-value pairs may appear in the input, we must recognize them as valid.
+        // here since their name-value pspecConstsairs may appear in the input, we must recognize them as valid.
         std::vector<Variable*> specConsts;
         for (const auto spec : specs)
-            inputs.push_back(global[spec].getVariable());
+            specConsts.push_back(global[spec].getVariable());
 
         // Next go through variables defined and verify they match needed
         for (const auto& [name, val] : provided) {
@@ -321,9 +333,20 @@ public:
     void execute(bool verbose, bool debug, ValueFormat& format) noexcept(false) {
         Instruction& entry_inst = insts[entry];
         DataView& global = data.getGlobal();
-        const EntryPoint& ep = entry_inst.getEntryPoint(global);
 
-        unsigned num_invocations = ep.localX * ep.localY * ep.localZ;
+        // Load the workgroup size from the variable, if provided
+        if (workGroupSize != 0) {
+            const Variable& workSizeVar = *static_cast<const Variable*>(global[workGroupSize].getVariable());
+            const Aggregate& sizeAgg = *static_cast<const Aggregate*>(workSizeVar.getVal());
+            // Update the entry point
+            EntryPoint& ep = entry_inst.getEntryPoint(global);
+            ep.sizeX = static_cast<const Primitive*>(sizeAgg[0])->data.u32;
+            ep.sizeY = static_cast<const Primitive*>(sizeAgg[1])->data.u32;
+            ep.sizeZ = static_cast<const Primitive*>(sizeAgg[2])->data.u32;
+        }
+        const EntryPoint& ep = entry_inst.getEntryPoint(global);
+        unsigned num_invocations = ep.sizeX * ep.sizeY * ep.sizeZ;
+
         Debugger debugger(insts, format, num_invocations);
         // The stack frame holds variables, temporaries, program counter, return address, etc
         // We have a stack frame for each invocation
@@ -336,10 +359,19 @@ public:
         std::vector<const Value*> entry_args;
 
         Variable* local_invoc_idx = nullptr;
+        Variable* global_invoc_id = nullptr;
+        const Type tUint = Type::primitive(DataType::UINT);
+        const Type tUvec3 = Type::array(3, tUint);
         if (localInvocIdx != 0)
             local_invoc_idx = global[localInvocIdx].getVariable();
+        if (globalInvocId != 0)
+            global_invoc_id = global[globalInvocId].getVariable();
 
         for (unsigned i = 0; i < num_invocations; ++i) {
+            unsigned localX = i % ep.sizeX;
+            unsigned localY = (i / ep.sizeX) % ep.sizeY;
+            unsigned localZ = (i / (ep.sizeX * ep.sizeY)) % ep.sizeZ;
+
             DataView* invoc_global = data.makeView(&global);
             invoc_globals.push_back(invoc_global);
             active_threads.insert(i);
@@ -350,6 +382,18 @@ public:
                 const Primitive idx(i);
                 v->setVal(idx);
                 invoc_global->local(localInvocIdx).redefine(v);
+            }
+            if (global_invoc_id != nullptr) {
+                // GlobalInvocationID = WorkGroupID * WorkGroupSize + LocalInvocationID
+                Variable* v = new Variable(*global_invoc_id);
+                Array arr(tUint, 3);
+                const Primitive gid_x(0 * ep.sizeX + localX);
+                const Primitive gid_y(0 * ep.sizeY + localY);
+                const Primitive gid_z(0 * ep.sizeZ + localZ);
+                std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
+                arr.addElements(elements);
+                v->setVal(arr);
+                invoc_global->local(globalInvocId).redefine(v);
             }
             frame_stacks[i].push_back(new Frame(ep.getLocation(), entry_args, 0, *invoc_global));
         }

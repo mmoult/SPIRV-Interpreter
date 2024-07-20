@@ -203,9 +203,10 @@ public:
 };
 
 export struct EntryPoint : public Function {
-    unsigned localX = 1;
-    unsigned localY = 1;
-    unsigned localZ = 1;
+    // Workgroup size in three dimensions:
+    unsigned sizeX = 1;
+    unsigned sizeY = 1;
+    unsigned sizeZ = 1;
 
     EntryPoint(Type* type, unsigned location): Function(type, location) {}
 };
