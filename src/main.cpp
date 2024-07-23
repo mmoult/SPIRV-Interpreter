@@ -17,7 +17,7 @@ import front.argparse;
 import front.console;
 import spv.program;
 
-constexpr auto VERSION = "0.6.0";
+constexpr auto VERSION = "0.7.0";
 
 enum ReturnCode : int {
     OK = 0,

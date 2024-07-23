@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -111,6 +112,27 @@ void accum_same(Primitive& x, const Primitive& y) {
     default:
         throw std::invalid_argument("Can only multiply primitives of type float, uint, or int!");
     }
+}
+
+Value* composite_extract(Value* composite, unsigned index_start, const std::vector<Token>& operands) {
+    for (unsigned i = index_start; i < operands.size(); ++i) {
+        if (DataType dt = composite->getType().getBase(); dt != DataType::ARRAY && dt != DataType::STRUCT) {
+            std::stringstream error;
+            error << "Cannot extract from non-composite type!";
+            throw std::runtime_error(error.str());
+        }
+        Aggregate& agg = *static_cast<Aggregate*>(composite);
+        assert(operands[i].type == Token::Type::UINT);
+        auto idx = std::get<unsigned>(operands[i].raw);
+        if (idx >= agg.getSize()) {
+            std::stringstream error;
+            error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
+            throw std::runtime_error(error.str());
+        }
+        composite = agg[idx];
+        // Repeat the process for all indices
+    }
+    return composite;
 }
 
 struct OpSrc {
@@ -610,9 +632,9 @@ bool Instruction::makeResult(
                 switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
                 case spv::ExecutionMode::ExecutionModeLocalSize:
                     assert(deco->operands.size() == 5);
-                    ep->localX = std::get<uint32_t>(deco->operands[2].raw);
-                    ep->localY = std::get<uint32_t>(deco->operands[3].raw);
-                    ep->localZ = std::get<uint32_t>(deco->operands[4].raw);
+                    ep->sizeX = std::get<uint32_t>(deco->operands[2].raw);
+                    ep->sizeY = std::get<uint32_t>(deco->operands[3].raw);
+                    ep->sizeZ = std::get<uint32_t>(deco->operands[4].raw);
                     break;
                 default:
                     break;
@@ -625,9 +647,9 @@ bool Instruction::makeResult(
                 switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
                 case spv::ExecutionMode::ExecutionModeLocalSizeId:
                     assert(deco->operands.size() == 5);
-                    ep->localX = static_cast<const Primitive*>(getValue(2, data))->data.u32;
-                    ep->localY = static_cast<const Primitive*>(getValue(3, data))->data.u32;
-                    ep->localZ = static_cast<const Primitive*>(getValue(4, data))->data.u32;
+                    ep->sizeX = static_cast<const Primitive*>(getValue(2, data))->data.u32;
+                    ep->sizeY = static_cast<const Primitive*>(getValue(3, data))->data.u32;
+                    ep->sizeZ = static_cast<const Primitive*>(getValue(4, data))->data.u32;
                     break;
                 default:
                     break;
@@ -715,25 +737,20 @@ bool Instruction::makeResult(
     case spv::OpCompositeExtract: { // 81
         Type* res_type = getType(0, data);
         Value* to_ret = res_type->construct();
-        const Value* composite = getValue(2, data);
-        for (unsigned i = 3; i < operands.size(); ++i) {
-            if (DataType dt = composite->getType().getBase(); dt != DataType::ARRAY && dt != DataType::STRUCT) {
-                std::stringstream error;
-                error << "Cannot extract from non-composite type!";
-                throw std::runtime_error(error.str());
-            }
-            const Aggregate& agg = *static_cast<const Aggregate*>(composite);
-            assert(operands[i].type == Token::Type::UINT);
-            auto idx = std::get<unsigned>(operands[i].raw);
-            if (idx >= agg.getSize()) {
-                std::stringstream error;
-                error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
-                throw std::runtime_error(error.str());
-            }
-            composite = agg[idx];
-            // Repeat the process for all indices
-        }
+        Value* composite = getValue(2, data);
+        const Value* extracted = composite_extract(composite, 3, operands);
+        to_ret->copyFrom(*extracted);
+        data[result_at].redefine(to_ret);
+        break;
+    }
+    case spv::OpCompositeInsert: { // 82
+        Type* res_type = getType(0, data);
+        Value* to_ret = res_type->construct();
+        const Value* composite = getValue(3, data);
         to_ret->copyFrom(*composite);
+        const Value* replacement = getValue(2, data);
+        Value* extracted = composite_extract(to_ret, 4, operands);
+        extracted->copyFrom(*replacement);
         data[result_at].redefine(to_ret);
         break;
     }
@@ -797,6 +814,10 @@ bool Instruction::makeResult(
         INT_E_BIN_OP(*);
     case spv::OpFMul: // 133
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 * b->data.fp32);
+    case spv::OpUDiv: // 134
+        TYPICAL_E_BIN_OP(UINT, a->data.fp32 / b->data.fp32);
+    case spv::OpSDiv: // 135
+        TYPICAL_E_BIN_OP(INT, a->data.fp32 / b->data.fp32);
     case spv::OpFDiv: { // 136
         OpSrc src{DataType::FLOAT, checkRef(2, data_len), checkRef(3, data_len)};
         OpDst dst{checkRef(0, data_len), result_at};
@@ -916,14 +937,14 @@ bool Instruction::makeResult(
         // [0 1]   [6]
         // [2 3] * [7] = [(0*6 + 2*7 + 4*8) (1*6 + 3*7 + 5*8)]
         // [4 5]   [8]
-        unsigned b = vec.getSize();
         unsigned a = vres.getSize();
-        for (unsigned i = 0; i < b; ++i) {
+        unsigned b = vec.getSize();
+        for (unsigned i = 0; i < a; ++i) {
             const Primitive& vecv = *static_cast<const Primitive*>(vec[i]);
             Primitive el(0);
-            for (unsigned j = 0; j < a; ++j) {
-                const Array& mcolumn = *static_cast<const Array*>(mat[i]);
-                const Primitive& matv = *static_cast<const Primitive*>(mcolumn[j]);
+            for (unsigned j = 0; j < b; ++j) {
+                const Array& mcolumn = *static_cast<const Array*>(mat[j]);
+                const Primitive& matv = *static_cast<const Primitive*>(mcolumn[i]);
                 Primitive eli = multiply_same(vecv, matv);
                 if (j == 0)
                     el = eli;
@@ -1312,10 +1333,31 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_UNARY_OP(FLOAT, std::trunc(a->data.fp32));
     case GLSLstd450FAbs: // 4
         TYPICAL_E_UNARY_OP(FLOAT, std::abs(a->data.fp32));
+    case GLSLstd450SAbs: // 5
+        TYPICAL_E_UNARY_OP(INT, (a->data.i32 > 0)? a->data.i32 : -a->data.i32);
+    case GLSLstd450FSign: { // 6
+        OpSrc src{DataType::FLOAT, checkRef(src_at, data_len), 0};
+        OpDst dst{checkRef(dst_type_at, data_len), result_at};
+        element_unary_op(src, dst, data, [](const Primitive* a) {
+            bool sgnbit = std::signbit(a->data.fp32);
+            return (a->data.fp32 == 0.0)? (sgnbit? -0.0f : 0.0f) : (sgnbit? -1.0f : 1.0f);
+        });
+        break;
+    }
+    case GLSLstd450SSign: // 7
+        TYPICAL_E_UNARY_OP(INT, std::clamp(a->data.i32, -1, 1));
     case GLSLstd450Floor: // 8
         TYPICAL_E_UNARY_OP(FLOAT, std::floor(a->data.fp32));
     case GLSLstd450Ceil: // 9
         TYPICAL_E_UNARY_OP(FLOAT, std::ceil(a->data.fp32));
+    case GLSLstd450Sin: // 13
+        TYPICAL_E_UNARY_OP(FLOAT, std::sin(a->data.fp32));
+    case GLSLstd450Cos: // 14
+        TYPICAL_E_UNARY_OP(FLOAT, std::cos(a->data.fp32));
+    case GLSLstd450Tan: // 15
+        TYPICAL_E_UNARY_OP(FLOAT, std::tan(a->data.fp32));
+    case GLSLstd450Pow: // 26
+        TYPICAL_E_BIN_OP(FLOAT, std::pow(a->data.fp32, b->data.fp32));
     case GLSLstd450Exp: // 27
         TYPICAL_E_UNARY_OP(FLOAT, std::exp(a->data.fp32));
     case GLSLstd450Log: // 28
@@ -1326,6 +1368,8 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_UNARY_OP(FLOAT, std::log2(a->data.fp32));
     case GLSLstd450Sqrt: // 31
         TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.fp32));
+    case GLSLstd450InverseSqrt: // 32
+        TYPICAL_E_UNARY_OP(FLOAT, 1.0f / std::sqrt(a->data.fp32));
     case GLSLstd450Modf: { // 35
         // fraction = modf(input, whole_pointer);
         // OpExtInst %float %23 = %1 Modf %20 %22
