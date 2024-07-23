@@ -474,7 +474,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         Primitive& result = static_cast<Primitive&>(*getValue(1, data));
 
         // --- Store the return value
-        result.data.u32 = ray_query.getIntersectionT(intersection);
+        result.data.fp32 = ray_query.getIntersectionT(intersection);
 
         break;
     }
@@ -624,7 +624,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         assert(result.getSize() == 3);
 
         // --- Store the return value
-        const auto origin = ray_query.getIntersectionObjectRayDirection(intersection);
+        const auto origin = ray_query.getIntersectionObjectRayOrigin(intersection);
         for (unsigned i = 0; i < result.getSize(); ++i) {
             Primitive& location = static_cast<Primitive&>(*(result[i]));
             location.data.fp32 = origin[i];

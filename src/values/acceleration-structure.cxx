@@ -87,7 +87,7 @@ private:
               children([](const std::vector<std::shared_ptr<Node>>& children) -> std::vector<std::shared_ptr<Node>> {
                   std::vector<std::shared_ptr<Node>> result;
                   for (const auto& child : children)
-                      result.push_back(child->clone());
+                      result.push_back(child);
                   return result;
               }(children)) {}
 
@@ -751,8 +751,8 @@ private:
     void initTrace() {
         committedIntersection.reset();
         candidateIntersection.reset();
-        activeTrace = true;
         nodesToEval.push(&root);
+        activeTrace = true;
     }
 
 public:
@@ -891,15 +891,13 @@ private:
 
 public:
     /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.
-    /// @return tuple containing (1) whether there is more to trace and (2) if a triangle or procedural was intersected
-    /// respectively.
-    std::tuple<bool, bool> stepTrace() {
+    /// @return if a triangle or procedural was intersected; implies if there is more to trace.
+    bool stepTrace() {
         // Do not trace if the trace is inactive.
         if (!activeTrace)
-            return std::make_tuple(false, false);
+            return false;
 
         // Traverse the acceleration structure until it reaches the next non-instance primitive.
-        bool intersect_geometry = false;  // Refers to triangles and procedurals.
         bool found_primitive = false;
         while (!found_primitive && (nodesToEval.size() > 0)) {
 
@@ -962,30 +960,24 @@ public:
                         missIndex
                     );
                 }
-                const std::tuple<bool, bool> result = ref_accel_struct->stepTrace();
-                const bool more_to_trace = get<0>(result);
-                intersect_geometry = get<1>(result);
-                didPopNodePreviously = !more_to_trace;
-
-                // If can continue tracing, push the node back onto the stack.
-                if (more_to_trace)
-                    nodesToEval.push(curr_node_ref);
+                found_primitive = ref_accel_struct->stepTrace();
+                didPopNodePreviously = !found_primitive;
 
                 // Handle the result of tracing the ray in the instance.
-                if (intersect_geometry) {
+                if (found_primitive) {
+                    // Can try the instance's acceleration structure again
+                    nodesToEval.push(curr_node_ref);
+
                     // Update candidate
                     candidateIntersection = ref_accel_struct->candidateIntersection;
                     candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*curr_node_ref);
 
                     // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit)
-                        return std::make_tuple(false, true);
+                    if (rayFlagTerminateOnFirstHit) {
+                        activeTrace = false;
+                        return true;
+                    }
                 }
-
-                // Either it will find a geometry mid-trace where it returns more to trace and intersected a geometry,
-                // or find the last geometry where it returns no more to trace and intersected a geometry.
-                // Therefore, a geometry will always be found when entering this switch case.
-                found_primitive = true;
 
                 break;
             }
@@ -1018,9 +1010,9 @@ public:
                     rayFlagCullFrontFacingTriangles
                 );
 
-                intersect_geometry = get<0>(result);
+                found_primitive = get<0>(result);
 
-                if (intersect_geometry) {
+                if (found_primitive) {
                     // Get triangle intersection data
                     float t = get<1>(result);  // Distance to intersection
                     float u = get<2>(result);  // Barycentric coordinate u
@@ -1036,10 +1028,11 @@ public:
                     candidateIntersection.update(true, properties);
 
                     // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit)
-                        return std::make_tuple(false, true);
+                    if (rayFlagTerminateOnFirstHit) {
+                        activeTrace = false;
+                        return true;
+                    }
                 }
-                found_primitive = true;
 
                 break;
             }
@@ -1047,9 +1040,9 @@ public:
                 // TODO: Not correct until shader binding table support.
                 // Currently, it returns an intersection if it intersects the
                 // respective AABB for the procedural.
-                std::cout << "WARNING: encountered procedural; multi-shader invocation not a feature; will return "
-                             "its AABB intersection result instead"
-                          << std::endl;
+                // std::cout << "WARNING: encountered procedural; multi-shader invocation not a feature; will return "
+                //              "its AABB intersection result instead"
+                //           << std::endl;
 
                 // Check skip AABBs (procedurals) flag
                 if (rayFlagSkipAABBs)
@@ -1068,7 +1061,7 @@ public:
                 if ((rayFlagCullOpaque && is_opaque) || (rayFlagCullNoOpaque && !is_opaque))
                     break;
 
-                intersect_geometry = rayAABBIntersect(
+                found_primitive = rayAABBIntersect(
                     rayOrigin,
                     rayDirection,
                     rayTMin,
@@ -1077,27 +1070,29 @@ public:
                     procedural_node->maxBounds
                 );
 
-                if (intersect_geometry) {
+                if (found_primitive) {
                     // Update candidate
                     IntersectionProperties properties;
                     properties.isOpaque = procedural_node->opaque;
                     candidateIntersection.update(false, properties);
 
                     // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit)
-                        return std::make_tuple(false, true);
+                    if (rayFlagTerminateOnFirstHit) {
+                        activeTrace = false;
+                        return true;
+                    }
                 }
-                found_primitive = true;
 
                 break;
             }
             }
         }
 
+        // Make sure to deactivate the trace if there is no more to traverse
         if (nodesToEval.empty())
             activeTrace = false;
 
-        return std::make_tuple(!nodesToEval.empty(), intersect_geometry);
+        return found_primitive;
     }
 
     /// @brief Include the current AABB/procedural intersection in determining the closest hit.
@@ -1110,6 +1105,7 @@ public:
         if (hit_t >= committedIntersection.properties.hitT)
             return;
 
+        candidateIntersection.properties.hitT = hit_t;
         committedIntersection.update(false, candidateIntersection);
     }
 
@@ -1300,14 +1296,11 @@ public:
             miss_index
         );
 
-        bool intersect = false;
         bool intersect_once = false;
         bool continue_trace = false;
         do {
-            std::tuple<bool, bool> result = stepTrace();
-            continue_trace = get<0>(result);
-            intersect = get<1>(result);
-            if (intersect)
+            continue_trace = stepTrace();
+            if (continue_trace)
                 intersect_once = true;
         } while (continue_trace);
 
@@ -1605,12 +1598,17 @@ public:
         return *this;
     }
 
-    void copyFrom(const Value& other) noexcept(false) override {
-        // Copy the type of "other"
-        copyType(other);
+    void copyFrom(const Value& new_val) noexcept(false) override {
+        const bool new_val_is_accel_struct = new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE;
 
-        // Build the acceleration structures
-        buildAccelerationStructures();
+        // Copy the type of "other"
+        copyType(new_val);
+
+        // Construct the acceleration structures based on the type of "other"
+        if (new_val_is_accel_struct)
+            *this = static_cast<const AccelerationStructureManager&>(new_val);
+        else
+            buildAccelerationStructures();
     }
 
     /// @brief Initialize the step trace.
@@ -1653,8 +1651,7 @@ public:
     /// @brief Take a step in the trace.
     /// @return whether there is more to trace.
     bool stepTraceRay() {
-        std::tuple<bool, bool> result = root->stepTrace();
-        return get<0>(result);
+        return root->stepTrace();
     }
 
     /// @brief Completely trace the acceleration structure.

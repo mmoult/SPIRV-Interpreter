@@ -30,7 +30,25 @@ export class Instruction {
 
     enum class Extension {
         GLSL_STD,
+        SPV_KHR_RAY_TRACING,
+        SPV_KHR_RAY_QUERY
     };
+
+    /// @brief Find if a given extension is supported by the interpreter
+    /// @param ext_name name of the extension
+    /// @return whether the extension is supported
+    static bool isSupportedExtension(const std::string& ext_name) {
+        // Contains only implemented extensions
+        static const std::vector<std::string> supported_ext {
+            "GLSL.std.",
+            "SPV_KHR_ray_tracing",
+            "SPV_KHR_ray_query"
+        };
+
+        // Find the extension
+        auto it = std::find(supported_ext.begin(), supported_ext.end(), ext_name);
+        return it != supported_ext.end();
+    }
 
     unsigned checkRef(unsigned idx, unsigned len) const noexcept(false) {
         assert(operands[idx].type == Token::Type::REF);

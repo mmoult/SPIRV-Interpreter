@@ -131,7 +131,6 @@ Instruction* Instruction::readOp(
     case spv::OpString: // 7
     case spv::OpExtInstImport: // 11
     case spv::OpModuleProcessed: // 330
-    case spv::OpExtension: // 10 TODO: need to still handle this outside of "inst-read.cpp"
         to_load.push_back(Type::STRING);
         break;
     case spv::OpLine: // 8
@@ -409,22 +408,11 @@ Instruction* Instruction::readOp(
     }
 
     // If it was an extension, make sure it's supported
-    // TODO: should differentiate "extensions" and "extended instructions"?
     if (op == spv::OpExtension) {
-        auto& operands = inst.operands;
+        const auto& operands = inst.operands;
         assert(operands[0].type == Token::Type::STRING);
-        std::string ext_name = std::get<std::string>(operands[0].raw);
-
-        // TODO: maybe change to "unordered_set" if there's a lot of supported extensions
-        // TODO: move into "Spv::Instruction" class?
-        // Contains only implemented extensions.
-        const std::vector<std::string> supported_ext {
-            "SPV_KHR_ray_tracing",
-            "SPV_KHR_ray_query"
-        };
-
-        auto it = std::find(supported_ext.begin(), supported_ext.end(), ext_name);
-        if (it == supported_ext.end()) {
+        const std::string ext_name = std::get<std::string>(operands[0].raw);
+        if (!Instruction::isSupportedExtension(ext_name)) {
             std::stringstream err;
             err << "Unsupported extension: " << ext_name;
             throw std::runtime_error(err.str());
