@@ -112,6 +112,10 @@ Instruction* Instruction::readOp(
         optional.push_back(Type::REF);
         optional.push_back(Type::STRING);
         break;
+    case spv::OpSourceExtension: // 4
+    case spv::OpExtension: // 10
+        to_load.push_back(Type::STRING);
+        break;
     case spv::OpName: // 5
         to_load.push_back(Type::REF);
         to_load.push_back(Type::STRING);
@@ -130,9 +134,6 @@ Instruction* Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
         to_load.push_back(Type::UINT);
-        break;
-    case spv::OpExtension: // 10
-        to_load.push_back(Type::STRING);
         break;
     case spv::OpExtInst: // 12
         to_load.push_back(Type::REF);
@@ -183,6 +184,8 @@ Instruction* Instruction::readOp(
     case spv::OpFSub: // 131
     case spv::OpIMul: // 132
     case spv::OpFMul: // 133
+    case spv::OpUDiv: // 134
+    case spv::OpSDiv: // 135
     case spv::OpFDiv: // 136
     case spv::OpUMod: // 137
     case spv::OpVectorTimesScalar: // 142
@@ -191,7 +194,10 @@ Instruction* Instruction::readOp(
     case spv::OpMatrixTimesVector: // 145
     case spv::OpMatrixTimesMatrix: // 146
     case spv::OpDot: // 148
+    case spv::OpLogicalEqual: // 164
+    case spv::OpLogicalNotEqual: // 165
     case spv::OpLogicalOr: // 166
+    case spv::OpLogicalAnd: // 167
     case spv::OpIEqual: // 170
     case spv::OpINotEqual: // 171
     case spv::OpUGreaterThan: // 172
@@ -288,6 +294,7 @@ Instruction* Instruction::readOp(
         repeating = true;
         break;
     case spv::OpVectorShuffle: // 79
+    case spv::OpCompositeInsert: // 82
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
