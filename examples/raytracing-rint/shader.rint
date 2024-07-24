@@ -1,6 +1,3 @@
-// Sphere intersection algorithm adapted from Scratchapixel
-// https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection.html
-
 #version 460 core
 #extension GL_EXT_ray_tracing : require
 
@@ -10,98 +7,60 @@ layout(location = 2) out uint intersection;
 
 hitAttributeEXT vec3 normal;
 
-struct Intersection
+struct IntersectionProperties
 {
-    float t0;
-    float t1;
+    vec3 normal;
+    float hit_t;
     bool intersected;
 };
 
-Intersection solveQuadratic(float a, float b, float c)
+IntersectionProperties raySphereIntersection(vec3 sphere_center, float sphere_radius, vec3 ray_origin, vec3 ray_direction)
 {
-    Intersection results = { -1.0f, -1.0f, false };
+    // Assume the ray will miss
+    IntersectionProperties result;
+    result.normal = vec3(0.0);
+    result.hit_t = 10000000.0;
+    result.intersected = false;
 
-    float discriminant = b * b - 4.0f * a * c;
-    if (discriminant < 0.0f)
-        return results;
-    else if (discriminant == 0.0f)
+    // Solves the intersection by using an analytic solution.
+    // Let (origin - sphere_center) be x.
+    // We are solving [(dir * dir) * t^2 + (2 * dir . x) * t + (x . x) - radius^2 = 0]
+    vec3 dist_o_c = ray_origin - sphere_center; // Distance between the ray's origin and the sphere's center
+    float a = dot(ray_direction, ray_direction);
+    float b = 2.0 * dot(ray_direction, dist_o_c);
+    float c = dot(dist_o_c, dist_o_c) - (sphere_radius * sphere_radius);
+
+    float discriminant = (b * b) - (4.0 * a * c); // An intersection exist if we can take the square root of this value
+
+    if (discriminant >= 0)
     {
-        results.t0 = -0.5f * b / a;
-        results.t1 = results.t0;
-    }
-    else
-    {
-        float q = (b > 0.0f) ?
-            -0.5f * (b + sqrt(discriminant)) :
-            -0.5f * (b - sqrt(discriminant));
-        results.t0 = q / a;
-        results.t1 = c / q;
-    }
-
-    results.intersected = true;
-    return results;
-}
-
-Intersection raySphereIntersection(vec3 center, float radius, vec3 rayOrigin, vec3 rayDir) 
-{
-    Intersection results = { -1.0f, -1.0f, false };
-
-    const vec3 L = rayOrigin - center;
-    float a = dot(rayDir, rayDir);
-    float b = 2.0f * dot(rayDir, L);
-    float c = dot(L, L) - radius * radius;
-
-    Intersection quadraticResults = solveQuadratic(a, b, c);
-    if (!quadraticResults.intersected)
-        return results;
-
-    float t0 = quadraticResults.t0;
-    float t1 = quadraticResults.t1;
-
-    if (t0 > t1)
-    {
-        const float temp = t0;
-        t0 = t1;
-        t1 = temp;
+        result.intersected = true;
+        result.hit_t = (-b - sqrt(discriminant)) / (2.0 * a); // The entry point
+        result.normal = normalize((ray_origin + ray_direction * result.hit_t) - sphere_center);
     }
 
-    // If t0 is negative, use t1 instead
-    if (t0 < 0.0f)
-    {
-        t0 = t1;
-
-        // If both are negative, return false
-        if (t0 < 0.0f)
-            return results;
-    }
-
-    results.t0 = t0;
-    results.t1 = t1;
-    results.intersected = true;
-    return results;
+    return result;
 }
 
 void main() 
 {
-    vec3 rayOrigin = gl_ObjectRayOriginEXT;
-    vec3 rayDirection = gl_ObjectRayDirectionEXT;
+    vec3 ray_origin = gl_ObjectRayOriginEXT;
+    vec3 ray_direction = gl_ObjectRayDirectionEXT;
 
-    const Intersection result = raySphereIntersection (
+    const IntersectionProperties result = raySphereIntersection (
         sphereCenter, 
         sphereRadius, 
-        rayOrigin, 
-        rayDirection
+        ray_origin, 
+        ray_direction
     );
 
-    const float t = result.t0;
-
-    if (result.intersected && t >= 0)
+    if (result.intersected && result.hit_t >= 0)
     {
         // Intersected sphere in direction of ray
-        vec3 entryPoint = rayOrigin + rayDirection * t;
-        normal = normalize(entryPoint - sphereCenter);
+        vec3 entryPoint = ray_origin + ray_direction * result.hit_t;
+        normal = result.normal;
     }
 
     // Note: parameters: hitT, hitKind
-    intersection = uint(reportIntersectionEXT(t, 0));
+    intersection = uint(reportIntersectionEXT(result.hit_t, 0));
 }
