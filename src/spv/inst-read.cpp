@@ -131,7 +131,6 @@ Instruction* Instruction::readOp(
         to_load.push_back(Type::UINT);
         to_load.push_back(Type::STRING);
         break;
-    case spv::OpSourceExtension: // 4
     case spv::OpString: // 7
     case spv::OpExtInstImport: // 11
     case spv::OpModuleProcessed: // 330

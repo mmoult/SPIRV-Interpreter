@@ -1599,7 +1599,8 @@ public:
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
-        const bool new_val_is_accel_struct = new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE;
+        const bool new_val_is_accel_struct =
+            new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE;
 
         // Copy the type of "other"
         copyType(new_val);

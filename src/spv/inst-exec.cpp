@@ -420,7 +420,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // TODO: once intersection shader can be invoked by pipeline, use actual rayTMin and rayTMax.
         // For now, using constants.
         const float ray_t_min = 0.0;
-        const float ray_t_max = std::numeric_limits<float>::infinity();
+        const float ray_t_max = 10000.0;
 
         if (hit_t < ray_t_min || hit_t > ray_t_max) {
             // Intersection is outside of the current ray interval

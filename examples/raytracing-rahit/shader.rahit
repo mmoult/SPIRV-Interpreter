@@ -5,8 +5,6 @@ layout(location = 0) in float opacity; // 0.0f = transparent, 1.0f = opaque
 
 void main()
 {
-    // The very first opaque geometry evaluated will terminate the ray
-    // Round about way so that interpreter can work with these
     float o = opacity;
     if (o > 1.0f)
         o = 1.0f;

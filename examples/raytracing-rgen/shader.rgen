@@ -2,12 +2,6 @@
 #extension GL_EXT_ray_tracing : require
 #extension GL_EXT_ray_flags_primitive_culling : enable
 
-/*
-TODO: features to check
-- StorageClasses
-    - ShaderRecordBufferKHR
-*/
-
 layout(set = 0, binding = 0) uniform accelerationStructureEXT accelStruct;
 
 layout(location = 0) in uint rayFlags;
