@@ -1,1 +1,40 @@
-https://www.desmos.com/3d/rvun5refsx
+https://www.desmos.com/3d/uisuiaqbe7
+
+---------------------------------------------------------------------------------------------------
+|          Below are the variables and equation to use in Desmos 3-D if the link fails            |
+---------------------------------------------------------------------------------------------------
+R_{ayOriginX}=0
+R_{ayOriginY}=0
+R_{ayOriginZ}=0
+R_{ayDirectionX}=1
+R_{ayDirectionY}=1
+R_{ayDirectionZ}=1
+R_{ayOrigin}=\left(R_{ayOriginX},\ R_{ayOriginY},\ R_{ayOriginZ}\right)
+R_{ayDirection}=\left(R_{ayDirectionX},\ R_{ayDirectionY},\ R_{ayDirectionZ}\right)
+R_{ayDirectionTranslatedByOrigin}=R_{ayDirection}+R_{ayOrigin}
+R_{ayT}=5
+\operatorname{vector}\left(R_{ayOrigin},\ R_{ayDirectionTranslatedByOrigin}\right)\cdot R_{ayT}
+
+M_{odel1TranslateX}\ =0
+M_{odel1TranslateY}\ =2.8
+M_{odel1TranslateZ}=-5
+M_{odel1Translation}=\left(M_{odel1TranslateX},\ M_{odel1TranslateY},\ M_{odel1TranslateZ}\right)
+\operatorname{triangle}\left(\left(0.0,\ 2.0,\ 2.0\right)+M_{odel1Translation},\ \left(0.0,\ 0.0,\ 0.0\right)+M_{odel1Translation},\ \left(2.0,\ 0.0,\ 0.0\right)+M_{odel1Translation}\right)
+\operatorname{triangle}\left(\left(0.0,\ -2.0,\ 2.0\right)+M_{odel1Translation},\ \left(0.0,\ 0.0,\ 0.0\right)+M_{odel1Translation},\ \left(2.0,\ 0.0,\ 0.0\right)+M_{odel1Translation}\right)
+\operatorname{triangle}\left(\left(0.0,\ -2.0,\ 2.0\right)+M_{odel1Translation},\ \left(0.0,\ 0.0,\ 0.0\right)+M_{odel1Translation},\ \left(-2.0,\ 0.0,\ 0.0\right)+M_{odel1Translation}\right)
+-1+M_{odel1TranslateZ}<z<0+M_{odel1TranslateZ}\left\{-3.5+M_{odel1TranslateX}<x<-2.5+M_{odel1TranslateX}\right\}\left\{-1+M_{odel1TranslateY}<y<0+M_{odel1TranslateY}\right\}
+
+M_{odel2TranslateX}=0.5
+M_{odel2TranslateY}=1.74
+M_{odel2TranslateZ}=-1.36
+M_{odel2Translation}=\left(M_{odel2TranslateX},\ M_{odel2TranslateY},\ M_{odel2TranslateZ}\right)
+\operatorname{triangle}\left(\left(0.0,\ 1.5,\ 0.0\right)+M_{odel2Translation},\ \left(-1.25,\ -1.25,\ 0.0\right)+M_{odel2Translation},\ \left(1.5,\ 0.0,\ 0.0\right)+M_{odel2Translation}\right)
+
+\operatorname{triangle}\left(\left(0.0,\ 1.5,\ 0.0\right)-M_{odel2Translation},\ \left(-1.25,\ -1.25,\ 0.0\right)-M_{odel2Translation},\ \left(1.5,\ 0.0,\ 0.0\right)-M_{odel2Translation}\right)
+
+M_{odel3Point1}=\left(-1.2929,\ -2.04,\ 4.6071\right)
+M_{odel3Point2}=\left(-1.2929,\ -0.04,\ 4.6071\right)
+M_{odel3Point3}=\left(-2.7071,\ -0.04,\ 3.1929\right)
+M_{odel3Point4}=\left(-2.7071,\ -2.04,3.1929\right)
+\operatorname{triangle}\left(M_{odel3Point4},\ M_{odel3Point2},\ M_{odel3Point1}\right)
+\operatorname{triangle}\left(M_{odel3Point4},\ M_{odel3Point3},\ M_{odel3Point2}\right)

@@ -1,1 +1,36 @@
-https://www.desmos.com/3d/linjbopc4y
+https://www.desmos.com/3d/znlikhbata
+
+---------------------------------------------------------------------------------------------------
+|          Below are the variables and equation to use in Desmos 3-D if the link fails            |
+---------------------------------------------------------------------------------------------------
+
+S_{phereRadius}=1
+S_{phereCenterX}=0
+S_{phereCenterY}=0
+S_{phereCenterZ}=0
+S_{phereCenter}=\left(S_{phereCenterX},\ S_{phereCenterY},\ S_{phereCenterZ}\right)
+0=\left(x-S_{phereCenterX}\right)^{2}+\left(y-S_{phereCenterY}\right)^{2}+\left(z-S_{phereCenterZ}\right)^{2}-S_{phereRadius}^{2}
+
+R_{ayOriginX}=0.5
+R_{ayOriginY}=0.5
+R_{ayOriginZ}=3
+R_{ayDirectionX}=-1
+R_{ayDirectionY}=0
+R_{ayDirectionZ}=-3
+R_{ayOrigin}=\left(R_{ayOriginX},\ R_{ayOriginY},\ R_{ayOriginZ}\right)
+R_{ayDirection}=\left(R_{ayDirectionX},\ R_{ayDirectionY},\ R_{ayDirectionZ}\right)
+R_{ayDirectionTranslatedByOrigin}=R_{ayDirection}+R_{ayOrigin}
+\operatorname{vector}\left(R_{ayOrigin},\ R_{ayDirectionTranslatedByOrigin}\right)\cdot\left\{E_{nableNormalCondition}>0:\ R_{ayClosestT},\ 1\right\}
+\left(R_{ayOrigin}+R_{ayDirection}\cdot R_{ayClosestT}\right)
+\left(R_{ayOrigin}+R_{ayDirection}\cdot R_{ayClosestT}\right)-\left(S_{phereCenterX},\ S_{phereCenterY},\ S_{phereCenterZ}\right)
+R_{ayClosestT}=\left\{\max\left(t_{0},\ t_{1}\right)<0:0,\ t_{1}>t_{0}>0:t_{0},\ t_{1}>0:t_{1},\ 0\right\}
+
+E_{nableNormalCondition}=\left\{R_{ayClosestT}>0\ :\ 1,\ R_{ayClosestT}\le0\ :\ 0\right\}
+\operatorname{vector}\left(\left(R_{ayOrigin}+R_{ayDirection}\cdot R_{ayClosestT}\right)-S_{phereCenter},\ \left(\left(R_{ayOrigin}+R_{ayDirection}\cdot R_{ayClosestT}\right)-S_{phereCenter}\right)\cdot2\right)\cdot E_{nableNormalCondition}
+\operatorname{vector}\left(\left(R_{ayOrigin}+R_{ayDirection}\cdot R_{ayClosestT}\right),\ \left(\left(R_{ayOrigin}+R_{ayDirection}\cdot R_{ayClosestT}\right)-S_{phereCenter}\right)\cdot2+S_{phereCenter}\right)\cdot E_{nableNormalCondition}
+
+a=R_{ayDirection}\cdot R_{ayDirection}
+b=2\cdot\left(R_{ayDirection}\cdot\left(R_{ayOrigin}-S_{phereCenter}\right)\right)
+c=\left|R_{ayOrigin}-S_{phereCenter}\right|^{2}-S_{phereRadius}^{2}
+t_{0}=\frac{-b-\sqrt{b^{2}-4ac}}{2a}
+t_{1}=\frac{-b+\sqrt{b^{2}-4ac}}{2a}
