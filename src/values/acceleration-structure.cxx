@@ -1598,6 +1598,13 @@ public:
         return *this;
     }
 
+    Struct* getStructure() const {
+        Struct* result = new Struct(type);
+        result->dummyFill();
+        result->copyFrom(*structureInfo);
+        return result;
+    }
+
     void copyFrom(const Value& new_val) noexcept(false) override {
         const bool new_val_is_accel_struct =
             new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE;
