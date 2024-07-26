@@ -26,9 +26,11 @@ module spv.instruction;
 import spv.data.data;
 import spv.frame;
 import spv.token;
+import value.accelerationStructure;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
+import value.rayQuery;
 
 const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
     if (queue != nullptr) {
@@ -838,6 +840,9 @@ bool Instruction::makeResult(
     case spv::OpUMod: // 137
         // Result undefined if the denominator is 0. Maybe print an undefined warning?
         TYPICAL_E_BIN_OP(FLOAT, (b->data.u32 != 0)? a->data.u32 % b->data.u32 : 0);
+    case spv::OpFMod: // 141
+        // Result undefined if the denominator is 0. Maybe print an undefined warning?
+        TYPICAL_E_BIN_OP(FLOAT, (b->data.fp32 != 0.0f)? std::fmod(a->data.fp32, b->data.fp32) : 0.0f);
     case spv::OpVectorTimesScalar: { // 142
         Value* vec_val = getValue(2, data);
         const Type& vec_type = vec_val->getType();
@@ -1248,37 +1253,324 @@ bool Instruction::makeResult(
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
+    case spv::OpConvertUToAccelerationStructureKHR: { // 4447
+        assert(hasResultType);
+        // TODO: needs the get an acceleration structure from a buffer via a 64-bit address. How to do this?
+        Value* address_ptr = getValue(2, data);
+        assert(address_ptr != nullptr);
+        uint64_t address = 0;
+        if (address_ptr->getType().getBase() == DataType::ARRAY) {
+            // case uvec2
+            Array& address_components = static_cast<Array&>(*address_ptr);
+            assert(address_components.getSize() == 2);
+            address = static_cast<Primitive&>(*(address_components[0])).data.u32;
+            address <<= 32;
+            uint32_t lower = static_cast<Primitive&>(*(address_components[1])).data.u32;
+            address |= lower;
+        } else {
+            // case uint64_t
+            throw std::runtime_error("uint64_t is unsupported for OpConvertUToAccelerationStructureKHR.");
+        }
+
+        throw std::runtime_error("OpConvertUToAccelerationStructureKHR not implemented.");
+
+        Type* res_type = getType(0, data);
+        // AccelerationStructureManager res; // TODO: update me; set the acceleration structure
+        // std::vector<const Value*> values {&res};
+        // data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
     case spv::OpTypeRayQueryKHR: { // 4472
         data[result_at].redefine(new Type(Type::rayQuery()));
         break;
     }
-    case spv::OpTypeAccelerationStructureKHR: // 5341
+    case spv::OpRayQueryProceedKHR: { // 4477
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.proceed());
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionTypeKHR: { // 4479
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionType(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpReportIntersectionKHR: { // 5334
+        // TODO: update once interpreter supports SBTs
+        const float hit_t = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
+        const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        // TODO: once intersection shader can be invoked by pipeline, use actual rayTMin and rayTMax.
+        // For now, using constants.
+        const float ray_t_min = 0.0;
+        const float ray_t_max = 10000.0;
+
+        bool result = false;
+        const bool ignore_hit_shader = (hit_t < ray_t_min) || (hit_t > ray_t_max);
+        if (!ignore_hit_shader) {
+            // TODO: Invoke any-hit shader.
+            // If ignored by any-hit, return false.
+            // If any-hit rejects it, return false.
+            result = true;
+        }
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(result);
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpTypeAccelerationStructureKHR: { // 5341
         data[result_at].redefine(new Type(Type::accelerationStructure()));
         break;
-    case spv::OpConvertUToAccelerationStructureKHR: // 4447
-    case spv::OpRayQueryProceedKHR: // 4477
-    case spv::OpRayQueryGetIntersectionTypeKHR: // 4479
-    case spv::OpReportIntersectionKHR: // 5334
-    case spv::OpRayQueryGetRayTMinKHR: // 6016
-    case spv::OpRayQueryGetRayFlagsKHR: // 6017
-    case spv::OpRayQueryGetIntersectionTKHR: // 6018
-    case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: // 6019
-    case spv::OpRayQueryGetIntersectionInstanceIdKHR: // 6020
-    case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: // 6021
-    case spv::OpRayQueryGetIntersectionGeometryIndexKHR: // 6022
-    case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: // 6023
-    case spv::OpRayQueryGetIntersectionBarycentricsKHR: // 6024
-    case spv::OpRayQueryGetIntersectionFrontFaceKHR: // 6025
-    case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: // 6026
-    case spv::OpRayQueryGetIntersectionObjectRayDirectionKHR: // 6027
-    case spv::OpRayQueryGetIntersectionObjectRayOriginKHR: // 6028
-    case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
-    case spv::OpRayQueryGetWorldRayOriginKHR: // 6030
-    case spv::OpRayQueryGetIntersectionObjectToWorldKHR: // 6031
+    }
+    case spv::OpRayQueryGetRayTMinKHR: { // 6016
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getRayTMin());
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetRayFlagsKHR: { // 6017
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getRayFlags());
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionTKHR: { // 6018
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionT(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: { // 6019
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionInstanceCustomIndex(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionInstanceIdKHR: { // 6020
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionInstanceId(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: { // 6021
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionInstanceShaderBindingTableRecordOffset(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionGeometryIndexKHR: { // 6022
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionGeometryIndex(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: { // 6023
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionPrimitiveIndex(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionBarycentricsKHR: { // 6024
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        data[result_at].redefine(res_type->construct());
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 2);
+
+        const auto barycentrics = ray_query.getIntersectionBarycentrics(intersection);
+        for (unsigned i = 0; i < result.getSize(); ++i) {
+            Primitive& destination = static_cast<Primitive&>(*(result[i]));
+            Primitive source = Primitive(barycentrics[i]);
+            destination.copyFrom(source);
+        }
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionFrontFaceKHR: { // 6025
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionFrontFace(intersection));
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: { // 6026
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        Type* res_type = getType(0, data);
+        Primitive res = Primitive(ray_query.getIntersectionCandidateAABBOpaque());
+        std::vector<const Value*> values {&res};
+        data[result_at].redefine(res_type->construct(values));
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionObjectRayDirectionKHR: { // 6027
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        data[result_at].redefine(res_type->construct());
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 3);
+
+        const auto direction = ray_query.getIntersectionObjectRayDirection(intersection);
+        for (unsigned i = 0; i < result.getSize(); ++i) {
+            Primitive& destination = static_cast<Primitive&>(*(result[i]));
+            Primitive source = Primitive(direction[i]);
+            destination.copyFrom(source);
+        }
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionObjectRayOriginKHR: { // 6028
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        data[result_at].redefine(res_type->construct());
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 3);
+
+        const auto origin = ray_query.getIntersectionObjectRayOrigin(intersection);
+        for (unsigned i = 0; i < result.getSize(); ++i) {
+            Primitive& destination = static_cast<Primitive&>(*(result[i]));
+            Primitive source = Primitive(origin[i]);
+            destination.copyFrom(source);
+        }
+
+        break;
+    }
+    case spv::OpRayQueryGetWorldRayDirectionKHR: { // 6029
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        Type* res_type = getType(0, data);
+        data[result_at].redefine(res_type->construct());
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 3);
+
+        const auto direction = ray_query.getWorldRayDirection();
+        for (unsigned i = 0; i < result.getSize(); ++i) {
+            Primitive& destination = static_cast<Primitive&>(*(result[i]));
+            Primitive source = Primitive(direction[i]);
+            destination.copyFrom(source);
+        }
+
+        break;
+    }
+    case spv::OpRayQueryGetWorldRayOriginKHR: { // 6030
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+
+        Type* res_type = getType(0, data);
+        data[result_at].redefine(res_type->construct());
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 3);
+
+        const auto origin = ray_query.getWorldRayOrigin();
+        for (unsigned i = 0; i < result.getSize(); ++i) {
+            Primitive& destination = static_cast<Primitive&>(*(result[i]));
+            Primitive source = Primitive(origin[i]);
+            destination.copyFrom(source);
+        }
+
+        break;
+    }
+    case spv::OpRayQueryGetIntersectionObjectToWorldKHR: { // 6031
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        data[result_at].redefine(res_type->construct());
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 4); // Expecting 4 columns
+
+        const auto object_to_world = ray_query.getIntersectionObjectToWorld(intersection); // column-major order
+        for (unsigned col = 0; col < result.getSize(); ++col) {
+            Array& col_locations = static_cast<Array&>(*(result[col]));
+            for (unsigned row = 0; row < col_locations.getSize(); ++row) {
+                Primitive& destination = static_cast<Primitive&>(*(col_locations[row]));
+                Primitive source = Primitive(object_to_world[col][row]);
+                destination.copyFrom(source);
+            }
+        }
+
+        break;
+    }
     case spv::OpRayQueryGetIntersectionWorldToObjectKHR: { // 6032
-        assert(hasResultType);
-        Type* ret_type = getType(0, data);
-        data[result_at].redefine(ret_type->construct());
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
+        const unsigned intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Type* res_type = getType(0, data);
+        data[result_at].redefine(res_type->construct());
+        Array& result = static_cast<Array&>(*getValue(1, data));
+        assert(result.getSize() == 4); // Expecting 4 columns
+
+        const auto world_to_object = ray_query.getIntersectionWorldToObject(intersection); // column-major order
+        for (unsigned col = 0; col < result.getSize(); ++col) {
+            Array& col_locations = static_cast<Array&>(*(result[col]));
+            for (unsigned row = 0; row < col_locations.getSize(); ++row) {
+                Primitive& destination = static_cast<Primitive&>(*(col_locations[row]));
+                Primitive source = Primitive(world_to_object[col][row]);
+                destination.copyFrom(source);
+            }
+        }
+
         break;
     }
     }
