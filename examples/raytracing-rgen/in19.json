@@ -158,8 +158,8 @@
                 "geometryIndex" : 1,
                 "primitiveIndex" : 0,
                 "opaque" : true,
-                "minBounds" : [ -2.5, 0.0, 0.0 ],
-                "maxBounds" : [ -3.5, -1.0, -1.0 ]
+                "minBounds" : [ -3.5, -1.0, -1.0 ],
+                "maxBounds" : [ -2.5, 0.0, 0.0 ]
             }
         },
         "accelerationStructure2" : {
