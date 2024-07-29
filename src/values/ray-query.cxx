@@ -264,10 +264,8 @@ public:
         glm::mat4x3 object_to_world = getIntersectionObjectToWorldGLM(intersection);
 
         std::vector<std::vector<float>> result;
-        for (unsigned col = 0; col < 4; ++col) {
-            result.push_back(std::vector<float> {object_to_world[col].x, object_to_world[col].y, object_to_world[col].z}
-            );
-        }
+        for (unsigned col = 0; col < 4; ++col)
+            result.push_back({object_to_world[col].x, object_to_world[col].y, object_to_world[col].z});
 
         return result;
     }
@@ -287,10 +285,8 @@ public:
         glm::mat4x3 world_to_object = getIntersectionWorldToObjectGLM(intersection);
 
         std::vector<std::vector<float>> result;
-        for (unsigned col = 0; col < 4; ++col) {
-            result.push_back(std::vector<float> {world_to_object[col].x, world_to_object[col].y, world_to_object[col].z}
-            );
-        }
+        for (unsigned col = 0; col < 4; ++col)
+            result.push_back({world_to_object[col].x, world_to_object[col].y, world_to_object[col].z});
 
         return result;
     }

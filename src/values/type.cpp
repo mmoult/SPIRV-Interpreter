@@ -58,7 +58,7 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     }
     case DataType::STRING:
         return new String("");
-    case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: 
+    case DataType::RAY_TRACING_ACCELERATION_STRUCTURE:
         return new AccelerationStructureManager(*this);
     case DataType::RAY_QUERY:
         return new RayQuery(*this);

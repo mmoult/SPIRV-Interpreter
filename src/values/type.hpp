@@ -174,7 +174,12 @@ public:
     }
 
     inline bool sameBase(const Type& rhs) const {
-        return base == rhs.base;
+        // STRUCT and RAY_TRACING_ACCELERATION_STRUCTURE are considered the same
+        bool is_struct_and_accel_struct =
+            (base == DataType::STRUCT && rhs.base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) ||
+            (base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE && rhs.base == DataType::STRUCT);
+
+        return base == rhs.base || is_struct_and_accel_struct;
     }
 
     inline void nameMember(unsigned i, std::string name) noexcept(false) {

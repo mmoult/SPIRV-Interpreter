@@ -759,6 +759,36 @@ public:
     /// @brief Resets the trace to the beginning.
     void resetTrace() {
         activeTrace = false;
+
+        // Reset children instance nodes
+        if (isTLAS && root->type() == NodeType::Box) {
+            std::stack<std::shared_ptr<Node>> frontier;
+            frontier.push(root);
+            while (!frontier.empty()) {
+                std::shared_ptr<Node> node = frontier.top();
+                frontier.pop();
+                switch (node->type()) {
+                default: {
+                    std::stringstream err;
+                    err << "Cannot reset the trace of node type enumeration value: "
+                        << static_cast<unsigned>(node->type());
+                    throw std::runtime_error(err.str());
+                }
+                case NodeType::Box: {
+                    BoxNode& box_node = static_cast<BoxNode&>(*node);
+                    for (auto& child : box_node.children)
+                        frontier.push(child);
+                    break;
+                }
+                case NodeType::Instance: {
+                    InstanceNode& instance_node = static_cast<InstanceNode&>(*node);
+                    instance_node.accelerationStructure->resetTrace();
+                    break;
+                }
+                }
+            }
+        }
+
         clearTrace();
         initTrace();
     }
@@ -1318,12 +1348,8 @@ public:
     }
 
 private:
-    /// TODO:
-    /// Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm by Amy Williams et al., 2004."
-    /// found on Scratchapixel
-    /// (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html).
-    ///
-    /// @brief Check if a ray intersects an axis-aligned bounding box (AABB). If the ray is inside the box, it will be
+    /// @brief Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm" by Amy Williams et al.,
+    /// 2004. Check if a ray intersects an axis-aligned bounding box (AABB). If the ray is inside the box, it will be
     /// considered an intersection.
     /// @param ray_origin ray origin.
     /// @param ray_direction ray direction.
@@ -1340,63 +1366,80 @@ private:
         const glm::vec3& min_bounds,
         const glm::vec3& max_bounds
     ) const {
-        // Check if the ray if inside of the AABB; it is considered inside if right at the surface
+        // Check if the ray if inside of the AABB; it is considered inside if right at the surface.
         bool inside_aabb = ray_origin.x >= min_bounds.x && ray_origin.y >= min_bounds.y &&
                            ray_origin.z >= min_bounds.z && ray_origin.x <= max_bounds.x &&
                            ray_origin.y <= max_bounds.y && ray_origin.z <= max_bounds.z;
         if (inside_aabb)
             return true;
 
-        // Otherwise, check if the ray intersects the surface of the AABB from the outside
-        // Check the x-plane
-        float t_min = (min_bounds.x - ray_origin.x) / ray_direction.x;
-        float t_max = (max_bounds.x - ray_origin.x) / ray_direction.x;
+        // Otherwise, check if the ray intersects the surface of the AABB from the outside.
+        // Get the distances to the yz-plane intersections.
+        float t_min, t_max;
+        const float x_dir_reciprocal = 1.0f / ray_direction.x;
+        if (ray_direction.x >= 0) {
+            t_min = (min_bounds.x - ray_origin.x) * x_dir_reciprocal;
+            t_max = (max_bounds.x - ray_origin.x) * x_dir_reciprocal;
+        } else {
+            t_min = (max_bounds.x - ray_origin.x) * x_dir_reciprocal;
+            t_max = (min_bounds.x - ray_origin.x) * x_dir_reciprocal;
+        }
 
-        if (t_min > t_max)
-            std::swap(t_min, t_max);
+        // Get the distances to the xz-plane intersections.
+        float ty_min, ty_max;
+        const float y_dir_reciprocal = 1.0f / ray_direction.y;
+        if (ray_direction.y >= 0) {
+            ty_min = (min_bounds.y - ray_origin.y) * y_dir_reciprocal;
+            ty_max = (max_bounds.y - ray_origin.y) * y_dir_reciprocal;
+        } else {
+            ty_min = (max_bounds.y - ray_origin.y) * y_dir_reciprocal;
+            ty_max = (min_bounds.y - ray_origin.y) * y_dir_reciprocal;
+        }
 
-        // Check the y-plane
-        float ty_min = (min_bounds.y - ray_origin.y) / ray_direction.y;
-        float ty_max = (max_bounds.y - ray_origin.y) / ray_direction.y;
-
-        if (ty_min > ty_max)
-            std::swap(ty_min, ty_max);
-
+        // Check if the ray missed the box.
+        // If the closest plane intersection is farther than the farthest xz-plane intersection, then the ray missed.
+        // If the closest xz-plane intersection is farther than the farthest plane intersection, then the ray missed.
         if ((t_min > ty_max) || (ty_min > t_max))
             return false;
 
+        // Get the larger of the minimums; the larger minimum is closer to the box.
         if (ty_min > t_min)
             t_min = ty_min;
+
+        // Get the smaller of the maximums; the smaller maximum is closer to the box.
         if (ty_max < t_max)
             t_max = ty_max;
 
-        // Check the z-plane
-        float tz_min = (min_bounds.z - ray_origin.z) / ray_direction.z;
-        float tz_max = (max_bounds.z - ray_origin.z) / ray_direction.z;
+        // Get the distances to the xy-plane intersections.
+        float tz_min, tz_max;
+        const float z_dir_reciprocal = 1.0f / ray_direction.z;
+        if (ray_direction.z >= 0) {
+            tz_min = (min_bounds.z - ray_origin.z) * z_dir_reciprocal;
+            tz_max = (max_bounds.z - ray_origin.z) * z_dir_reciprocal;
+        } else {
+            tz_min = (max_bounds.z - ray_origin.z) * z_dir_reciprocal;
+            tz_max = (min_bounds.z - ray_origin.z) * z_dir_reciprocal;
+        }
 
-        if (tz_min > tz_max)
-            std::swap(tz_min, tz_max);
-
+        // Check if the ray missed the box.
+        // If the closest plane intersection is farther than the farthest xy-plane intersection, then the ray missed.
+        // If the closest xy-plane intersection is farther than the farthest plane intersection, then the ray missed.
         if ((t_min > tz_max) || (tz_min > t_max))
             return false;
 
+        // Get the larger of the minimums; the larger minimum is closer to the box.
         if (tz_min > t_min)
             t_min = tz_min;
+
+        // Get the smaller of the maximums; the smaller maximum is closer to the box.
         if (tz_max < t_max)
             t_max = tz_max;
 
-        // Only check the entry point of the ray into the box
-        if (t_min < ray_t_min || t_min > ray_t_max)
-            return false;
-
-        return true;
+        // Check if the intersection is within the ray's interval.
+        return ((t_min < ray_t_max) && (t_max > ray_t_min));
     }
 
-    /// TODO:
-    /// Moller-Trumbore ray/triangle intersection algorithm
-    /// return: triangle intersected, t, u, v, entered front
-    ///
-    /// @brief Check if the ray intersects a triangle.
+    /// @brief Moller-Trumbore ray/triangle intersection algorithm. Check if a ray intersects a triangle.
     /// @param ray_origin ray origin.
     /// @param ray_direction ray direction.
     /// @param ray_t_min ray minimum distance to intersection.
@@ -1417,52 +1460,48 @@ private:
     ) const {
         // Immediately return if culling both faces
         if (cull_back_face && cull_front_face)
-            return std::make_tuple(false, 0.0f, 0.0f, 0.0f, false);
+            return {false, 0.0f, 0.0f, 0.0f, false};
 
         constexpr float epsilon = std::numeric_limits<float>::epsilon();
 
-        // Find vectors for 2 edges that share a vertex
+        // Find vectors for 2 edges that share a vertex.
+        // Vertex at index 0 will be the shared vertex.
         glm::vec3 edge_1 = vertices[1] - vertices[0];
         glm::vec3 edge_2 = vertices[2] - vertices[0];
 
         glm::vec3 pvec = glm::cross(ray_direction, edge_2);
 
-        // If positive determinant, then the ray hit the front face
-        // If negative determinant, then the ray hit the back face
-        // If determinant is close to zero, then the ray missed the triangle
+        // If positive determinant, then the ray hit the front face.
+        // If negative determinant, then the ray hit the back face.
+        // If determinant is close to zero, then the ray missed the triangle.
         float determinant = glm::dot(edge_1, pvec);
-        bool intersect_front = determinant < epsilon ? false : true;
+        const bool intersect_front = determinant >= epsilon;
 
-        if (cull_back_face) {
-            if (determinant < epsilon)
-                return std::make_tuple(false, 0.0f, 0.0f, 0.0f, intersect_front);
-        } else if (cull_front_face) {
-            if (determinant > epsilon)
-                return std::make_tuple(false, 0.0f, 0.0f, 0.0f, intersect_front);
-        } else {
-            if (std::fabs(determinant) < epsilon)
-                return std::make_tuple(false, 0.0f, 0.0f, 0.0f, intersect_front);
-        }
+        const bool cull_back_face_and_entered_back = cull_back_face && determinant <= -epsilon;
+        const bool cull_front_face_and_entered_front = cull_front_face && intersect_front;
+        const bool ray_parallel_to_triangle = std::fabs(determinant) < epsilon;
+        if (cull_back_face_and_entered_back || cull_front_face_and_entered_front || ray_parallel_to_triangle)
+            return {false, 0.0f, 0.0f, 0.0f, intersect_front};
 
         float inverse_determinant = 1.0f / determinant;
 
-        glm::vec3 tvec = ray_origin - vertices[0];  // Distance from ray origin to shared vertex
+        glm::vec3 tvec = ray_origin - vertices[0];
 
         float u = glm::dot(tvec, pvec) * inverse_determinant;
         if (u < 0 || u > 1)
-            return std::make_tuple(false, 0.0f, u, 0.0f, intersect_front);
+            return {false, 0.0f, u, 0.0f, intersect_front};
 
         glm::vec3 qvec = glm::cross(tvec, edge_1);
 
         float v = glm::dot(ray_direction, qvec) * inverse_determinant;
         if (v < 0 || u + v > 1)
-            return std::make_tuple(false, 0.0f, u, v, intersect_front);
+            return {false, 0.0f, u, v, intersect_front};
 
         float t = glm::dot(edge_2, qvec) * inverse_determinant;
         if (t < ray_t_min || t > ray_t_max)
-            return std::make_tuple(false, t, u, v, intersect_front);
+            return {false, t, u, v, intersect_front};
 
-        return std::make_tuple(true, t, u, v, intersect_front);
+        return {true, t, u, v, intersect_front};
     }
 
 public:
@@ -1480,7 +1519,7 @@ public:
         using NodeRefAndNumTabs = std::tuple<ConstNodeRef, unsigned>;
 
         std::stack<NodeRefAndNumTabs> frontier;
-        frontier.push(std::make_tuple(&root, tab_level));
+        frontier.push({&root, tab_level});
 
         while (!frontier.empty()) {
             NodeRefAndNumTabs top = frontier.top();
@@ -1499,7 +1538,7 @@ public:
                 BoxNode* box_node = static_cast<BoxNode*>(curr_node);
                 const auto& children = box_node->children;
                 for (int i = children.size() - 1; i >= 0; --i)
-                    frontier.push(std::make_tuple(&(children[i]), num_tabs + 1));
+                    frontier.push({&(children[i]), num_tabs + 1});
                 break;
             }
             case NodeType::Instance: {
@@ -1547,7 +1586,7 @@ private:
             const unsigned num_triangle = static_cast<const Primitive&>(*(curr_accel_struct_info[2])).data.u32;
             const unsigned num_procedural = static_cast<const Primitive&>(*(curr_accel_struct_info[3])).data.u32;
 
-            structure_data.push_back(std::array<unsigned, 4> {num_box, num_instance, num_triangle, num_procedural});
+            structure_data.push_back({num_box, num_instance, num_triangle, num_procedural});
         }
 
         // Change the current type to match
@@ -1913,7 +1952,7 @@ public:
 
         std::stack<NameAndValue> frontier;
         const Value custom_string = Value(Type::string());
-        frontier.push(std::make_tuple(std::string("Structure for acceleration structures"), structureInfo.get(), 0));
+        frontier.push({std::string("Structure for acceleration structures"), structureInfo.get(), 0});
 
         while (!frontier.empty()) {
             const NameAndValue top = frontier.top();
@@ -1942,7 +1981,7 @@ public:
             case DataType::STRUCT:
             case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
                 result << Util::repeatedString(num_tabs, tab_string) << name << " {" << std::endl;
-                frontier.push(std::make_tuple(" }", &custom_string, num_tabs));
+                frontier.push({" }", &custom_string, num_tabs});
 
                 const Struct& info = static_cast<const Struct&>(*value);
 
@@ -1953,7 +1992,7 @@ public:
                 for (int i = names.size() - 1; i >= 0; --i) {
                     std::stringstream message;
                     message << names[i];
-                    frontier.push(std::make_tuple(message.str(), info[i], num_tabs + 1));
+                    frontier.push({message.str(), info[i], num_tabs + 1});
                 }
 
                 break;
@@ -1968,9 +2007,9 @@ public:
                 if (child_data_type == DataType::STRUCT || child_data_type == DataType::ARRAY ||
                     child_data_type == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) {
                     result << " [" << std::endl;
-                    frontier.push(std::make_tuple(" ]", &custom_string, num_tabs));
+                    frontier.push({" ]", &custom_string, num_tabs});
                     for (int i = info.getSize() - 1; i >= 0; --i) {
-                        frontier.push(std::make_tuple(array_element_marker, info[i], num_tabs + 1));
+                        frontier.push({array_element_marker, info[i], num_tabs + 1});
                     }
                 } else {
                     result << " [ ";
@@ -2219,6 +2258,6 @@ public:
             }
         }
 
-        return std::make_tuple(names, fields);
+        return {names, fields};
     }
 };
