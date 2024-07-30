@@ -141,12 +141,14 @@ public:
     /// @param outs a list of ref indices in data pointing to out variables
     /// @param specs a list of ref indices in data pointing to specialization constants
     /// @param provided a map of input variables. Needed for spec constants
+    /// @param entry_point an entry point instruction to get the execution model
     void ioGen(
         DataView& data,
         std::vector<unsigned>& ins,
         std::vector<unsigned>& outs,
         std::vector<unsigned>& specs,
-        ValueMap& provided
+        ValueMap& provided,
+        const Instruction& entry_point
     ) const noexcept(false) {
         switch (opcode) {
         case spv::OpSpecConstantTrue:
@@ -164,6 +166,10 @@ public:
         unsigned id = std::get<unsigned>(operands[1].raw);
         assert(var != nullptr);  // should have already been created
 
+        // Make sure <entry_point> is an actual entry point before identifying the execution model
+        const int execution_model =
+            (entry_point.opcode == spv::OpEntryPoint) ? std::get<unsigned>(entry_point.operands[0].raw) : -1;
+
         using SC = spv::StorageClass;
         switch (var->getStorageClass()) {
         case SC::StorageClassPushConstant:
@@ -178,22 +184,36 @@ public:
             [[fallthrough]];
         case SC::StorageClassUniformConstant:
         case SC::StorageClassInput:
-        case SC::StorageClassCallableDataKHR:
+        case SC::StorageClassShaderRecordBufferKHR:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
-        case SC::StorageClassHitAttributeKHR:
-        case SC::StorageClassIncomingRayPayloadKHR:
+        case SC::StorageClassCallableDataKHR:
         case SC::StorageClassIncomingCallableDataKHR:
+        case SC::StorageClassRayPayloadKHR:
+        case SC::StorageClassIncomingRayPayloadKHR:
             ins.push_back(id);
             outs.push_back(id);
             break;
         case SC::StorageClassOutput:
-        case SC::StorageClassRayPayloadKHR:
             outs.push_back(id);
             break;
+        case SC::StorageClassHitAttributeKHR: {
+            switch (execution_model) {
+                default:
+                    throw std::runtime_error("Bad execution model using storage class HitAttributeKHR.");
+                case spv::ExecutionModelIntersectionKHR:
+                    outs.push_back(id);
+                    break;
+                case spv::ExecutionModelAnyHitKHR:
+                case spv::ExecutionModelClosestHitKHR:
+                    ins.push_back(id);
+                    break;
+            }
+            break;
+        }
         case SC::StorageClassPrivate:
         case SC::StorageClassFunction:
         case SC::StorageClassWorkgroup:

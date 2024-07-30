@@ -30,6 +30,13 @@ private:
     float rayTMin;
     float rayTMax;
 
+    std::vector<std::vector<float>> glmMat4x3ToVector(const glm::mat4x3& mat) const {
+        std::vector<std::vector<float>> result;
+        for (unsigned col = 0; col < 4; ++col)
+            result.push_back({mat[col].x, mat[col].y, mat[col].z});
+        return result;
+    }
+
 public:
     RayQuery(Type t): Value(t), tlas(t), active(false) {}
 
@@ -262,12 +269,7 @@ public:
     /// @return 4x3 world-to-object column-major order matrix.
     std::vector<std::vector<float>> getIntersectionObjectToWorld(const unsigned intersection) const {
         glm::mat4x3 object_to_world = getIntersectionObjectToWorldGLM(intersection);
-
-        std::vector<std::vector<float>> result;
-        for (unsigned col = 0; col < 4; ++col)
-            result.push_back({object_to_world[col].x, object_to_world[col].y, object_to_world[col].z});
-
-        return result;
+        return glmMat4x3ToVector(object_to_world);
     }
 
     /// @brief Get the committed or candidate intersection 3x4 world-to-object matrix.
@@ -283,11 +285,6 @@ public:
     /// @return 4x3 world-to-object column-major order matrix.
     std::vector<std::vector<float>> getIntersectionWorldToObject(const unsigned intersection) const {
         glm::mat4x3 world_to_object = getIntersectionWorldToObjectGLM(intersection);
-
-        std::vector<std::vector<float>> result;
-        for (unsigned col = 0; col < 4; ++col)
-            result.push_back({world_to_object[col].x, world_to_object[col].y, world_to_object[col].z});
-
-        return result;
+        return glmMat4x3ToVector(world_to_object);
     }
 };

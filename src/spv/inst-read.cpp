@@ -413,18 +413,6 @@ Instruction* Instruction::readOp(
         handle_type(type, inst.operands, words, i);
     }
 
-    // If it was an extension, make sure it's supported
-    if (op == spv::OpExtension) {
-        const auto& operands = inst.operands;
-        assert(operands[0].type == Token::Type::STRING);
-        const std::string ext_name = std::get<std::string>(operands[0].raw);
-        if (!Instruction::isSupportedExtension(ext_name)) {
-            std::stringstream err;
-            err << "Unsupported extension: " << ext_name;
-            throw std::runtime_error(err.str());
-        }
-    }
-
     if (!optional.empty()) {
         // Try optional.
         // If any in optional are present, all in list must exist

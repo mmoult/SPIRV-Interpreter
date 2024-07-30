@@ -198,7 +198,7 @@ public:
                     }
 
                     if (static_ctn)
-                        inst.ioGen(global, ins, outs, specs, provided);
+                        inst.ioGen(global, ins, outs, specs, provided, insts[entry]);
                 }
             }
         }

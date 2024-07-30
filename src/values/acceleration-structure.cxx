@@ -34,7 +34,9 @@ namespace Util {
 /// @param str string to repeat.
 /// @return single string of the repeated string.
 std::string repeatedString(const unsigned num, const std::string& str) {
-    std::stringstream result;
+    std::string reserve;
+    reserve.reserve(num * str.length());
+    std::stringstream result(reserve);
     for (unsigned i = 0; i < num; ++i)
         result << str;
     return result.str();
@@ -635,17 +637,6 @@ private:
             isOpaque = true;
             enteredTriangleFrontFace = false;
         }
-
-        IntersectionProperties& operator=(const IntersectionProperties& other) {
-            instance = other.instance;
-            geometryIndex = other.geometryIndex;
-            primitiveIndex = other.primitiveIndex;
-            hitT = other.hitT;
-            barycentrics = other.barycentrics;
-            isOpaque = other.isOpaque;
-            enteredTriangleFrontFace = other.enteredTriangleFrontFace;
-            return *this;
-        }
     };
     struct CandidateIntersection {
         CandidateIntersectionType type = CandidateIntersectionType::Triangle;
@@ -664,12 +655,6 @@ private:
             type = is_triangle ? CandidateIntersectionType::Triangle : CandidateIntersectionType::AABB;
             properties = new_properties;
         }
-
-        CandidateIntersection& operator=(const CandidateIntersection& other) {
-            type = other.type;
-            properties = other.properties;
-            return *this;
-        }
     };
     struct CommittedIntersection {
         CommittedIntersectionType type = CommittedIntersectionType::None;
@@ -687,12 +672,6 @@ private:
         void update(const bool is_triangle, const CandidateIntersection& candidate_intersection) {
             type = is_triangle ? CommittedIntersectionType::Triangle : CommittedIntersectionType::Generated;
             properties = candidate_intersection.properties;
-        }
-
-        CommittedIntersection& operator=(const CommittedIntersection& other) {
-            type = other.type;
-            properties = other.properties;
-            return *this;
         }
     };
 
@@ -1312,7 +1291,6 @@ public:
         const unsigned stride_sbt = 0,
         const unsigned miss_index = 0
     ) {
-
         initTrace(
             ray_flags,
             cull_mask,
@@ -1403,12 +1381,9 @@ private:
             return false;
 
         // Get the larger of the minimums; the larger minimum is closer to the box.
-        if (ty_min > t_min)
-            t_min = ty_min;
-
         // Get the smaller of the maximums; the smaller maximum is closer to the box.
-        if (ty_max < t_max)
-            t_max = ty_max;
+        t_min = std::max(t_min, ty_min);
+        t_max = std::min(t_max, ty_max);
 
         // Get the distances to the xy-plane intersections.
         float tz_min, tz_max;
@@ -1428,12 +1403,9 @@ private:
             return false;
 
         // Get the larger of the minimums; the larger minimum is closer to the box.
-        if (tz_min > t_min)
-            t_min = tz_min;
-
         // Get the smaller of the maximums; the smaller maximum is closer to the box.
-        if (tz_max < t_max)
-            t_max = tz_max;
+        t_min = std::max(t_min, tz_min);
+        t_max = std::min(t_max, tz_max);
 
         // Check if the intersection is within the ray's interval.
         return ((t_min < ray_t_max) && (t_max > ray_t_min));
