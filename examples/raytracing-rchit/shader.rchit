@@ -3,7 +3,7 @@
 
 layout(location = 0) rayPayloadInEXT vec3 hitPayload;
 
-hitAttributeEXT vec3 normal; // read-only
+hitAttributeEXT vec3 normal;
 
 void main()
 {

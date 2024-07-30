@@ -1,6 +1,7 @@
 {
     "gl_LaunchIDEXT" : [ 1, 2, 3 ],
     "gl_LaunchSizeEXT" : [ 3, 2, 1 ],
+    "payload" : [ 0.0, 0.0, 0.0 ],
 
     "rayFlags" : 2, // No opaque
     "cullMask" : 255, // 0xFF

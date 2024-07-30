@@ -3,6 +3,5 @@
     "gl_ObjectRayOriginEXT" : [ -1.13, -0.13, 1.94 ],
     "gl_ObjectRayDirectionEXT" : [ 0.4, 0.0, -5.46 ],
     "sphereCenter" : [ -0.5, 0.0, 0.0 ],
-    "sphereRadius" : 1.0,
-    "normal" : [ 0.0, 0.0, 0.0 ]
+    "sphereRadius" : 1.0
 }

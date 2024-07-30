@@ -1,4 +1,8 @@
 {
-    "intersection" : 0,
-    "normal" : [ 0.0, 0.0, 0.0 ]
+    "intersectionResults": {
+        "normal" : [ 0.0, 0.0, 0.0 ],
+        "hit_t" : 0.0,
+        "intersected" : false
+    },
+    "reportIntersectionResult" : 0
 }
