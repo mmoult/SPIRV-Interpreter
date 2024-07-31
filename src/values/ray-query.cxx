@@ -119,22 +119,10 @@ public:
         return std::vector<float> {rayOrigin.x, rayOrigin.y, rayOrigin.z};
     }
 
-    /// @brief Get the ray's world-space origin.
-    /// @return world-space ray origin.
-    glm::vec3 getWorldRayOriginGLM() const {
-        return glm::vec3(rayOrigin);
-    }
-
     /// @brief Get the ray's world-space direction.
     /// @return world-space ray direction.
     std::vector<float> getWorldRayDirection() const {
         return std::vector<float> {rayDirection.x, rayDirection.y, rayDirection.z};
-    }
-
-    /// @brief Get the ray's world-space direction.
-    /// @return world-space ray direction.
-    glm::vec3 getWorldRayDirectionGLM() const {
-        return glm::vec3(rayDirection);
     }
 
     /// @brief Get the committed or candidate intersection type.
@@ -196,16 +184,9 @@ public:
     /// @brief Get the committed or candidate intersection barycentrics.
     /// @param intersection type of intersection: 0-candidate, 1-committed.
     /// @return barycentric coordinates.
-    glm::vec2 getIntersectionBarycentricsGLM(const unsigned intersection) const {
-        assert(intersection == 0 || intersection == 1);
-        return tlas.getIntersectionBarycentrics(static_cast<bool>(intersection));
-    }
-
-    /// @brief Get the committed or candidate intersection barycentrics.
-    /// @param intersection type of intersection: 0-candidate, 1-committed.
-    /// @return barycentric coordinates.
     std::vector<float> getIntersectionBarycentrics(const unsigned intersection) const {
-        glm::vec2 barycentrics = getIntersectionBarycentricsGLM(intersection);
+        assert(intersection == 0 || intersection == 1);
+        glm::vec2 barycentrics = tlas.getIntersectionBarycentrics(static_cast<bool>(intersection));
         return std::vector<float> {barycentrics.x, barycentrics.y};
     }
 
@@ -227,64 +208,36 @@ public:
     /// @brief Get the committed or candidate intersection object-space ray direction.
     /// @param intersection type of intersection: 0-candidate, 1-committed.
     /// @return object-space ray direction.
-    glm::vec3 getIntersectionObjectRayDirectionGLM(const unsigned intersection) const {
-        assert(intersection == 0 || intersection == 1);
-        return tlas.getIntersectionObjectRayDirection(static_cast<bool>(intersection));
-    }
-
-    /// @brief Get the committed or candidate intersection object-space ray direction.
-    /// @param intersection type of intersection: 0-candidate, 1-committed.
-    /// @return object-space ray direction.
     std::vector<float> getIntersectionObjectRayDirection(const unsigned intersection) const {
-        glm::vec3 object_ray_dir = getIntersectionObjectRayDirectionGLM(intersection);
+        assert(intersection == 0 || intersection == 1);
+        glm::vec3 object_ray_dir = tlas.getIntersectionObjectRayDirection(static_cast<bool>(intersection));
         return std::vector<float> {object_ray_dir.x, object_ray_dir.y, object_ray_dir.z};
     }
 
     /// @brief Get the committed or candidate intersection object-space ray origin.
     /// @param intersection type of intersection: 0-candidate, 1-committed.
     /// @return object-space ray origin.
-    glm::vec3 getIntersectionObjectRayOriginGLM(const unsigned intersection) const {
-        assert(intersection == 0 || intersection == 1);
-        return tlas.getIntersectionObjectRayOrigin(static_cast<bool>(intersection));
-    }
-
-    /// @brief Get the committed or candidate intersection object-space ray origin.
-    /// @param intersection type of intersection: 0-candidate, 1-committed.
-    /// @return object-space ray origin.
     std::vector<float> getIntersectionObjectRayOrigin(const unsigned intersection) const {
-        glm::vec3 object_ray_origin = getIntersectionObjectRayOriginGLM(intersection);
+        assert(intersection == 0 || intersection == 1);
+        glm::vec3 object_ray_origin = tlas.getIntersectionObjectRayOrigin(static_cast<bool>(intersection));
         return std::vector<float> {object_ray_origin.x, object_ray_origin.y, object_ray_origin.z};
     }
 
     /// @brief Get the committed or candidate intersection 3x4 object-to-world matrix.
     /// @param intersection type of intersection: 0-candidate, 1-committed.
     /// @return 4x3 world-to-object column-major order matrix.
-    glm::mat4x3 getIntersectionObjectToWorldGLM(const unsigned intersection) const {
-        assert(intersection == 0 || intersection == 1);
-        return tlas.getIntersectionObjectToWorld(static_cast<bool>(intersection));
-    }
-
-    /// @brief Get the committed or candidate intersection 3x4 object-to-world matrix.
-    /// @param intersection type of intersection: 0-candidate, 1-committed.
-    /// @return 4x3 world-to-object column-major order matrix.
     std::vector<std::vector<float>> getIntersectionObjectToWorld(const unsigned intersection) const {
-        glm::mat4x3 object_to_world = getIntersectionObjectToWorldGLM(intersection);
+        assert(intersection == 0 || intersection == 1);
+        glm::mat4x3 object_to_world = tlas.getIntersectionObjectToWorld(static_cast<bool>(intersection));
         return glmMat4x3ToVector(object_to_world);
     }
 
     /// @brief Get the committed or candidate intersection 3x4 world-to-object matrix.
     /// @param intersection type of intersection: 0-candidate, 1-committed.
     /// @return 4x3 world-to-object column-major order matrix.
-    glm::mat4x3 getIntersectionWorldToObjectGLM(const unsigned intersection) const {
-        assert(intersection == 0 || intersection == 1);
-        return tlas.getIntersectionWorldToObject(static_cast<bool>(intersection));
-    }
-
-    /// @brief Get the committed or candidate intersection 3x4 world-to-object matrix.
-    /// @param intersection type of intersection: 0-candidate, 1-committed.
-    /// @return 4x3 world-to-object column-major order matrix.
     std::vector<std::vector<float>> getIntersectionWorldToObject(const unsigned intersection) const {
-        glm::mat4x3 world_to_object = getIntersectionWorldToObjectGLM(intersection);
+        assert(intersection == 0 || intersection == 1);
+        glm::mat4x3 world_to_object = tlas.getIntersectionWorldToObject(static_cast<bool>(intersection));
         return glmMat4x3ToVector(world_to_object);
     }
 };
