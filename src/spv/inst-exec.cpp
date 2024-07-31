@@ -326,13 +326,13 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         ray_query.terminate();
         break;
     }
-    case spv::OpRayQueryGenerateIntersectionKHR: {
+    case spv::OpRayQueryGenerateIntersectionKHR: { // 4475
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         const float hit_t = static_cast<Primitive&>(*getValue(1, data)).data.fp32;
         ray_query.generateIntersection(hit_t);
         break;
     }
-    case spv::OpRayQueryConfirmIntersectionKHR: {
+    case spv::OpRayQueryConfirmIntersectionKHR: { // 4476
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         ray_query.confirmIntersection();
         break;
