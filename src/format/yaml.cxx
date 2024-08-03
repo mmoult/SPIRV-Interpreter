@@ -432,21 +432,10 @@ private:
         }
         case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
             const auto& accel_struct_manager = static_cast<const AccelerationStructureManager&>(value);
-            if (templatize) {
-                std::vector<std::array<unsigned, 4>> formatData {
-                    {1, 1, 0, 0},  // 1 box node, 1 instance node
-                    {1, 0, 1, 1}  // 1 box node, 1 triangle node, 1 procedural node
-                };
-                const auto format = accel_struct_manager.getStructureFormat(&formatData);
-                const Type structure_type = Type::structure(get<1>(format), get<0>(format));
-                Struct structure = Struct(structure_type);
-                structure.dummyFill();
-                printValue(out, structure, 1);
-            } else {
-                Struct* structure = accel_struct_manager.getStructure();
-                printValue(out, *structure, 1);
-                delete structure;
-            }
+            const Type accel_struct_type = accel_struct_manager.getExpectedType();
+            Struct structure = Struct(Type::structure(accel_struct_type.getFields(), accel_struct_type.getNames()));
+            structure.dummyFill();
+            printValue(out, structure, 1);
             break;
         }
         default: // VOID, FUNCTION, RAY_QUERY

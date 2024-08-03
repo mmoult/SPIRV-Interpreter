@@ -1569,12 +1569,8 @@ private:
                                   ? *((static_cast<const AccelerationStructureManager&>(new_val)).structureInfo)
                                   : static_cast<const Struct&>(new_val);
 
-        // Get some metadata about the structure
-        assert((other[0])->getType().getBase() == DataType::BOOL);
-        const bool has_sbt = (static_cast<const Primitive&>(*(other[0]))).data.b32;
-
         // Change the current type to match
-        type = getExpectedType(has_sbt);
+        type = getExpectedType();
 
         // Copy "other" into "structureInfo"; the "copyFrom(...)" method will fail if the input does not match
         structureInfo = std::make_unique<Struct>(type);
@@ -1589,7 +1585,7 @@ private:
         // Note: different instance nodes can point to the same acceleration structure
         std::vector<std::shared_ptr<AccelerationStructure>> accel_structs;
         const Struct& structure_info_ref = *structureInfo;
-        const Array& accel_structs_info = static_cast<const Array&>(*(structure_info_ref[1]));
+        const Array& accel_structs_info = static_cast<const Array&>(*(structure_info_ref[0]));
         const unsigned num_accel_structs = accel_structs_info.getSize();
 
         // Construct each acceleration structure bottom-up
@@ -2004,7 +2000,7 @@ public:
 
     /// @brief Get the type for an acceleration structure manager.
     /// @return acceleration structure type.
-    static Type getExpectedType(const bool has_sbt = false) {
+    static Type getExpectedType() {
         using Names = std::vector<std::string>;  // Field names
         using Fields = std::vector<const Type*>;  // Fields
 
@@ -2013,13 +2009,10 @@ public:
         const Type* uint_type = new Type(Type::primitive(DataType::UINT));
 
         // TODO: allow user-defined names (names from input), and if not provided to this method, use default names
-        Names names {"has_sbt", "acceleration_structures_info"};
+        Names names {"acceleration_structures", "shader_binding_table"};
         Fields fields;
 
         // Note: <field> comment defines the input structure field being populated.
-
-        // <has_sbt>
-        fields.push_back(bool_type);
 
         // <acceleration_structures>
         Names acceleration_structure_names {
@@ -2144,11 +2137,9 @@ public:
             new Type(Type::structure(acceleration_structure_fields, acceleration_structure_names));
         fields.push_back(new Type(Type::array(0, *acceleration_structure_type)));
 
-        // <sbt>
-        if (has_sbt) {
-            // TODO: update during shader binding table implementation
-            throw std::runtime_error("Shader binding tables are not implemented yet!");
-        }
+        // <shader_binding_table>
+        // TODO: update when implementing shader binding tables
+        fields.push_back(new Type(Type::array(0, *(new Type(Type::primitive(DataType::UINT))))));
 
         return Type::accelerationStructure(fields, names);
     }
