@@ -16,7 +16,7 @@ module;
 // TODO: plan to remove/change header(s) below
 #include <iostream>
 
-// TODO: probably want to reduce GLM files to link
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext.hpp>
 
 #include "../external/spirv.hpp"
@@ -388,13 +388,11 @@ public:
     /// @brief AccelerationStructure constructor.
     /// @param id identifier of when it was constructed relative to other acceleration structures.
     /// @param structure_info acceleration structure information.
-    /// @param node_counts number of each type of node.
     /// @param all_accel_structs all constructed acceleration structures.
     /// @param num_accel_structs total expected number of acceleration structures after construction.
     AccelerationStructure(
         const unsigned id,
         const Struct& structure_info,
-        const Struct& node_counts,
         std::vector<std::shared_ptr<AccelerationStructure>>& all_accel_structs,
         const unsigned num_accel_structs
     )
@@ -402,25 +400,26 @@ public:
           isTLAS(static_cast<const Primitive&>(*(structure_info[0])).data.b32) {
 
         // Get node information
-        const unsigned num_box_nodes = static_cast<const Primitive&>(*(node_counts[0])).data.u32;
-        const unsigned num_instance_nodes = static_cast<const Primitive&>(*(node_counts[1])).data.u32;
-        const unsigned num_triangle_nodes = static_cast<const Primitive&>(*(node_counts[2])).data.u32;
-        const unsigned num_procedural_nodes = static_cast<const Primitive&>(*(node_counts[3])).data.u32;
+        const Array& box_node_infos = static_cast<const Array&>(*(structure_info[1]));
+        const Array& instance_node_infos = static_cast<const Array&>(*(structure_info[2]));
+        const Array& triangle_node_infos = static_cast<const Array&>(*(structure_info[3]));
+        const Array& procedural_node_infos = static_cast<const Array&>(*(structure_info[4]));
+
+        const unsigned num_box_nodes = box_node_infos.getSize();
+        const unsigned num_instance_nodes = instance_node_infos.getSize();
+        const unsigned num_triangle_nodes = triangle_node_infos.getSize();
+        const unsigned num_procedural_nodes = procedural_node_infos.getSize();
 
         const unsigned num_non_instance_nodes = num_triangle_nodes + num_procedural_nodes;
-        assert(
-            (num_instance_nodes == 0 && num_non_instance_nodes > 0) ||
-            (num_instance_nodes > 0 && num_non_instance_nodes == 0)
-        );
+        assert((num_instance_nodes == 0 || num_non_instance_nodes == 0));
+        const unsigned num_nodes = num_box_nodes + num_instance_nodes + num_non_instance_nodes;
 
         // Construct the nodes bottom-up
-        const unsigned offset = 1;  // offset of struct fields to the start of nodes
-        const unsigned num_nodes = num_box_nodes + num_instance_nodes + num_non_instance_nodes;
         std::vector<std::shared_ptr<Node>> nodes;
 
         // Procedural nodes
         for (unsigned i = 0; i < num_procedural_nodes; ++i) {
-            const Struct& primitive_info = static_cast<const Struct&>(*(structure_info[num_nodes + offset - 1 - i]));
+            const Struct& primitive_info = static_cast<const Struct&>(*(procedural_node_infos[i]));
 
             // Geometry index
             const unsigned geometry_index = static_cast<const Primitive&>(*(primitive_info[0])).data.u32;
@@ -451,8 +450,7 @@ public:
 
         // Triangle node
         for (unsigned i = 0; i < num_triangle_nodes; ++i) {
-            const Struct& primitive_info =
-                static_cast<const Struct&>(*(structure_info[num_nodes + offset - 1 - i - num_procedural_nodes]));
+            const Struct& primitive_info = static_cast<const Struct&>(*(triangle_node_infos[i]));
 
             // Geometry index
             const unsigned geometry_index = static_cast<const Primitive&>(*(primitive_info[0])).data.u32;
@@ -468,10 +466,10 @@ public:
             const Array& vertices_info = static_cast<const Array&>(*(primitive_info[3]));
             for (unsigned j = 0; j < vertices_info.getSize(); ++j) {
                 glm::vec3 vertex;
-                const Array& vertexInfo = static_cast<const Array&>(*(vertices_info[j]));
-                assert(vertexInfo.getSize() == 3);
-                for (unsigned k = 0; k < vertexInfo.getSize(); ++k) {
-                    vertex[k] = static_cast<const Primitive&>(*(vertexInfo[k])).data.fp32;
+                const Array& vertex_info = static_cast<const Array&>(*(vertices_info[j]));
+                assert(vertex_info.getSize() == 3);
+                for (unsigned k = 0; k < vertex_info.getSize(); ++k) {
+                    vertex[k] = static_cast<const Primitive&>(*(vertex_info[k])).data.fp32;
                 }
                 vertices.push_back(vertex);
             }
@@ -489,8 +487,7 @@ public:
 
         // Instance nodes
         for (unsigned i = 0; i < num_instance_nodes; ++i) {
-            const Struct& instance_info =
-                static_cast<const Struct&>(*(structure_info[num_nodes + offset - 1 - i - num_non_instance_nodes]));
+            const Struct& instance_info = static_cast<const Struct&>(*(instance_node_infos[i]));
 
             // Object-to-world matrix
             glm::mat4x3 object_to_world_matrix;  // GLM stores in column-major order
@@ -538,12 +535,10 @@ public:
         }
 
         // Box nodes
-        assert(num_non_instance_nodes == 0 || num_instance_nodes == 0);
         for (unsigned i = 0; i < num_box_nodes; ++i) {
-            const Struct& box_info = static_cast<const Struct&>(
-                *(structure_info[num_nodes + offset - 1 - i - num_non_instance_nodes - num_instance_nodes])
-            );
+            const Struct& box_info = static_cast<const Struct&>(*(box_node_infos[i]));
 
+            // Bounds
             const Array& min_bounds_info = static_cast<const Array&>(*(box_info[0]));
             const Array& max_bounds_info = static_cast<const Array&>(*(box_info[1]));
             glm::vec4 min_bounds;
@@ -556,18 +551,43 @@ public:
             min_bounds.w = 1.0f;
             max_bounds.w = 1.0f;
 
+            // Children
             const Array& children_indices_info = static_cast<const Array&>(*(box_info[2]));
-            std::vector<unsigned> children_indices;
+            std::vector<std::vector<unsigned>> children_indices;
             for (unsigned j = 0; j < children_indices_info.getSize(); ++j) {
-                unsigned child_index = static_cast<const Primitive&>(*(children_indices_info[j])).data.u32;
+                const Array& child_index_info = static_cast<const Array&>(*(children_indices_info[j]));
+                std::vector<unsigned> child_index {
+                    static_cast<const Primitive&>(*(child_index_info[0])).data.u32,
+                    static_cast<const Primitive&>(*(child_index_info[1])).data.u32
+                };
                 children_indices.push_back(child_index);
             }
 
-            // Get the children
             std::vector<std::shared_ptr<Node>> children;
-            for (const auto& child_index : children_indices) {
-                assert(nodes[num_nodes - 1 - child_index] != nullptr);
-                children.push_back(std::move(nodes[num_nodes - 1 - child_index]));
+            for (unsigned i = 0; i < children_indices.size(); ++i) {
+                const auto& child_index = children_indices[i];
+                assert(child_index[0] < 4);  // Make sure it's a valid node type
+                const NodeType node_type = static_cast<NodeType>(child_index[0]);
+                unsigned index = i;
+                switch (node_type) {
+                case NodeType::Box: {
+                    index +=
+                        instance_node_infos.getSize() + triangle_node_infos.getSize() + procedural_node_infos.getSize();
+                    break;
+                }
+                case NodeType::Instance: {
+                    index += triangle_node_infos.getSize() + procedural_node_infos.getSize();
+                    break;
+                }
+                case NodeType::Triangle: {
+                    index += procedural_node_infos.getSize();
+                    break;
+                }
+                case NodeType::Procedural: {
+                    break;
+                }
+                }
+                children.push_back(std::move(nodes[index]));
             }
 
             nodes.push_back(std::make_shared<BoxNode>(min_bounds, max_bounds, children));
@@ -575,8 +595,8 @@ public:
 
         // Assertion to make sure nodes list is within expectation
         unsigned root_index = num_nodes - 1;
-        for (unsigned i = 0; i < nodes.size(); ++i)
-            assert((i != root_index && nodes[i] == nullptr) || (i == root_index && nodes[i] != nullptr));
+        for (unsigned i = 0; i < nodes.size() - 1; ++i)
+            assert(nodes[i] == nullptr);
 
         // Set the root node
         root = std::move(nodes[num_nodes - 1]);
@@ -1480,12 +1500,12 @@ public:
     /// @brief Get the string representation of the acceleration structure.
     /// @param tab_level number of tabs to indent each line with.
     /// @return string of the acceleration structure.
-    std::string toString(unsigned tab_level = 0) {
+    std::string toString(const unsigned tab_level = 0) {
         std::stringstream result;
         const std::string tab_string("|\t");
 
         result << Util::repeatedString(tab_level, tab_string) << "acceleration_structure_id = " << id << std::endl;
-        result << Util::repeatedString(tab_level + 1, tab_string) << "is_TLAS = " << (isTLAS ? "true" : "false")
+        result << Util::repeatedString(tab_level + 1, tab_string) << "is_tlas = " << (isTLAS ? "true" : "false")
                << std::endl;
 
         using NodeRefAndNumTabs = std::tuple<ConstNodeRef, unsigned>;
@@ -1539,33 +1559,24 @@ private:
     /// @brief Copy the type from "new_val".
     /// @param new_val "Value" to copy the type from.
     void copyType(const Value& new_val) {
-        // "new_val" is a "Struct" instead of "AccelerationStructureManager" at the very first copy of input
-        const Aggregate& other =
-            new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE
-                ? static_cast<const Aggregate&>(
-                      *((static_cast<const AccelerationStructureManager*>(&new_val))->structureInfo)
-                  )
-                : static_cast<const Aggregate&>(new_val);
+        assert(
+            new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE ||
+            new_val.getType().getBase() == DataType::STRUCT
+        );
 
-        // Get data about the structure from the "new_val"
-        std::vector<std::array<unsigned, 4>> structure_data;
-        const Array& accel_struct_info = static_cast<const Array&>(*(other[0]));
-        for (unsigned i = 0; i < accel_struct_info.getSize(); ++i) {
-            const Struct& curr_accel_struct_info = static_cast<const Struct&>(*(accel_struct_info[i]));
+        // "new_val" could be an "Array" or "AccelerationStructureManager" depending on when it is copied
+        const Struct& other = new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE
+                                  ? *((static_cast<const AccelerationStructureManager&>(new_val)).structureInfo)
+                                  : static_cast<const Struct&>(new_val);
 
-            const unsigned num_box = static_cast<const Primitive&>(*(curr_accel_struct_info[0])).data.u32;
-            const unsigned num_instance = static_cast<const Primitive&>(*(curr_accel_struct_info[1])).data.u32;
-            const unsigned num_triangle = static_cast<const Primitive&>(*(curr_accel_struct_info[2])).data.u32;
-            const unsigned num_procedural = static_cast<const Primitive&>(*(curr_accel_struct_info[3])).data.u32;
-
-            structure_data.push_back({num_box, num_instance, num_triangle, num_procedural});
-        }
+        // Get some metadata about the structure
+        assert((other[0])->getType().getBase() == DataType::BOOL);
+        const bool has_sbt = (static_cast<const Primitive&>(*(other[0]))).data.b32;
 
         // Change the current type to match
-        auto info = getStructureFormat(&structure_data);
-        type = Type::accelerationStructure(get<1>(info), get<0>(info));
+        type = getExpectedType(has_sbt);
 
-        // Start copying the type
+        // Copy "other" into "structureInfo"; the "copyFrom(...)" method will fail if the input does not match
         structureInfo = std::make_unique<Struct>(type);
         structureInfo->dummyFill();
         structureInfo->copyFrom(other);
@@ -1578,15 +1589,13 @@ private:
         // Note: different instance nodes can point to the same acceleration structure
         std::vector<std::shared_ptr<AccelerationStructure>> accel_structs;
         const Struct& structure_info_ref = *structureInfo;
-        const Array& accel_structs_info = static_cast<const Array&>(*(structure_info_ref[0]));
+        const Array& accel_structs_info = static_cast<const Array&>(*(structure_info_ref[1]));
         const unsigned num_accel_structs = accel_structs_info.getSize();
 
         // Construct each acceleration structure bottom-up
-        const unsigned offset = 1;  // Offset to the start of all acceleration sturctures
         for (int i = num_accel_structs - 1; i >= 0; --i) {
             accel_structs.push_back(std::make_shared<AccelerationStructure>(
                 i,
-                static_cast<const Struct&>(*(structure_info_ref[i + offset])),
                 static_cast<const Struct&>(*(accel_structs_info[i])),
                 accel_structs,
                 num_accel_structs
@@ -1605,26 +1614,15 @@ public:
 
         // Copy the acceleration structures instead of building them
         root = std::make_shared<AccelerationStructure>(*(other.root));
-
         return *this;
     }
 
-    Struct* getStructure() const {
-        Struct* result = new Struct(type);
-        result->dummyFill();
-        result->copyFrom(*structureInfo);
-        return result;
-    }
-
     void copyFrom(const Value& new_val) noexcept(false) override {
-        const bool new_val_is_accel_struct =
-            new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE;
-
         // Copy the type of "other"
         copyType(new_val);
 
         // Construct the acceleration structures based on the type of "other"
-        if (new_val_is_accel_struct)
+        if (new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE)
             *this = static_cast<const AccelerationStructureManager&>(new_val);
         else
             buildAccelerationStructures();
@@ -1966,13 +1964,13 @@ public:
                     message << names[i];
                     frontier.push({message.str(), info[i], num_tabs + 1});
                 }
-
                 break;
             }
             case DataType::ARRAY: {
                 result << Util::repeatedString(num_tabs, tab_string) << name;
 
                 const Array& info = static_cast<const Array&>(*value);
+
                 const DataType child_data_type = info.getSize() > 0 ? info[0]->getType().getBase() : DataType::VOID;
 
                 // Add the children to the stack if some kind of structure
@@ -1985,12 +1983,13 @@ public:
                     }
                 } else {
                     result << " [ ";
-                    for (unsigned i = 0; i < info.getSize() - 1; ++i) {
-                        result << getPrimitiveValueAsString(*(info[i])) << ", ";
+                    if (info.getSize() != 0) {
+                        for (unsigned i = 0; i < info.getSize() - 1; ++i)
+                            result << getPrimitiveValueAsString(*(info[i])) << ", ";
+                        result << getPrimitiveValueAsString(*(info[info.getSize() - 1]));
                     }
-                    result << getPrimitiveValueAsString(*(info[info.getSize() - 1])) << " ]" << std::endl;
+                    result << " ]" << std::endl;
                 }
-
                 break;
             }
             case DataType::STRING: {
@@ -2003,233 +2002,154 @@ public:
         return result.str();
     }
 
-    /// @brief Gives the fields and field names of the structure for acceleration structures.
-    /// @param data number of nodes in each acceleration structure.
-    /// @return field names as strings and fields as types.
-    static std::tuple<std::vector<std::string>, std::vector<const Type*>>
-    getStructureFormat(const std::vector<std::array<unsigned, 4>>* data = nullptr) {
+    /// @brief Get the type for an acceleration structure manager.
+    /// @return acceleration structure type.
+    static Type getExpectedType(const bool has_sbt = false) {
+        using Names = std::vector<std::string>;  // Field names
+        using Fields = std::vector<const Type*>;  // Fields
 
-        using Names = std::vector<std::string>;
-        using Fields = std::vector<const Type*>;
+        const Type* float_type = new Type(Type::primitive(DataType::FLOAT));
+        const Type* bool_type = new Type(Type::primitive(DataType::BOOL));
+        const Type* uint_type = new Type(Type::primitive(DataType::UINT));
 
-        Names names {"accelerationStructuresInfo"};
+        // TODO: allow user-defined names (names from input), and if not provided to this method, use default names
+        Names names {"has_sbt", "acceleration_structures_info"};
         Fields fields;
 
-        // Note: "--- <field name>" means which field we are populating with the code below it
+        // Note: <field> comment defines the input structure field being populated.
 
-        // --- accelerationStructuresInfo
-        const Names acceleration_structures_info_names {
-            "numBoxNodes",
-            "numInstanceNodes",
-            "numTriangleNodes",
-            "numProceduralNodes"
+        // <has_sbt>
+        fields.push_back(bool_type);
+
+        // <acceleration_structures>
+        Names acceleration_structure_names {
+            "is_tlas",
+            "box_nodes",
+            "instance_nodes",
+            "triangle_nodes",
+            "procedural_nodes"
         };
-        Fields acceleration_structures_info_fields;
+        Fields acceleration_structure_fields;
         {
-            // --- numBoxNodes
-            acceleration_structures_info_fields.push_back(new Type(Type::primitive(DataType::UINT)));
+            // <is_tlas>
+            acceleration_structure_fields.push_back(bool_type);
 
-            // --- numInstanceNodes
-            acceleration_structures_info_fields.push_back(new Type(Type::primitive(DataType::UINT)));
+            // <box_nodes>
+            Names box_node_names {"min_bounds", "max_bounds", "children_indices"};
+            Fields box_node_fields;
+            {
+                // <min_bounds>
+                box_node_fields.push_back(new Type(Type::array(3, *float_type)));
 
-            // --- numTriangleNodes
-            acceleration_structures_info_fields.push_back(new Type(Type::primitive(DataType::UINT)));
+                // <max_bounds>
+                box_node_fields.push_back(new Type(Type::array(3, *float_type)));
 
-            // --- numProceduralNodes
-            acceleration_structures_info_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-        }
-        Type* acceleration_structures_info_struct =
-            new Type(Type::structure(acceleration_structures_info_fields, acceleration_structures_info_names));
-        Type* acceleration_structures_info_array = new Type(Type::array(0, *acceleration_structures_info_struct));
-        fields.push_back(acceleration_structures_info_array);
-
-        // Add the acceleration structures if we know how many there are
-        // Note: data contains information about the acceleration structures
-        if (data != nullptr) {
-
-            // Add on the acceleration structures
-            for (int i = 0; i < data->size(); ++i) {
-                const unsigned num_box_nodes = (*data)[i][0];
-                const unsigned num_instance_nodes = (*data)[i][1];
-                const unsigned num_triangle_nodes = (*data)[i][2];
-                const unsigned num_procedural_nodes = (*data)[i][3];
-
-                // --- accelerationStructure
-                Names acceleration_structure_field_names {"isTLAS"};
-                Fields acceleration_structure_fields;
-                {
-                    // --- isTLAS
-                    acceleration_structure_fields.push_back(new Type(Type::primitive(DataType::BOOL)));
-
-                    // --- boxNodes
-                    if (num_box_nodes > 0) {
-                        const Names box_node_field_names {"minBounds", "maxBounds", "childrenIndices"};
-                        Fields box_node_fields;
-                        {
-                            Type* bounds = new Type(Type::primitive(DataType::FLOAT));
-
-                            // --- minBounds
-                            box_node_fields.push_back(new Type(Type::array(3, *bounds)));
-
-                            // --- maxBounds
-                            box_node_fields.push_back(new Type(Type::array(3, *bounds)));
-
-                            // --- childrenIndices
-                            Type* children_index = new Type(Type::primitive(DataType::UINT));
-                            box_node_fields.push_back(new Type(Type::array(0, *children_index)));
-                        }
-                        Type* box_node = new Type(Type::structure(box_node_fields, box_node_field_names));
-
-                        for (int j = 0; j < num_box_nodes; ++j) {
-                            std::stringstream box_node_name;
-                            box_node_name << "box" << j;
-                            acceleration_structure_field_names.push_back(box_node_name.str());
-                            acceleration_structure_fields.push_back(box_node);
-                        }
-                    }
-
-                    // --- instanceNodes
-                    if (num_instance_nodes > 0) {
-                        Names instance_node_field_names {
-                            "objectToWorld",
-                            "id",
-                            "customIndex",
-                            "geometryIndex",
-                            "primitiveIndex",
-                            "mask",
-                            "shaderBindingTableRecordOffset",
-                            "accelerationStructureIndex"
-                        };
-                        Fields instance_node_fields;
-                        {
-                            // --- objectToWorld
-                            unsigned num_rows = 3;
-                            unsigned num_cols = 4;
-                            Type* float_value = new Type(Type::primitive(DataType::FLOAT));
-                            Type* rows = new Type(Type::array(num_cols, *float_value));
-                            Type* matrix = new Type(Type::array(num_rows, *rows));
-                            instance_node_fields.push_back(matrix);
-
-                            // --- id
-                            instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- customIndex
-                            instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- geometryIndex
-                            instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- primitiveIndex
-                            instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- mask
-                            instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- shaderBindingTableRecordOffset
-                            instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- accelerationStructureIndex
-                            instance_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-                        }
-                        Type* instance_node =
-                            new Type(Type::structure(instance_node_fields, instance_node_field_names));
-
-                        for (int j = 0; j < num_instance_nodes; ++j) {
-                            std::stringstream instance_node_name;
-                            instance_node_name << "instance" << j;
-                            acceleration_structure_field_names.push_back(instance_node_name.str());
-                            acceleration_structure_fields.push_back(instance_node);
-                        }
-                    }
-
-                    // --- triangleNodes
-                    if (num_triangle_nodes > 0) {
-                        Names triangle_node_field_names {
-                            "geometryIndex",
-                            "primitiveIndex",
-                            "opaque",
-                            "vertices",
-                            "indices"
-                        };
-                        Fields triangle_node_fields;
-                        {
-                            // --- geometryIndex
-                            triangle_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- primitiveIndex
-                            triangle_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- opaque
-                            triangle_node_fields.push_back(new Type(Type::primitive(DataType::BOOL)));
-
-                            // --- vertices
-                            Type* float_value = new Type(Type::primitive(DataType::FLOAT));
-                            Type* vertex = new Type(Type::array(0, *float_value));
-                            triangle_node_fields.push_back(new Type(Type::array(0, *vertex)));
-
-                            // --- indices
-                            Type* indices = new Type(Type::primitive(DataType::UINT));
-                            triangle_node_fields.push_back(new Type(Type::array(0, *indices)));
-                        }
-                        Type* triangle_node =
-                            new Type(Type::structure(triangle_node_fields, triangle_node_field_names));
-
-                        for (int j = 0; j < num_triangle_nodes; ++j) {
-                            std::stringstream triangle_node_name;
-                            triangle_node_name << "triangle" << j;
-                            acceleration_structure_field_names.push_back(triangle_node_name.str());
-                            acceleration_structure_fields.push_back(triangle_node);
-                        }
-                    }
-
-                    // --- proceduralNodes
-                    if (num_procedural_nodes > 0) {
-                        Names procedural_node_field_names {
-                            "geometryIndex",
-                            "primitiveIndex",
-                            "opaque",
-                            "minBounds",
-                            "maxBounds"
-                        };
-                        Fields procedural_node_fields;
-                        {
-                            // --- geometryIndex
-                            procedural_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- primitiveIndex
-                            procedural_node_fields.push_back(new Type(Type::primitive(DataType::UINT)));
-
-                            // --- opaque
-                            procedural_node_fields.push_back(new Type(Type::primitive(DataType::BOOL)));
-
-                            // --- minBounds
-                            Type* bounds = new Type(Type::primitive(DataType::FLOAT));
-                            procedural_node_fields.push_back(new Type(Type::array(3, *bounds)));
-
-                            // --- maxBounds
-                            procedural_node_fields.push_back(new Type(Type::array(3, *bounds)));
-                        }
-                        Type* proceduralNode =
-                            new Type(Type::structure(procedural_node_fields, procedural_node_field_names));
-
-                        for (int j = 0; j < num_procedural_nodes; ++j) {
-                            std::stringstream procedural_node_name;
-                            procedural_node_name << "procedural" << j;
-                            acceleration_structure_field_names.push_back(procedural_node_name.str());
-                            acceleration_structure_fields.push_back(proceduralNode);
-                        }
-                    }
-                }
-
-                Type* acceleration_structure =
-                    new Type(Type::structure(acceleration_structure_fields, acceleration_structure_field_names));
-                std::stringstream acceleration_structure_name;
-                acceleration_structure_name << "accelerationStructure" << i;
-                names.push_back(acceleration_structure_name.str());
-                fields.push_back(acceleration_structure);
+                // <children_indices>
+                const Type* child_index_type = new Type(Type::array(2, *uint_type));
+                box_node_fields.push_back(new Type(Type::array(0, *child_index_type)));
             }
+            const Type* box_node_type = new Type(Type::structure(box_node_fields, box_node_names));
+            acceleration_structure_fields.push_back(new Type(Type::array(0, *box_node_type)));
+
+            // <instance_nodes>
+            Names instance_node_names {
+                "object_to_world_matrix",
+                "id",
+                "custom_index",
+                "geometry_index",
+                "primitive_index",
+                "mask",
+                "shader_binding_table_record_offset",
+                "acceleration_structure_index"
+            };
+            Fields instance_node_fields;
+            {
+                // <object_to_world_matrix>
+                const unsigned num_rows = 3;
+                const unsigned num_cols = 4;
+                const Type* row_of_floats_type = new Type(Type::array(num_cols, *float_type));
+                const Type* matrix_type = new Type(Type::array(num_rows, *row_of_floats_type));
+                instance_node_fields.push_back(matrix_type);
+
+                // <id>
+                instance_node_fields.push_back(uint_type);
+
+                // <custom_index>
+                instance_node_fields.push_back(uint_type);
+
+                // <geometry_index>
+                instance_node_fields.push_back(uint_type);
+
+                // <primitive_index>
+                instance_node_fields.push_back(uint_type);
+
+                // <mask>
+                instance_node_fields.push_back(uint_type);
+
+                // <shader_binding_table_record_offset>
+                instance_node_fields.push_back(uint_type);
+
+                // <acceleration_structure_index>
+                instance_node_fields.push_back(uint_type);
+            }
+            const Type* instance_node_type = new Type(Type::structure(instance_node_fields, instance_node_names));
+            acceleration_structure_fields.push_back(new Type(Type::array(0, *instance_node_type)));
+
+            // <triangle_nodes>
+            Names triangle_node_names {"geometry_index", "primitive_index", "opaque", "vertices", "indices"};
+            Fields triangle_node_fields;
+            {
+                // <geometry_index>
+                triangle_node_fields.push_back(uint_type);
+
+                // <primitive_index>
+                triangle_node_fields.push_back(uint_type);
+
+                // <opaque>
+                triangle_node_fields.push_back(bool_type);
+
+                // <vertices>
+                const Type* vertex_type = new Type(Type::array(3, *float_type));
+                triangle_node_fields.push_back(new Type(Type::array(0, *vertex_type)));
+
+                // <indices>
+                triangle_node_fields.push_back(new Type(Type::array(0, *uint_type)));
+            }
+            const Type* triangle_node_type = new Type(Type::structure(triangle_node_fields, triangle_node_names));
+            acceleration_structure_fields.push_back(new Type(Type::array(0, *triangle_node_type)));
+
+            // <procedural_nodes>
+            Names procedural_node_names {"geometry_index", "primitive_index", "opaque", "min_bounds", "max_bounds"};
+            Fields procedural_node_fields;
+            {
+                // <geometry_index>
+                procedural_node_fields.push_back(uint_type);
+
+                // <primitive_index>
+                procedural_node_fields.push_back(uint_type);
+
+                // <opaque>
+                procedural_node_fields.push_back(bool_type);
+
+                // <min_bounds>
+                procedural_node_fields.push_back(new Type(Type::array(3, *float_type)));
+
+                // <max_bounds>
+                procedural_node_fields.push_back(new Type(Type::array(3, *float_type)));
+            }
+            const Type* procedural_node_type = new Type(Type::structure(procedural_node_fields, procedural_node_names));
+            acceleration_structure_fields.push_back(new Type(Type::array(0, *procedural_node_type)));
+        }
+        Type* acceleration_structure_type =
+            new Type(Type::structure(acceleration_structure_fields, acceleration_structure_names));
+        fields.push_back(new Type(Type::array(0, *acceleration_structure_type)));
+
+        // <sbt>
+        if (has_sbt) {
+            // TODO: update during shader binding table implementation
+            throw std::runtime_error("Shader binding tables are not implemented yet!");
         }
 
-        return {names, fields};
+        return Type::accelerationStructure(fields, names);
     }
 };
