@@ -14,186 +14,187 @@
     "rayTMax" : 0.5, 
 
     "indexSBTCallable" : 727,
-    "callableData": [ 1.234, 4.321 ],
+    "callableData" : [ 1.234, 4.321 ],
     
     "accelStruct" : {
-        "accelerationStructuresInfo" : [
+        "acceleration_structures" : [
             {
-                "numBoxNodes" : 3,
-                "numInstanceNodes" : 4,
-                "numTriangleNodes" : 0,
-                "numProceduralNodes" : 0
+                "is_tlas" : true,
+                "box_nodes" : [
+                    {
+                        "min_bounds" : [ -4.0, -4.0, -7.0 ],
+                        "max_bounds" : [ 2.0, 6.0, 6.0 ],
+                        "children_indices" : [ [ 0, 0 ], [ 0, 1 ] ]
+                    },
+                    {
+                        "min_bounds" : [ -4.0, -4.0, -7.0 ],
+                        "max_bounds" : [ 2.0, 6.0, -1.0 ],
+                        "children_indices" : [ [ 1, 0 ], [ 1, 1 ] ]
+                    },
+                    {
+                        "min_bounds" : [ -4.0, -4.0, 1.0 ],
+                        "max_bounds" : [ 2.0, 6.0, 5.0 ],
+                        "children_indices" : [ [ 1, 2 ], [ 1, 3 ] ]
+                    }
+                ],
+                "instance_nodes" : [
+                    {
+                        "object_to_world_matrix" : [
+                            [ 1.0, 0.0, 0.0, 0.0 ],
+                            [ 0.0, 1.0, 0.0, 2.8 ],
+                            [ 0.0, 0.0, 1.0, -5.0 ]
+                        ],
+                        "id" : 0,
+                        "custom_index" : 0,
+                        "geometry_index" : 0,
+                        "primitive_index" : 0,
+                        "mask" : 255,
+                        "shader_binding_table_record_offset" : 0,
+                        "acceleration_structure_index" : 1
+                    },
+                    {
+                        "object_to_world_matrix" : [
+                            [ 1.0, 0.0, 0.0, 0.5 ],
+                            [ 0.0, 1.0, 0.0, 1.74 ],
+                            [ 0.0, 0.0, 1.0, -1.36 ]
+                        ],
+                        "id" : 1,
+                        "custom_index" : 1,
+                        "geometry_index" : 0,
+                        "primitive_index" : 1,
+                        "mask" : 1,
+                        "shader_binding_table_record_offset" : 0,
+                        "acceleration_structure_index" : 2
+                    },
+                    {
+                        "object_to_world_matrix" : [
+                            [ 1.4142, 0.0, -1.4142, -2.7071 ],
+                            [ 0.0, 2.0, 0.0, -2.04 ],
+                            [ 1.4142, 0.0, 1.4142, 3.1929 ]
+                        ],
+                        "id" : 2,
+                        "custom_index" : 2,
+                        "geometry_index" : 0,
+                        "primitive_index" : 2,
+                        "mask" : 255,
+                        "shader_binding_table_record_offset" : 0,
+                        "acceleration_structure_index" : 3
+                    },
+                    {
+                        "object_to_world_matrix" : [
+                            [ 1.0, 0.0, 0.0, -0.5 ],
+                            [ 0.0, 1.0, 0.0, -1.74 ],
+                            [ 0.0, 0.0, 1.0, 1.36 ]
+                        ],
+                        "id" : 3,
+                        "custom_index" : 3,
+                        "geometry_index" : 0,
+                        "primitive_index" : 3,
+                        "mask" : 1,
+                        "shader_binding_table_record_offset" : 0,
+                        "acceleration_structure_index" : 2
+                    }
+                ],
+                "triangle_nodes" : [],
+                "primitive_nodes" : []
             },
             {
-                "numBoxNodes" : 3,
-                "numInstanceNodes" : 0,
-                "numTriangleNodes" : 3,
-                "numProceduralNodes" : 1
+                "is_tlas" : false,
+                "box_nodes" : [
+                    {
+                        "min_bounds" : [ -4.0, -2.0, -1.0 ],
+                        "max_bounds" : [ 2.0, 2.0, 2.0 ],
+                        "children_indices" : [ [ 0, 0 ], [ 0, 1 ] ]
+                    },
+                    {
+                        "min_bounds" : [ 0.0, -2.0, 0.0 ],
+                        "max_bounds" : [ 2.0, 2.0, 2.0 ],
+                        "children_indices" : [ [ 2, 0 ], [ 2, 1 ] ]
+                    },
+                    {
+                        "min_bounds" : [ -4.0, -2.0, -1.0 ],
+                        "max_bounds" : [ 0.0, 0.0, 2.0 ],
+                        "children_indices" : [ [ 2, 2 ], [ 3, 0 ] ]
+                    }
+                ],
+                "instance_nodes" : [],
+                "triangle_nodes" : [
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 0,
+                        "opaque" : true,
+                        "vertices" : [ [ 0.0, 2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ 2.0, 0.0, 0.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    },
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 1,
+                        "opaque" : true,
+                        "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 2.0, 0.0, 0.0 ], [ 0.0, 0.0, 0.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    },
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 2,
+                        "opaque" : true,
+                        "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ -2.0, 0.0, 0.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    }
+                ],
+                "procedural_nodes" : [
+                    {
+                        "geometry_index" : 1,
+                        "primitive_index" : 0,
+                        "opaque" : true,
+                        "min_bounds" : [ -3.5, -1.0, -1.0 ],
+                        "max_bounds" : [ -2.5, 0.0, 0.0 ]
+                    }
+                ]
             },
             {
-                "numBoxNodes" : 0,
-                "numInstanceNodes" : 0,
-                "numTriangleNodes" : 1,
-                "numProceduralNodes" : 0
+                "is_tlas" : false,
+                "box_nodes" : [],
+                "instance_nodes" : [],
+                "triangle_nodes" : [
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 0,
+                        "opaque" : false,
+                        "vertices" : [ [ 0.0, 1.5, 0.0 ], [ -1.25, -1.25, 0.0 ], [ 1.5, 0.0, 0.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    }
+                ],
+                "procedural_nodes" : []
             },
             {
-                "numBoxNodes" : 1,
-                "numInstanceNodes" : 0,
-                "numTriangleNodes" : 2,
-                "numProceduralNodes" : 0
+                "is_tlas" : false,
+                "box_nodes" : [
+                    {
+                        "min_bounds" : [ 0.0, 0.0, -0.1 ],
+                        "max_bounds" : [ 1.0, 1.0, 0.1 ],
+                        "children_indices" : [ [ 2, 0 ], [ 2, 1 ] ]
+                    }
+                ],
+                "instance_nodes" : [],
+                "triangle_nodes" : [
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 0,
+                        "opaque" : true,
+                        "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 1.0, 1.0, 0.0 ], [ 1.0, 0.0, 0.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    },
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 1,
+                        "opaque" : true,
+                        "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 0.0, 1.0, 0.0 ], [ 1.0, 1.0, 0.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    }
+                ],
+                "procedural_nodes" : []
             }
         ],
-        "accelerationStructure0" : {
-            "isTLAS" : true,
-            "box0" : {
-                "minBounds": [ -4.0, -4.0, -7.0 ],
-                "maxBounds": [ 2.0, 6.0, 6.0 ],
-                "childrenIndices" : [ 1, 2 ]
-            },
-            "box1" : {
-                "minBounds": [ -4.0, -4.0, -7.0 ],
-                "maxBounds": [ 2.0, 6.0, -1.0 ],
-                "childrenIndices" : [ 3, 4 ]
-            },
-            "box2" : {
-                "minBounds": [ -4.0, -4.0, 1.0 ],
-                "maxBounds": [ 2.0, 6.0, 5.0 ],
-                "childrenIndices" : [ 5, 6 ]
-            },
-            "instance0" : {
-                "objectToWorldMatrix" : [ // Translate
-                    [ 1.0, 0.0, 0.0, 0.0 ],
-                    [ 0.0, 1.0, 0.0, 2.8 ],
-                    [ 0.0, 0.0, 1.0, -5.0 ]
-                ],
-                "id" : 0,
-                "customIndex" : 0,
-                "geometryIndex" : 0,
-                "primitiveIndex" : 0,
-                "mask" : 255, // 0xFF
-                "shaderBindingTableRecordOffset" : 0,
-                "accelerationStructureIndex" : 1
-            },
-            "instance1" : { // Single triangle
-                "objectToWorldMatrix" : [ // Translate
-                    [ 1.0, 0.0, 0.0, 0.5 ],
-                    [ 0.0, 1.0, 0.0, 1.74 ],
-                    [ 0.0, 0.0, 1.0, -1.36 ]
-                ],
-                "id" : 1,
-                "customIndex" : 1,
-                "geometryIndex" : 0,
-                "primitiveIndex" : 1,
-                "mask" : 1, // 0x1
-                "shaderBindingTableRecordOffset" : 0,
-                "accelerationStructureIndex" : 2
-            },
-            "instance2" : {
-                "objectToWorldMatrix" : [ // Translate to center -> Rotate by 45 degrees -> Scale by 2 -> Translate
-                    [ 1.4142, 0.0, -1.4142, -2.7071 ],
-                    [ 0.0, 2.0, 0.0, -2.04 ],
-                    [ 1.4142, 0.0, 1.4142, 3.1929 ]
-                ],
-                "id" : 2,
-                "customIndex" : 2,
-                "geometryIndex" : 0,
-                "primitiveIndex" : 2,
-                "mask" : 255, // 0xFF
-                "shaderBindingTableRecordOffset" : 0,
-                "accelerationStructureIndex" : 3
-            },
-            "instance3" : { // Single triangle
-                "objectToWorldMatrix" : [ // Translate
-                    [ 1.0, 0.0, 0.0, -0.5 ],
-                    [ 0.0, 1.0, 0.0, -1.74 ],
-                    [ 0.0, 0.0, 1.0, 1.36 ]
-                ],
-                "id" : 3,
-                "customIndex" : 3,
-                "geometryIndex" : 0,
-                "primitiveIndex" : 3,
-                "mask" : 1, // 0x1
-                "shaderBindingTableRecordOffset" : 0,
-                "accelerationStructureIndex" : 2
-            }
-        },
-        "accelerationStructure1" : {
-            "isTLAS" : false,
-            "box0" : {
-                "minBounds": [ -4.0, -2.0, -1.0 ],
-                "maxBounds": [ 2.0, 2.0, 2.0 ],
-                "childrenIndices" : [ 1, 2 ]
-            },
-            "box1" : {
-                "minBounds": [ 0.0, -2.0, 0.0 ],
-                "maxBounds": [ 2.0, 2.0, 2.0 ],
-                "childrenIndices" : [ 3, 4 ]
-            },
-            "box2" : {
-                "minBounds": [ -4.0, -2.0, -1.0 ],
-                "maxBounds": [ 0.0, 0.0, 2.0 ],
-                "childrenIndices" : [ 5, 6 ]
-            },
-            "triangle0" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 0,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, 2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ 2.0, 0.0, 0.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            },
-            "triangle1" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 1,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 2.0, 0.0, 0.0 ], [ 0.0, 0.0, 0.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            },
-            "triangle2" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 2,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ -2.0, 0.0, 0.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            },
-            "procedural0" : {
-                "geometryIndex" : 1,
-                "primitiveIndex" : 0,
-                "opaque" : true,
-                "minBounds" : [ -3.5, -1.0, -1.0 ],
-                "maxBounds" : [ -2.5, 0.0, 0.0 ]
-            }
-        },
-        "accelerationStructure2" : {
-            "isTLAS" : false,
-            "triangle0" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 0,
-                "opaque" : false,
-                "vertices" : [ [ 0.0, 1.5, 0.0 ], [ -1.25, -1.25, 0.0 ], [ 1.5, 0.0, 0.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            }
-        },
-        "accelerationStructure3" : {
-            "isTLAS" : false,
-            "box0" : {
-                "minBounds": [ 0.0, 0.0, -0.1 ],
-                "maxBounds": [ 1.0, 1.0, 0.1 ],
-                "childrenIndices" : [ 1, 2 ]
-            },
-            "triangle0" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 0,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 1.0, 1.0, 0.0 ], [ 1.0, 0.0, 0.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            },
-            "triangle1" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 1,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 0.0, 1.0, 0.0 ], [ 1.0, 1.0, 0.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            }
-        }
+        "shader_binding_table" : []
     }
 }

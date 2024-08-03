@@ -8,107 +8,107 @@
         "tMax" : 1000.0
     },
     "TLAS" : {
-        "accelerationStructuresInfo" : [
+        "acceleration_structures" : [
             {
-                "numBoxNodes" : 1,
-                "numInstanceNodes" : 3,
-                "numTriangleNodes" : 0,
-                "numProceduralNodes" : 0
+                "is_tlas" : true,
+                "box_nodes" : [
+                    {
+                        "min_bounds" : [ -1000.0, -1.0, -1000.0 ],
+                        "max_bounds" : [ 1000.0, 6.0, 1000.0 ],
+                        "children_indices" : [ [ 1, 0 ], [ 1, 1 ], [ 1, 2 ] ]
+                    }
+                ],
+                "instance_nodes" : [
+                    {
+                        "object_to_world_matrix" : [
+                            [ 1.0, 0.0, 0.0, 0.0 ],
+                            [ 0.0, 1.0, 0.0, -0.5 ],
+                            [ 0.0, 0.0, 1.0, 0.0 ]
+                        ],
+                        "id" : 0,
+                        "custom_index" : 0,
+                        "geometry_index" : 0,
+                        "primitive_index" : 0,
+                        "mask" : 255,
+                        "shader_binding_table_record_offset" : 0,
+                        "acceleration_structure_index" : 1
+                    },
+                    {
+                        "object_to_world_matrix" : [
+                            [ 1.0, 0.0, 0.0, 0.0 ],
+                            [ 0.0, 1.0, 0.0, -1.0 ],
+                            [ 0.0, 0.0, 1.0, 0.0 ]
+                        ],
+                        "id" : 1,
+                        "custom_index" : 1,
+                        "geometry_index" : 0,
+                        "primitive_index" : 1,
+                        "mask" : 255,
+                        "shader_binding_table_record_offset" : 0,
+                        "acceleration_structure_index" : 2
+                    },
+                    {
+                        "object_to_world_matrix" : [
+                            [ 3.0, 0.0, 0.0, -3.0 ],
+                            [ 0.0, 3.0, 0.0, 0.5 ],
+                            [ 0.0, 0.0, 3.0, 0.0 ]
+                        ],
+                        "id" : 2,
+                        "custom_index" : 2,
+                        "geometry_index" : 0,
+                        "primitive_index" : 2,
+                        "mask" : 255,
+                        "shader_binding_table_record_offset" : 0,
+                        "acceleration_structure_index" : 1
+                    }  
+                ],
+                "triangle_nodes" : [],
+                "procedural_nodes" : []
             },
             {
-                "numBoxNodes" : 0,
-                "numInstanceNodes" : 0,
-                "numTriangleNodes" : 0,
-                "numProceduralNodes" : 1
+                "is_tlas" : false,
+                "box_nodes" : [],
+                "instance_nodes" : [],
+                "triangle_nodes" : [],
+                "procedural_nodes" : [
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 0,
+                        "opaque" : true,
+                        "min_bounds" : [ -0.5, -0.5, -0.5 ],
+                        "max_bounds" : [ 0.5, 0.5, 0.5 ]
+                    }
+                ]
             },
             {
-                "numBoxNodes" : 1,
-                "numInstanceNodes" : 0,
-                "numTriangleNodes" : 2,
-                "numProceduralNodes" : 0
+                "is_tlas" : false,
+                "box_nodes" : [
+                    {
+                        "min_bounds" : [ -100.0, -1.0, -100.0 ],
+                        "max_bounds" : [ 100.0, 0.0, 100.0 ],
+                        "children_indices" : [ [2, 0], [2, 1] ]
+                    }
+                ],
+                "instance_nodes" : [],
+                "triangle_nodes" : [
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 0,
+                        "opaque" : true,
+                        "vertices" : [ [ -1000.0, 0.0, -1000.0 ], [ 1000.0, 0.0, -1000.0 ], [ -1000.0, 0.0, 1000.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    },
+                    {
+                        "geometry_index" : 0,
+                        "primitive_index" : 1,
+                        "opaque" : true,
+                        "vertices" : [ [ 1000.0, 0.0, 1000.0 ], [ -1000.0, 0.0, 1000.0 ], [ 1000.0, 0.0, -1000.0 ] ],
+                        "indices" : [ 0, 1, 2 ]
+                    }
+                ],
+                "procedural_nodes" : []
             }
         ],
-        "accelerationStructure0" : {
-            "isTLAS" : true,
-            "box0" : {
-                "minBounds" : [ -1000.0, -1.0, -1000.0 ],
-                "maxBounds" : [ 1000.0, 6.0, 1000.0 ],
-                "childrenIndices" : [ 1, 2, 3 ]
-            },
-            "instance0_sphere" : {
-                "objectToWorldMatrix" : [
-                    [ 1.0, 0.0, 0.0, 0.0 ],
-                    [ 0.0, 1.0, 0.0, -0.5 ],
-                    [ 0.0, 0.0, 1.0, 0.0 ]
-                ],
-                "id" : 0,
-                "customIndex" : 0,
-                "geometryIndex" : 0,
-                "primitiveIndex" : 0,
-                "mask" : 255,
-                "shaderBindingTableRecordOffset" : 0,
-                "accelerationStructureIndex" : 1
-            },
-            "instance1_floor" : {
-                "objectToWorldMatrix" : [
-                    [ 1.0, 0.0, 0.0, 0.0 ],
-                    [ 0.0, 1.0, 0.0, -1.0 ],
-                    [ 0.0, 0.0, 1.0, 0.0 ]
-                ],
-                "id" : 1,
-                "customIndex" : 1,
-                "geometryIndex" : 0,
-                "primitiveIndex" : 1,
-                "mask" : 255,
-                "shaderBindingTableRecordOffset" : 0,
-                "accelerationStructureIndex" : 2
-            },
-            "instance2_reflective_sphere" : {
-                "objectToWorldMatrix" : [
-                    [ 3.0, 0.0, 0.0, -3.0 ],
-                    [ 0.0, 3.0, 0.0, 0.5 ],
-                    [ 0.0, 0.0, 3.0, 0.0 ]
-                ],
-                "id" : 2,
-                "customIndex" : 2,
-                "geometryIndex" : 0,
-                "primitiveIndex" : 2,
-                "mask" : 255,
-                "shaderBindingTableRecordOffset" : 0,
-                "accelerationStructureIndex" : 1
-            }
-        },
-        "accelerationStructure1_sphere" : {
-            "isTLAS" : false,
-            "procedural0" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 0,
-                "opaque" : true,
-                "minBounds" : [ -0.5, -0.5, -0.5 ],
-                "maxBounds" : [ 0.5, 0.5, 0.5 ]
-            }
-        },
-        "accelerationStructure2_floor" : {
-            "isTLAS" : false,
-            "box0" : {
-                "minBounds": [ -100.0, -1.0, -100.0 ],
-                "maxBounds": [ 100.0, 0.0, 100.0 ],
-                "childrenIndices" : [ 1, 2 ]
-            },
-            "triangle0" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 0,
-                "opaque" : true,
-                "vertices" : [ [ -1000.0, 0.0, -1000.0 ], [ 1000.0, 0.0, -1000.0 ], [ -1000.0, 0.0, 1000.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            },
-            "triangle1" : {
-                "geometryIndex" : 0,
-                "primitiveIndex" : 1,
-                "opaque" : true,
-                "vertices" : [ [ 1000.0, 0.0, 1000.0 ], [ -1000.0, 0.0, 1000.0 ], [ 1000.0, 0.0, -1000.0 ] ],
-                "indices" : [ 0, 1, 2 ]
-            }
-        }
+        "shader_binding_table" : []
     }
 }
