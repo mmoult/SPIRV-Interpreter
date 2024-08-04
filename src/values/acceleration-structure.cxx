@@ -535,7 +535,7 @@ public:
         }
 
         // Box nodes
-        for (unsigned i = 0; i < num_box_nodes; ++i) {
+        for (int i = num_box_nodes - 1; i >= 0; --i) {
             const Struct& box_info = static_cast<const Struct&>(*(box_node_infos[i]));
 
             // Bounds
@@ -564,30 +564,29 @@ public:
             }
 
             std::vector<std::shared_ptr<Node>> children;
-            for (unsigned i = 0; i < children_indices.size(); ++i) {
-                const auto& child_index = children_indices[i];
+            for (const auto& child_index : children_indices) {
                 assert(child_index[0] < 4);  // Make sure it's a valid node type
                 const NodeType node_type = static_cast<NodeType>(child_index[0]);
-                unsigned index = i;
+                unsigned index = 0;
                 switch (node_type) {
                 case NodeType::Box: {
-                    index +=
+                    index =
                         instance_node_infos.getSize() + triangle_node_infos.getSize() + procedural_node_infos.getSize();
                     break;
                 }
                 case NodeType::Instance: {
-                    index += triangle_node_infos.getSize() + procedural_node_infos.getSize();
+                    index = triangle_node_infos.getSize() + procedural_node_infos.getSize();
                     break;
                 }
                 case NodeType::Triangle: {
-                    index += procedural_node_infos.getSize();
+                    index = procedural_node_infos.getSize();
                     break;
                 }
                 case NodeType::Procedural: {
                     break;
                 }
                 }
-                children.push_back(std::move(nodes[index]));
+                children.push_back(std::move(nodes[index + child_index[1]]));
             }
 
             nodes.push_back(std::make_shared<BoxNode>(min_bounds, max_bounds, children));
