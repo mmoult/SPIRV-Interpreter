@@ -4,12 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 #define SPV_ENABLE_UTILITY_CODE 1
@@ -104,6 +106,10 @@ Instruction* Instruction::readOp(
     case spv::OpReturn: // 253
     case spv::OpNoLine: // 317
     case spv::OpTerminateInvocation: // 4416
+    case spv::OpIgnoreIntersectionKHR: // 4448
+    case spv::OpTerminateRayKHR: // 4449
+    case spv::OpTypeRayQueryKHR: // 4472
+    case spv::OpTypeAccelerationStructureKHR: // 5341
         // no operands to handle (besides result and type, if present)
         break;
     case spv::OpSource: // 3
@@ -188,6 +194,7 @@ Instruction* Instruction::readOp(
     case spv::OpSDiv: // 135
     case spv::OpFDiv: // 136
     case spv::OpUMod: // 137
+    case spv::OpFMod: // 141
     case spv::OpVectorTimesScalar: // 142
     case spv::OpMatrixTimesScalar: // 143
     case spv::OpVectorTimesMatrix: // 144
@@ -226,6 +233,22 @@ Instruction* Instruction::readOp(
     case spv::OpBitwiseOr: // 197
     case spv::OpBitwiseXor: // 198
     case spv::OpBitwiseAnd: // 199
+    case spv::OpExecuteCallableKHR: // 4446
+    case spv::OpRayQueryGenerateIntersectionKHR: // 4475
+    case spv::OpRayQueryGetIntersectionTypeKHR: // 4479
+    case spv::OpReportIntersectionKHR: // 5334
+    case spv::OpRayQueryGetIntersectionTKHR: // 6018
+    case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: // 6019
+    case spv::OpRayQueryGetIntersectionInstanceIdKHR: // 6020
+    case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: // 6021
+    case spv::OpRayQueryGetIntersectionGeometryIndexKHR: // 6022
+    case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: // 6023
+    case spv::OpRayQueryGetIntersectionBarycentricsKHR: // 6024
+    case spv::OpRayQueryGetIntersectionFrontFaceKHR: // 6025
+    case spv::OpRayQueryGetIntersectionObjectRayDirectionKHR: // 6027
+    case spv::OpRayQueryGetIntersectionObjectRayOriginKHR: // 6028
+    case spv::OpRayQueryGetIntersectionObjectToWorldKHR: // 6031
+    case spv::OpRayQueryGetIntersectionWorldToObjectKHR: // 6032
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
@@ -244,6 +267,15 @@ Instruction* Instruction::readOp(
     case spv::OpNot: // 200
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
+    case spv::OpConvertUToAccelerationStructureKHR: // 4447
+    case spv::OpRayQueryTerminateKHR: // 4474
+    case spv::OpRayQueryConfirmIntersectionKHR: // 4476
+    case spv::OpRayQueryProceedKHR: // 4477
+    case spv::OpRayQueryGetRayTMinKHR: // 6016
+    case spv::OpRayQueryGetRayFlagsKHR: // 6017
+    case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: // 6026
+    case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
+    case spv::OpRayQueryGetWorldRayOriginKHR: // 6030
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeStruct: // 30
@@ -343,6 +375,13 @@ Instruction* Instruction::readOp(
         to_load.push_back(Type::CONST);
         optional.push_back(Type::REF);
         repeating = true;
+    case spv::OpTraceRayKHR: // 4445
+        for (int i = 0; i < 11; ++i)
+            to_load.push_back(Type::REF);
+        break;
+    case spv::OpRayQueryInitializeKHR: // 4473
+        for (int i = 0; i < 8; ++i)
+            to_load.push_back(Type::REF);
         break;
     }
 

@@ -1,0 +1,89 @@
+#version 460 core
+#extension GL_EXT_ray_tracing : require
+
+layout(location = 0) in vec3 sphereCenter;
+layout(location = 1) in float sphereRadius;
+layout(location = 2) out uint reportIntersectionResult;
+
+struct IntersectionProperties
+{
+    vec3 normal;
+    float hit_t;
+    bool intersected;
+};
+
+hitAttributeEXT IntersectionProperties intersectionResults;
+
+const float MAX_HIT_T = 10000000000.0;
+const uint HIT_KIND_NONE = 0;
+const uint HIT_KIND_SPHERE = 1;
+
+IntersectionProperties raySphereIntersection(vec3 sphere_center, float sphere_radius, vec3 ray_origin, vec3 ray_direction, float ray_t_min, float ray_t_max)
+{
+    // Assume the ray will miss
+    IntersectionProperties result;
+    result.normal = vec3(0.0);
+    result.hit_t = MAX_HIT_T;
+    result.intersected = false;
+
+    // Solves the intersection by using an analytic solution.
+    // Let (origin - sphere_center) be x.
+    // We are solving [(dir * dir) * t^2 + (2 * dir . x) * t + (x . x) - radius^2 = 0],
+    // or ||ray_o + ray_dir * t||^2 = r^2.
+    vec3 dist_o_c = ray_origin - sphere_center; // Distance between the ray's origin and the sphere's center
+    float a = dot(ray_direction, ray_direction);
+    float b = 2.0 * dot(ray_direction, dist_o_c);
+    float c = dot(dist_o_c, dist_o_c) - (sphere_radius * sphere_radius);
+
+    float discriminant = (b * b) - (4.0 * a * c);
+
+    if (discriminant >= 0)
+    {
+        // Set it to the smaller solution
+        float hit_t = (-b - sqrt(discriminant)) / (2.0 * a);
+
+        if (hit_t < ray_t_min || hit_t > ray_t_max)
+        {
+            // Set it to the other solution
+            hit_t = (-b - sqrt(discriminant)) / (2.0 * a);
+        }
+
+        if (hit_t < ray_t_min || hit_t > ray_t_max)
+        {
+            // If entered this if-statement, both solutions are bad
+            return result;
+        }
+
+        result.intersected = true;
+        result.hit_t = hit_t;
+        result.normal = normalize((ray_origin + ray_direction * result.hit_t) - sphere_center);
+    }
+
+    return result;
+}
+
+void main() 
+{
+    const vec3 ray_origin = gl_ObjectRayOriginEXT;
+    const vec3 ray_direction = gl_ObjectRayDirectionEXT;
+    const float ray_t_min = 0.0;
+    const float ray_t_max = 1000.0;
+
+    const IntersectionProperties result = raySphereIntersection (
+        sphereCenter, 
+        sphereRadius, 
+        ray_origin, 
+        ray_direction,
+        ray_t_min,
+        ray_t_max
+    );
+
+    uint hit_kind = HIT_KIND_NONE;
+    if (result.intersected)
+    {
+        intersectionResults = result;
+        hit_kind = HIT_KIND_SPHERE;
+    }
+
+    reportIntersectionResult = uint(reportIntersectionEXT(result.hit_t, hit_kind));
+}

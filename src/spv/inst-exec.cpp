@@ -7,6 +7,7 @@ module;
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -22,7 +23,10 @@ module spv.instruction;
 import spv.data.data;
 import spv.frame;
 import spv.token;
+import value.accelerationStructure;
+import value.aggregate;
 import value.primitive;
+import value.rayQuery;
 
 bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
     bool inc_pc = true;
@@ -194,6 +198,143 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         inc_pc = pop_frame();
         // Save the return onto the previous frame
         frame_stack.back()->getData()[ret_at].redefine(ret);
+        break;
+    }
+    case spv::OpTraceRayKHR: { // 4445
+        // --- Get the arguments
+        AccelerationStructureManager& as = static_cast<AccelerationStructureManager&>(*getValue(0, data));
+
+        const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
+        const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
+        const unsigned offset_sbt = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+        const unsigned stride_sbt = static_cast<Primitive&>(*getValue(4, data)).data.u32;
+        const unsigned miss_index = static_cast<Primitive&>(*getValue(5, data)).data.u32;
+
+        Array& ray_origin_info = static_cast<Array&>(*getValue(6, data));
+        std::vector<float> ray_origin;
+        for (unsigned i = 0; i < ray_origin_info.getSize(); ++i)
+            ray_origin.push_back(static_cast<Primitive&>(*(ray_origin_info[i])).data.fp32);
+
+        const float ray_t_min = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
+
+        Array& ray_direction_info = static_cast<Array&>(*getValue(8, data));
+        std::vector<float> rayDirection;
+        for (unsigned i = 0; i < ray_direction_info.getSize(); ++i)
+            rayDirection.push_back(static_cast<Primitive&>(*(ray_direction_info[i])).data.fp32);
+
+        assert(ray_origin.size() == rayDirection.size());
+
+        const float ray_t_max = static_cast<Primitive&>(*getValue(9, data)).data.fp32;
+
+        auto payload_pointer = getFromPointer(10, data);
+
+        // --- Execute instruction
+        // Run it through our implementation of a ray tracing pipeline
+        // Only the 8 least-significant bits of Cull Mask are used in this instruction
+        // Only the 4 least-significant bits of SBT Offset are used in this instruction
+        // Only the 4 least-significant bits of SBT Stride are used in this instruction
+        // Only the 16 least-significant bits of Miss Index are used in this instruction
+        const bool intersect_geometry = as.traceRay(
+            ray_flags,
+            cull_mask & 0xFF,
+            ray_origin,
+            rayDirection,
+            ray_t_min,
+            ray_t_max,
+            true,
+            offset_sbt & 0xF,
+            stride_sbt & 0xF,
+            miss_index & 0xFFFF
+        );
+
+        // --- Store the data into the payload
+
+        // TODO: currently, payload stores if a geometry was intersected (a boolean).
+        // Must update once SBTs are implemented.
+        as.fillPayloadWithBool(payload_pointer, intersect_geometry);
+
+        break;
+    }
+    case spv::OpExecuteCallableKHR: { // 4446
+        // TODO: call the callable shader once there is SBT support
+        const unsigned index_sbt = static_cast<Primitive&>(*getValue(0, data)).data.u32;
+        const auto shader_args = getFromPointer(1, data);
+        std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
+        std::cout << "Invoking callable shader at SBT index = (" << index_sbt << ") with argument of type ("
+                  << shader_args->getType().getBase() << ")" << std::endl;
+        break;
+    }
+    case spv::OpIgnoreIntersectionKHR: { // 4448
+        // TODO: update once interpreter supports SBTs
+        std::cout << "WARNING: OpIgnoreIntersectionKHR instruction does nothing as the moment!" << std::endl;
+        std::cout << "\tShould terminate the calling any-hit shader and continue ray traversal without modifying "
+                     "gl_RayTmaxEXT and gl_RayTminEXT."
+                  << std::endl;
+
+        // TODO: temporarily do what OpReturn does
+        // verify that the stack didn't expect a return value
+        if (frame.hasReturn())
+            throw std::runtime_error("Missing value for function return!");
+        inc_pc = pop_frame();  // don't increment PC if we are at the end of program
+
+        break;
+    }
+    case spv::OpTerminateRayKHR: { // 4449
+        // TODO: update once interpreter supports SBTs
+        std::cout << "WARNING: OpTerminateRayKHR instruction does nothing as the moment!" << std::endl;
+        std::cout << "\tShould stop the ray traversal and invoke the closest hit shader." << std::endl;
+
+        // TODO: temporarily do what OpReturn does
+        // verify that the stack didn't expect a return value
+        if (frame.hasReturn())
+            throw std::runtime_error("Missing value for function return!");
+        inc_pc = pop_frame();  // don't increment PC if we are at the end of program
+
+        break;
+    }
+    case spv::OpRayQueryInitializeKHR: { // 4473
+        // --- Get the arguments
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
+        AccelerationStructureManager& as = static_cast<AccelerationStructureManager&>(*getValue(1, data));
+        const unsigned ray_flags = static_cast<Primitive&>(*getValue(2, data)).data.u32;
+        const unsigned cull_mask = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        Array& ray_origin_info = static_cast<Array&>(*getValue(4, data));
+        std::vector<float> ray_origin;
+        for (unsigned i = 0; i < ray_origin_info.getSize(); ++i)
+            ray_origin.push_back(static_cast<Primitive&>(*(ray_origin_info[i])).data.fp32);
+
+        const float ray_t_min = static_cast<Primitive&>(*getValue(5, data)).data.fp32;
+
+        Array& ray_direction_info = static_cast<Array&>(*getValue(6, data));
+        std::vector<float> ray_direction;
+        for (unsigned i = 0; i < ray_direction_info.getSize(); ++i)
+            ray_direction.push_back(static_cast<Primitive&>(*(ray_direction_info[i])).data.fp32);
+
+        assert(ray_origin.size() == ray_direction.size());
+
+        const float rayTMax = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
+
+        // --- Initialize the ray query
+        // Only 8-least significant bits of cull mask are used.
+        ray_query.initialize(as, ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, rayTMax);
+
+        break;
+    }
+    case spv::OpRayQueryTerminateKHR: { // 4474
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
+        ray_query.terminate();
+        break;
+    }
+    case spv::OpRayQueryGenerateIntersectionKHR: { // 4475
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
+        const float hit_t = static_cast<Primitive&>(*getValue(1, data)).data.fp32;
+        ray_query.generateIntersection(hit_t);
+        break;
+    }
+    case spv::OpRayQueryConfirmIntersectionKHR: { // 4476
+        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
+        ray_query.confirmIntersection();
         break;
     }
     }

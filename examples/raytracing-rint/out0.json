@@ -1,0 +1,8 @@
+{
+    "intersectionResults" : {
+        "normal" : [ -0.548392, -0.13, 0.826054 ],
+        "hit_t" : 0.204019,
+        "intersected" : true
+    },
+    "reportIntersectionResult" : 1
+}

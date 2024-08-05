@@ -1,0 +1,4 @@
+{
+    "gl_WorldRayDirectionEXT" : [ 10.0, 0.0, -20.0 ],
+    "hitPayload" : [ 0.0, 0.0, 0.0 ]
+}

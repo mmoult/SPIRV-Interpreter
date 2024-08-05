@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "value.hpp"
+import value.accelerationStructure;
 import value.aggregate;
 import value.primitive;
+import value.rayQuery;
 import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values) const {
@@ -56,6 +58,10 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     }
     case DataType::STRING:
         return new String("");
+    case DataType::RAY_TRACING_ACCELERATION_STRUCTURE:
+        return new AccelerationStructureManager(*this);
+    case DataType::RAY_QUERY:
+        return new RayQuery(*this);
     // TODO support other types
     }
 }
@@ -158,31 +164,50 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
         throw std::invalid_argument(error.str());
     }
     case DataType::ARRAY: {
-        if (other.base != base)
+        if (other.base != base && other.subElement->base != DataType::VOID && subElement->base != DataType::VOID)
             throw std::invalid_argument("Cannot find union of array and non-array types!");
-        if (other.subSize != subSize) {
-            std::stringstream error;
-            error << "Cannot find union between arrays of different sizes (" << subSize << " and ";
-            error << other.subSize << ")!";
-            throw std::invalid_argument(error.str());
+
+        // Assume a void type array will become the other array type if it's a non-void type
+        if (other.subElement->base == DataType::VOID || subElement->base == DataType::VOID) {
+            if (other.subElement->base == DataType::VOID && subElement->base == DataType::VOID)
+                return Type::array(0, *(new Type(Type::primitive(DataType::VOID))));
+            else if (other.subElement->base == DataType::VOID)
+                return Type::array(0, *(new Type((*subElement))));
+            else if (subElement->base == DataType::VOID)
+                return Type::array(0, *(new Type((*other.subElement))));
         }
+
         // Find the union of their subElements
+        const unsigned new_size = (other.subSize == 0 || subSize == 0 || other.subSize != subSize) ? 0 : subSize;
         Type sub = subElement->unionOf(*other.subElement);
+
         // Because the subElement is a const pointer, we need for the sub to be equal to one or the other so we can
         // borrow it as the subElement for the new unioned type
-        if (sub == *subElement)
+        if (sub == *subElement && subSize == new_size)
             return *this;
-        else if (sub == *other.subElement)
-            return *other.subElement;
-        throw std::runtime_error("Cannot currently take union of arrays with different unioned subelements!");
+        else if (sub == *other.subElement && other.subSize == new_size)
+            return other;
+        else  // Create a new unioned type
+            return Type::array(new_size, *(new Type(sub)));
     }
     case DataType::STRUCT: {
         // TODO more complex logic to compare nonequivalent types
         // The issue is data management- we may need to construct a new type, but if that type is discarded or
         // superseded, data is leaked. The function may need an extra argument of new datas to be deleted if the value
         // is discarded
+
+        // Check if the two structs are the same
         if (*this == other)
             return *this;
+
+        // Try to create a unioned struct
+        if (subList.size() == other.subList.size()) {
+            std::vector<const Type*> new_sub_list;
+            for (unsigned i = 0; i < subList.size(); ++i)
+                new_sub_list.push_back(new Type(subList[i]->unionOf(*other.subList[i])));
+            return *(new Type(Type::structure(new_sub_list, nameList)));
+        }
+
         throw std::runtime_error("Cannot currently take union of different struct types!");
     }
     // TODO support other types
@@ -208,6 +233,8 @@ Value* Type::asValue(std::vector<Type*>& to_delete) const {
     SIMPLE(VOID, void);
     SIMPLE(FUNCTION, function);
     SIMPLE(POINTER, pointer);
+    SIMPLE(RAY_TRACING_ACCELERATION_STRUCTURE, accelerationStructure);
+    SIMPLE(RAY_QUERY, rayQuery);
     }
 #undef SIMPLE
 }

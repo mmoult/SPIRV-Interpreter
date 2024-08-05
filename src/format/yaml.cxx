@@ -16,6 +16,7 @@ module;
 #include "../values/value.hpp"
 export module format.yaml;
 import format.parse;
+import value.accelerationStructure;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
@@ -429,7 +430,15 @@ private:
             out << strv.get();
             break;
         }
-        default: // VOID, FUNCTION
+        case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
+            const auto& accel_struct_manager = static_cast<const AccelerationStructureManager&>(value);
+            const Type accel_struct_type = accel_struct_manager.getExpectedType();
+            Struct structure = Struct(Type::structure(accel_struct_type.getFields(), accel_struct_type.getNames()));
+            structure.dummyFill();
+            printValue(out, structure, 1);
+            break;
+        }
+        default: // VOID, FUNCTION, RAY_QUERY
             throw std::runtime_error("Cannot print value!");
         }
     }
