@@ -116,7 +116,7 @@ RayQueryResults runRayQuery(float ray_t_min, float ray_t_max)
             const vec3 d = rayQueryGetIntersectionObjectRayDirectionEXT(rayQuery, false);
             const int procedural_custom_index = rayQueryGetIntersectionInstanceCustomIndexEXT(rayQuery, false);
             IntersectionProperties ip;
-            if (procedural_custom_index == PROCEDURAL_SPHERE_0_CUSTOM_INDEX || 
+            if (procedural_custom_index == PROCEDURAL_SPHERE_0_CUSTOM_INDEX ||
                 procedural_custom_index == PROCEDURAL_SPHERE_1_CUSTOM_INDEX)
             {
                 ip = raySphereIntersection(0.5, o, d, ray_t_min, ray_t_max);
@@ -151,7 +151,7 @@ vec3 getColor(int custom_index, vec3 curr_ray_origin, vec3 curr_ray_direction, v
         if (mod(total, 2.0) == 0.0)
         {
             color = vec3(0.65, 0.75, 0.4);
-        } 
+        }
         else {
             color = vec3(1.0);
         }
@@ -194,7 +194,7 @@ vec3 getColor(int custom_index, vec3 curr_ray_origin, vec3 curr_ray_direction, v
     RayQueryResults ray_query_results = runRayQuery(0.0, ray.tMax);
 
     const uint committed_type = rayQueryGetIntersectionTypeEXT(rayQuery, true);
-    if (committed_type != gl_RayQueryCommittedIntersectionNoneEXT) 
+    if (committed_type != gl_RayQueryCommittedIntersectionNoneEXT)
     {
         color *= vec3(0.15);
     }
@@ -220,7 +220,7 @@ void main()
     outColor = getColor(custom_index, ray.origin, ray.direction, ray_query_results.normal);
 
     // Reflection (depth of 1)
-    if (custom_index == PROCEDURAL_SPHERE_1_CUSTOM_INDEX) 
+    if (custom_index == PROCEDURAL_SPHERE_1_CUSTOM_INDEX)
     {
         // Re-run the ray query
         rayQueryInitializeEXT(rayQuery, TLAS, ray.flags, ray.cullMask, ray.origin, ray.tMin, ray.direction, ray.tMax);
@@ -239,7 +239,7 @@ void main()
         vec3 newRayPos = ray.origin + ray.direction * hit_t + new_ray_pos_offset;
         rayQueryInitializeEXT(rayQuery, TLAS, ray.flags, ray.cullMask, newRayPos, 0.0, reflect_dir, ray.tMax);
         runRayQuery(0.0, ray.tMax);
-        
+
         committed_type = rayQueryGetIntersectionTypeEXT(rayQuery, true);
         if (committed_type != gl_RayQueryCommittedIntersectionNoneEXT)
         {

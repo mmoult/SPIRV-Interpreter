@@ -132,6 +132,14 @@ int main(int argc, char* argv[]) {
         "be printed instead of <type> stubs.",
         "t"
     );
+    ArgParse::Flag unused;
+    parser.addOption(
+        &unused,
+        "unused",
+        "Generates default values for missing inputs. Useful for variables which exist in the shader interface but have"
+        " no semantic value (for example, if unused).",
+        "u"
+    );
     ArgParse::Flag version;
     parser.addOption(&version, "version", "Print version info and exit.", "v");
     ArgParse::StringOption spv_arg("FILE");
@@ -263,7 +271,7 @@ int main(int argc, char* argv[]) {
 
     // Verify that the inputs loaded match what the program expects
     try {
-        program.checkInputs(inputs);
+        program.checkInputs(inputs, unused.enabled);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROG_INPUT;

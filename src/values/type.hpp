@@ -12,21 +12,47 @@
 #include <string>
 #include <vector>
 
-enum DataType : unsigned {
-    FLOAT = 0,
-    UINT = 1,
-    INT = 2,
-    BOOL = 3,
-    STRUCT = 4,
-    ARRAY = 5,
-    STRING = 6,
+enum class DataType {
+    FLOAT,
+    UINT,
+    INT,
+    BOOL,
+    STRUCT,
+    ARRAY,
+    STRING,
     // Above is usable in TOML, below only internal to SPIR-V
-    VOID = 7,
-    FUNCTION = 8,
-    POINTER = 9,
-    RAY_TRACING_ACCELERATION_STRUCTURE = 10,
-    RAY_QUERY = 11
+    VOID,
+    FUNCTION,
+    POINTER,
+    ACCEL_STRUCT,
+    RAY_QUERY,
 };
+
+inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
+#define SWITCH(NAME) \
+    case DataType::NAME: { \
+        std::string str = #NAME; \
+        os << str; \
+        break; \
+    }
+
+    switch (type) {
+    SWITCH(FLOAT)
+    SWITCH(UINT)
+    SWITCH(INT)
+    SWITCH(BOOL)
+    SWITCH(STRUCT)
+    SWITCH(ARRAY)
+    SWITCH(STRING)
+    SWITCH(VOID)
+    SWITCH(FUNCTION)
+    SWITCH(POINTER)
+    SWITCH(ACCEL_STRUCT)
+    SWITCH(RAY_QUERY)
+    }
+#undef SWITCH
+    return os;
+}
 
 // necessary forward reference
 class Value;
@@ -119,10 +145,10 @@ public:
         return Type(DataType::STRING, 0, nullptr);
     }
 
-    static inline Type accelerationStructure(std::vector<const Type*> sub_list = std::vector<const Type*> {},
+    static inline Type accelStruct(std::vector<const Type*> sub_list = std::vector<const Type*> {},
             std::vector<std::string> name_list = std::vector<std::string> {}) {
         assert(sub_list.size() == name_list.size());
-        return Type(DataType::RAY_TRACING_ACCELERATION_STRUCTURE, sub_list, name_list);
+        return Type(DataType::ACCEL_STRUCT, sub_list, name_list);
     }
 
     static inline Type rayQuery() {
@@ -160,11 +186,11 @@ public:
     }
 
     inline const std::vector<const Type*>& getFields() const {
-        assert(base == DataType::STRUCT || base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
+        assert(base == DataType::STRUCT || base == DataType::ACCEL_STRUCT);
         return subList;
     }
     inline const std::vector<std::string>& getNames() const {
-        assert(base == DataType::STRUCT || base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
+        assert(base == DataType::STRUCT || base == DataType::ACCEL_STRUCT);
         return nameList;
     }
 
@@ -174,16 +200,16 @@ public:
     }
 
     inline bool sameBase(const Type& rhs) const {
-        // STRUCT and RAY_TRACING_ACCELERATION_STRUCTURE are considered the same
+        // STRUCT and ACCEL_STRUCT are considered the same
         bool is_struct_and_accel_struct =
-            (base == DataType::STRUCT && rhs.base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) ||
-            (base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE && rhs.base == DataType::STRUCT);
+            (base == DataType::STRUCT && rhs.base == DataType::ACCEL_STRUCT) ||
+            (base == DataType::ACCEL_STRUCT && rhs.base == DataType::STRUCT);
 
         return base == rhs.base || is_struct_and_accel_struct;
     }
 
     inline void nameMember(unsigned i, std::string name) noexcept(false) {
-        assert(base == DataType::STRUCT || base == DataType::RAY_TRACING_ACCELERATION_STRUCTURE);
+        assert(base == DataType::STRUCT || base == DataType::ACCEL_STRUCT);
         if (i >= nameList.size())
             throw std::invalid_argument("Cannot name member at index beyond existing!");
         nameList[i] = name;

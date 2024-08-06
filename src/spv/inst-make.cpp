@@ -26,7 +26,7 @@ module spv.instruction;
 import spv.data.data;
 import spv.frame;
 import spv.token;
-import value.accelerationStructure;
+import value.accelStruct;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
@@ -1027,26 +1027,6 @@ bool Instruction::makeResult(
             throw std::runtime_error(err.str());
         }
 
-        // TODO: will remove because GLM probably not be worth it here. It's here to make sure GLM works.
-        if (size == 4) {
-            // 4-D vector
-            glm::vec4 a(
-                (*static_cast<const Primitive*>((*arr[0])[0])).data.fp32,
-                (*static_cast<const Primitive*>((*arr[0])[1])).data.fp32,
-                (*static_cast<const Primitive*>((*arr[0])[2])).data.fp32,
-                (*static_cast<const Primitive*>((*arr[0])[3])).data.fp32
-            );
-            glm::vec4 b(
-                (*static_cast<const Primitive*>((*arr[1])[0])).data.fp32,
-                (*static_cast<const Primitive*>((*arr[1])[1])).data.fp32,
-                (*static_cast<const Primitive*>((*arr[1])[2])).data.fp32,
-                (*static_cast<const Primitive*>((*arr[1])[3])).data.fp32
-            );
-            float result = glm::dot(a, b);
-            data[result_at].redefine(new Primitive(result));
-            break;
-        }
-
         float total = 0;
         for (unsigned i = 0; i < size; ++i) {
             const Primitive& n0 = *static_cast<const Primitive*>((*arr[0])[i]);
@@ -1275,7 +1255,7 @@ bool Instruction::makeResult(
         throw std::runtime_error("OpConvertUToAccelerationStructureKHR not implemented.");
 
         Type* res_type = getType(0, data);
-        // AccelerationStructureManager res; // TODO: update me; set the acceleration structure
+        // AccelStructManager res; // TODO: update me; set the acceleration structure
         // std::vector<const Value*> values {&res};
         // data[result_at].redefine(res_type->construct(values));
 
@@ -1333,7 +1313,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpTypeAccelerationStructureKHR: { // 5341
-        data[result_at].redefine(new Type(Type::accelerationStructure()));
+        data[result_at].redefine(new Type(Type::accelStruct()));
         break;
     }
     case spv::OpRayQueryGetRayTMinKHR: { // 6016

@@ -207,7 +207,7 @@ public:
             throw std::runtime_error("Program is missing entry function!");
     }
 
-    void checkInputs(ValueMap& provided) noexcept(false) {
+    void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
         DataView& global = data.getGlobal();
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
@@ -254,7 +254,7 @@ public:
         }
 
         // At this point, all in interfaces should be removed. If not, there are more vars needed not provided
-        if (!inputs.empty()) {
+        if (!(inputs.empty() || unused)) {
             std::stringstream error;
             error << "Missing ";
             const auto missing = inputs.size();

@@ -15,7 +15,7 @@ module;
 #include "../values/value.hpp"
 export module format.json;
 import format.parse;
-import value.accelerationStructure;
+import value.accelStruct;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
@@ -347,8 +347,8 @@ private:
             out << "\"" << strv.get() << "\"";
             break;
         }
-        case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
-            const auto& accel_struct_manager = static_cast<const AccelerationStructureManager&>(value);
+        case DataType::ACCEL_STRUCT: {
+            const auto& accel_struct_manager = static_cast<const AccelStructManager&>(value);
             const Type accel_struct_type = accel_struct_manager.getExpectedType();
             Struct structure = Struct(Type::structure(accel_struct_type.getFields(), accel_struct_type.getNames()));
             structure.dummyFill();

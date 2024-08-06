@@ -13,6 +13,6 @@ void main()
 
     if (o < 1.0f)
         ignoreIntersectionEXT;
-    
+
     terminateRayEXT;
 }

@@ -23,7 +23,7 @@ module spv.instruction;
 import spv.data.data;
 import spv.frame;
 import spv.token;
-import value.accelerationStructure;
+import value.accelStruct;
 import value.aggregate;
 import value.primitive;
 import value.rayQuery;
@@ -202,7 +202,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     }
     case spv::OpTraceRayKHR: { // 4445
         // --- Get the arguments
-        AccelerationStructureManager& as = static_cast<AccelerationStructureManager&>(*getValue(0, data));
+        AccelStructManager& as = static_cast<AccelStructManager&>(*getValue(0, data));
 
         const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
         const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
@@ -295,7 +295,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     case spv::OpRayQueryInitializeKHR: { // 4473
         // --- Get the arguments
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
-        AccelerationStructureManager& as = static_cast<AccelerationStructureManager&>(*getValue(1, data));
+        AccelStructManager& as = static_cast<AccelStructManager&>(*getValue(1, data));
         const unsigned ray_flags = static_cast<Primitive&>(*getValue(2, data)).data.u32;
         const unsigned cull_mask = static_cast<Primitive&>(*getValue(3, data)).data.u32;
 

@@ -23,17 +23,19 @@ export struct Primitive : public Value {
         bool b32;
     } data;
 
+    using enum DataType;
+
 public:
-    Primitive(float fp32, unsigned size = 32): Value(Type::primitive(DataType::FLOAT, size)) {
+    Primitive(float fp32, unsigned size = 32): Value(Type::primitive(FLOAT, size)) {
         data.fp32 = fp32;
     }
-    Primitive(uint32_t u32, unsigned size = 32): Value(Type::primitive(DataType::UINT, size)) {
+    Primitive(uint32_t u32, unsigned size = 32): Value(Type::primitive(UINT, size)) {
         data.u32 = u32;
     }
-    Primitive(int32_t i32, unsigned size = 32): Value(Type::primitive(DataType::INT, size)) {
+    Primitive(int32_t i32, unsigned size = 32): Value(Type::primitive(INT, size)) {
         data.i32 = i32;
     }
-    Primitive(bool b32): Value(Type::primitive(DataType::BOOL)) {
+    Primitive(bool b32): Value(Type::primitive(BOOL)) {
         data.b32 = b32;
     }
     // Create a blank primitive from the given value
@@ -46,10 +48,10 @@ public:
         // (Don't use the super check since we don't require the same base)
         const auto from_base = new_val.getType().getBase();
         switch (from_base) {
-        case DataType::FLOAT:
-        case DataType::UINT:
-        case DataType::INT:
-        case DataType::BOOL:
+        case FLOAT:
+        case UINT:
+        case INT:
+        case BOOL:
             break;
         default:
             throw std::runtime_error("Cannot copy from non-primitive to a primitive type!");
@@ -58,24 +60,24 @@ public:
 
         // TODO precision handling
         switch (type.getBase()) { // cast to
-        case DataType::FLOAT:
+        case FLOAT:
             switch (from_base) { // copy from
-            case DataType::FLOAT:
+            case FLOAT:
                 data.fp32 = other.data.fp32;
                 break;
-            case DataType::UINT:
+            case UINT:
                 data.fp32 = static_cast<float>(other.data.u32);
                 break;
-            case DataType::INT:
+            case INT:
                 data.fp32 = static_cast<float>(other.data.i32);
                 break;
             default:
                 throw std::runtime_error("Cannot convert to float!");
             }
             break;
-        case DataType::UINT:
+        case UINT:
             switch (from_base) {
-            case DataType::UINT:
+            case UINT:
                 data.u32 = other.data.u32;
                 break;
             default:
@@ -84,25 +86,25 @@ public:
                 throw std::runtime_error("Cannot convert to uint!");
             }
             break;
-        case DataType::INT:
+        case INT:
             switch (from_base) {
-            case DataType::UINT:
+            case UINT:
                 // TODO verify that it is not too large
                 data.i32 = static_cast<int32_t>(other.data.u32);
                 break;
-            case DataType::INT:
+            case INT:
                 data.i32 = other.data.i32;
                 break;
             default:
                 throw std::runtime_error("Cannot convert to int!");
             }
             break;
-        case DataType::BOOL:
+        case BOOL:
             switch (from_base) {
-            case DataType::BOOL:
+            case BOOL:
                 data.b32 = other.data.b32;
                 break;
-            case DataType::UINT:
+            case UINT:
                 data.b32 = other.data.u32 != 0;
                 break;
             default:

@@ -23,7 +23,7 @@ module;
 #include "type.hpp"
 #include "value.hpp"
 
-export module value.accelerationStructure;
+export module value.accelStruct;
 import value.aggregate;
 import value.primitive;
 
@@ -131,7 +131,7 @@ private:
         const unsigned primitiveIndex;  // Index of node in geometry
         const unsigned mask;  // Mask that can make the ray ignore this instance
         const unsigned sbtRecordOffset;  // Shader binding table record offset (a.k.a. hit group id)
-        const std::shared_ptr<AccelerationStructure> accelerationStructure;
+        const std::shared_ptr<AccelerationStructure> accelStruct;
 
         /// @brief InstanceNode constructor.
         /// @param object_to_world object-to-world matrix.
@@ -166,7 +166,7 @@ private:
               primitiveIndex(primitive_index),
               mask(mask),
               sbtRecordOffset(sbt_record_offset),
-              accelerationStructure(accel_struct) {};
+              accelStruct(accel_struct) {};
 
         std::shared_ptr<Node> clone() const {
             return std::make_shared<InstanceNode>(
@@ -177,7 +177,7 @@ private:
                 primitiveIndex,
                 mask,
                 sbtRecordOffset,
-                std::make_shared<AccelerationStructure>(*accelerationStructure)
+                std::make_shared<AccelerationStructure>(*accelStruct)
             );
         }
 
@@ -239,7 +239,7 @@ private:
 
             // Acceleration structure pointer
             result << Util::repeatedString(indent + 1, indent_string)
-                   << "points_to_acceleration_structure_id = " << accelerationStructure->id << std::endl;
+                   << "points_to_acceleration_structure_id = " << accelStruct->id << std::endl;
 
             return result.str();
         }
@@ -780,7 +780,7 @@ public:
                 }
                 case NodeType::Instance: {
                     InstanceNode& instance_node = static_cast<InstanceNode&>(*node);
-                    instance_node.accelerationStructure->resetTrace();
+                    instance_node.accelStruct->resetTrace();
                     break;
                 }
                 }
@@ -968,7 +968,7 @@ public:
                 glm::vec3 object_ray_origin = instance_node->worldToObject * rayOrigin;
                 glm::vec3 object_ray_direction = instance_node->worldToObject * rayDirection;
 
-                const auto& ref_accel_struct = instance_node->accelerationStructure;
+                const auto& ref_accel_struct = instance_node->accelStruct;
 
                 // Trace the ray in the respective acceleration structure.
                 // Do not pop the node if we can still step through the instance node's acceleration structure.
@@ -1534,7 +1534,7 @@ public:
             }
             case NodeType::Instance: {
                 InstanceNode* instance_node = static_cast<InstanceNode*>(curr_node);
-                result << instance_node->accelerationStructure->toString(num_tabs + 2);
+                result << instance_node->accelStruct->toString(num_tabs + 2);
                 break;
             }
             default:  // No paths after current node
@@ -1546,26 +1546,26 @@ public:
     }
 };
 
-export class AccelerationStructureManager : public Value {
+export class AccelStructManager : public Value {
 private:
     std::shared_ptr<AccelerationStructure> root;
     std::unique_ptr<Struct> structureInfo;
 
 public:
-    AccelerationStructureManager(Type t): Value(t) {}
+    AccelStructManager(Type t): Value(t) {}
 
 private:
     /// @brief Copy the type from "new_val".
     /// @param new_val "Value" to copy the type from.
     void copyType(const Value& new_val) {
         assert(
-            new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE ||
+            new_val.getType().getBase() == DataType::ACCEL_STRUCT ||
             new_val.getType().getBase() == DataType::STRUCT
         );
 
-        // "new_val" could be an "Array" or "AccelerationStructureManager" depending on when it is copied
-        const Struct& other = new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE
-                                  ? *((static_cast<const AccelerationStructureManager&>(new_val)).structureInfo)
+        // "new_val" could be an "Array" or "AccelStructManager" depending on when it is copied
+        const Struct& other = new_val.getType().getBase() == DataType::ACCEL_STRUCT
+                                  ? *((static_cast<const AccelStructManager&>(new_val)).structureInfo)
                                   : static_cast<const Struct&>(new_val);
 
         // Change the current type to match
@@ -1603,7 +1603,7 @@ private:
     }
 
 public:
-    AccelerationStructureManager& operator=(const AccelerationStructureManager& other) {
+    AccelStructManager& operator=(const AccelStructManager& other) {
         // Copy the type
         copyType(other);
 
@@ -1617,8 +1617,8 @@ public:
         copyType(new_val);
 
         // Construct the acceleration structures based on the type of "other"
-        if (new_val.getType().getBase() == DataType::RAY_TRACING_ACCELERATION_STRUCTURE)
-            *this = static_cast<const AccelerationStructureManager&>(new_val);
+        if (new_val.getType().getBase() == DataType::ACCEL_STRUCT)
+            *this = static_cast<const AccelStructManager&>(new_val);
         else
             buildAccelerationStructures();
     }
@@ -1822,7 +1822,7 @@ public:
     }
 
     /// @brief (TODO: change "payload_info" to not be a pseudo-return, TODO: change once SBTs are implemented)
-    /// Fills the payload will whether a geometry was intersected.
+    /// Fills the payload with whether a geometry was intersected.
     /// @param payload_info payload to modify.
     /// @param intersected whether a geometry was intersected.
     void fillPayloadWithBool(Value* payload_info, const bool intersected) const {
@@ -1944,7 +1944,7 @@ public:
                 break;
             }
             case DataType::STRUCT:
-            case DataType::RAY_TRACING_ACCELERATION_STRUCTURE: {
+            case DataType::ACCEL_STRUCT: {
                 result << Util::repeatedString(num_tabs, tab_string) << name << " {" << std::endl;
                 frontier.push({" }", &custom_string, num_tabs});
 
@@ -1970,7 +1970,7 @@ public:
 
                 // Add the children to the stack if some kind of structure
                 if (child_data_type == DataType::STRUCT || child_data_type == DataType::ARRAY ||
-                    child_data_type == DataType::RAY_TRACING_ACCELERATION_STRUCTURE) {
+                    child_data_type == DataType::ACCEL_STRUCT) {
                     result << " [" << std::endl;
                     frontier.push({" ]", &custom_string, num_tabs});
                     for (int i = info.getSize() - 1; i >= 0; --i) {
@@ -2140,6 +2140,6 @@ public:
         // TODO: update when implementing shader binding tables
         fields.push_back(new Type(Type::array(0, *(new Type(Type::primitive(DataType::UINT))))));
 
-        return Type::accelerationStructure(fields, names);
+        return Type::accelStruct(fields, names);
     }
 };
