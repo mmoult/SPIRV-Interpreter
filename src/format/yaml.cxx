@@ -361,7 +361,7 @@ private:
             const auto& agg = static_cast<const Aggregate&>(value);
             unsigned agg_size = agg.getSize();
             // If any subelement is nested, print each on its own line
-            bool nested = agg_size > inline_max || (agg_size == 0 && !is_struct && templatize);
+            bool nested = (is_struct && agg_size > inline_max) || (agg_size == 0 && !is_struct && templatize);
             if (!nested) {
                 for (const auto& element: agg) {
                     if (isNested(*element)) {
@@ -398,13 +398,23 @@ private:
                 }
             } else {
                 // Inline print
-                out << open << " ";
+                bool compress = agg_size > inline_max;
+                if (!compress)
+                    out << open << " ";
+                else {
+                    out << open;
+                    ++e_indents;
+                    newline(out, true, e_indents);
+                }
                 bool first = true;
                 for (unsigned i = 0; i < agg_size; ++i) {
                     const auto& element = *agg[i];
                     if (first)
                         first = false;
-                    else
+                    else if (i % inline_max == 0) {
+                        out << ",";
+                        newline(out, true, e_indents);
+                    } else
                         out << ", ";
 
                     if (is_struct)
@@ -412,7 +422,13 @@ private:
                     else
                         printValue(out, element, indents);
                 }
-                out << " " << close;
+                if (!compress)
+                    out << " " << close;
+                else {
+                    --e_indents;
+                    newline(out, true, e_indents);
+                    out << close;
+                }
             }
             break;
         }

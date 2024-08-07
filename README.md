@@ -12,7 +12,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 45 test examples, and counting
+- 46 test examples, and counting
 
 ## Limitations
 
@@ -71,7 +71,7 @@ Contributions via merge requests are welcome! Contributions should:
 - Not break other code. Include the results of running `test/example-runner.py` and `tests` in requests as proof.
 
 ## License
-Full license terms are in [LICENSE.md](LICENSE.md).
+The interpreter's novel source is licensed with the MPL v2.0. Full license terms are in [LICENSE.md](LICENSE.md).
 
 ```
 © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
@@ -79,3 +79,15 @@ This Source Code Form is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ```
+
+There are a few code dependencies. You may review each individually (the last two are handled via git's submodule, so
+the links may not work until they are initialized) for the complete terms:
+
+- [SPIR-V](src/external/spirv.hpp): Custom Permissive License
+- [GLSL](src/external/GLSL.std.450.h): Custom Permissive License
+- [glm](src/external/glm): MIT License
+- [Catch2](test/Catch2): Boost Software License
+
+Examples in [examples](examples) may use their own licenses. Each has a `LICENSE` file with the necessary documentation.
+Examples are only for testing and demonstrating behavior- they are not bundled in the `spirv-run` executable or any
+other project build (and as such, the interpreter is *not* a "derivative work" in the legal sense).

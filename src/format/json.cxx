@@ -291,7 +291,8 @@ private:
             const auto& agg = static_cast<const Aggregate&>(value);
             // If any subelement is nested, print each on its own line
             unsigned agg_size = agg.getSize();
-            bool each_line = agg_size > inline_max || (agg_size == 0 && templatize && !is_struct);
+            bool compress = agg_size > inline_max;
+            bool each_line = (is_struct && compress) || (agg_size == 0 && templatize && !is_struct);
             if (!each_line) {
                 for (const auto& element: agg) {
                     if (isNested(*element)) {
@@ -314,7 +315,7 @@ private:
                 const auto& element = *agg[i];
                 if (i > 0)
                     out << ',';
-                if (each_line)
+                if (each_line || (compress && (i % inline_max == 0)))
                     newline(out, false, indents + 1);
                 else
                     out << ' ';
@@ -326,7 +327,7 @@ private:
 
                 printValue(out, element, indents + 1);
             }
-            if (each_line)
+            if (each_line || compress)
                 newline(out, false, indents);
             else
                 out << " "; // space the final value from the end brace

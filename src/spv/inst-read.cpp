@@ -233,6 +233,8 @@ Instruction* Instruction::readOp(
     case spv::OpBitwiseOr: // 197
     case spv::OpBitwiseXor: // 198
     case spv::OpBitwiseAnd: // 199
+    case spv::OpPtrEqual: // 401
+    case spv::OpPtrNotEqual: // 402
     case spv::OpExecuteCallableKHR: // 4446
     case spv::OpRayQueryGenerateIntersectionKHR: // 4475
     case spv::OpRayQueryGetIntersectionTypeKHR: // 4479

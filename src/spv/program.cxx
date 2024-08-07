@@ -35,6 +35,7 @@ export class Program {
     std::vector<unsigned> specs;
     // builtin variables we need to catch
     unsigned localInvocIdx = 0;
+    unsigned localInvocId  = 0;
     unsigned globalInvocId = 0;
     unsigned workGroupSize = 0;
 
@@ -186,6 +187,9 @@ public:
                     switch (inst.getVarBuiltIn(global)) {
                     case spv::BuiltIn::BuiltInLocalInvocationIndex:
                         localInvocIdx = inst.getResult();
+                        continue;
+                    case spv::BuiltIn::BuiltInLocalInvocationId:
+                        localInvocId = inst.getResult();
                         continue;
                     case spv::BuiltIn::BuiltInGlobalInvocationId:
                         globalInvocId = inst.getResult();
@@ -359,11 +363,14 @@ public:
         std::vector<const Value*> entry_args;
 
         Variable* local_invoc_idx = nullptr;
+        Variable* local_invoc_id  = nullptr;
         Variable* global_invoc_id = nullptr;
         const Type tUint = Type::primitive(DataType::UINT);
         const Type tUvec3 = Type::array(3, tUint);
         if (localInvocIdx != 0)
             local_invoc_idx = global[localInvocIdx].getVariable();
+        if (localInvocId != 0)
+            local_invoc_id = global[localInvocId].getVariable();
         if (globalInvocId != 0)
             global_invoc_id = global[globalInvocId].getVariable();
 
@@ -382,6 +389,17 @@ public:
                 const Primitive idx(i);
                 v->setVal(idx);
                 invoc_global->local(localInvocIdx).redefine(v);
+            }
+            if (local_invoc_id != nullptr) {
+                Variable* v = new Variable(*local_invoc_id);
+                Array arr(tUint, 3);
+                const Primitive gid_x(localX);
+                const Primitive gid_y(localY);
+                const Primitive gid_z(localZ);
+                std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
+                arr.addElements(elements);
+                v->setVal(arr);
+                invoc_global->local(localInvocId).redefine(v);
             }
             if (global_invoc_id != nullptr) {
                 // GlobalInvocationID = WorkGroupID * WorkGroupSize + LocalInvocationID

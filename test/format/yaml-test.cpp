@@ -37,7 +37,7 @@ TEST_CASE("output", "[yaml]") {
         std::vector<const Value*> inners;
         for (unsigned j = 0; j < 3; ++j) {
             std::vector<const Value*> es;
-            for (unsigned i = 0; i < 5; ++i) {
+            for (unsigned i = 0; i < 4; ++i) {
                 const Value* prim = new Primitive(static_cast<float>(i + j));
                 news.push_back(prim);
                 es.push_back(prim);
@@ -54,24 +54,9 @@ TEST_CASE("output", "[yaml]") {
         format.printFile(out, vars);
         REQUIRE(out.str() ==
             "foo: \n"
-            "- \n"
-            "  - 0.0\n"
-            "  - 1.0\n"
-            "  - 2.0\n"
-            "  - 3.0\n"
-            "  - 4.0\n"
-            "- \n"
-            "  - 1.0\n"
-            "  - 2.0\n"
-            "  - 3.0\n"
-            "  - 4.0\n"
-            "  - 5.0\n"
-            "- \n"
-            "  - 2.0\n"
-            "  - 3.0\n"
-            "  - 4.0\n"
-            "  - 5.0\n"
-            "  - 6.0\n"
+            "- [ 0.0, 1.0, 2.0, 3.0 ]\n"
+            "- [ 1.0, 2.0, 3.0, 4.0 ]\n"
+            "- [ 2.0, 3.0, 4.0, 5.0 ]\n"
             );
 
         for (const Value* val : news)
@@ -101,13 +86,10 @@ TEST_CASE("output", "[yaml]") {
 
         sformat.printFile(out, vars);
         REQUIRE(out.str() ==
-            "array: \n"
-            "-    0\n"
-            "-    1\n"
-            "-    2\n"
-            "-    3\n"
-            "-    4\n"
-            "-    5\n"
+            "array: [\n"
+            "     0, 1, 2, 3,\n"
+            "     4, 5\n"
+            "]\n"
             );
     }
 
@@ -170,5 +152,3 @@ TEST_CASE("i/o", "[yaml]") {
     }
 
 }
-
-

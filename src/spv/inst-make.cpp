@@ -1233,6 +1233,25 @@ bool Instruction::makeResult(
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
+    case spv::OpPtrEqual: // 401
+    case spv::OpPtrNotEqual: { // 402
+        const Value* first = getValue(2, data);
+        const Value* second = getValue(3, data);
+        if (first->getType().getBase() != DataType::POINTER)
+            throw std::runtime_error("The type of the first operand for pointer comparison must be a pointer!");
+        if (second->getType().getBase() != DataType::POINTER)
+            throw std::runtime_error("The type of the second operand for pointer comparison must be a pointer!");
+        const Pointer& first_ptr = *static_cast<const Pointer*>(first);
+        const Pointer& second_ptr = *static_cast<const Pointer*>(second);
+        Value* head_first = getHeadValue(first_ptr, data);
+        Value* head_second = getHeadValue(second_ptr, data);
+        const Value* first_pointed = first_ptr.dereference(*head_first);
+        const Value* second_pointed = second_ptr.dereference(*head_second);
+        bool result = (opcode == spv::OpPtrEqual)? (first_pointed == second_pointed)
+                                                 : (first_pointed != second_pointed);
+        data[result_at].redefine(new Primitive(result));
+        break;
+    }
     case spv::OpConvertUToAccelerationStructureKHR: { // 4447
         assert(hasResultType);
         // TODO: needs the get an acceleration structure from a buffer via a 64-bit address. How to do this?
