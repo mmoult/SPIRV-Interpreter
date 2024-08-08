@@ -194,6 +194,7 @@ Instruction* Instruction::readOp(
     case spv::OpSDiv: // 135
     case spv::OpFDiv: // 136
     case spv::OpUMod: // 137
+    case spv::OpSMod: // 139
     case spv::OpFMod: // 141
     case spv::OpVectorTimesScalar: // 142
     case spv::OpMatrixTimesScalar: // 143

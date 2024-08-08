@@ -630,6 +630,7 @@ bool Instruction::makeResult(
                 // examples:
                 // - OpExecutionMode %main OriginUpperLeft
                 // - OpExecutionMode %main LocalSize 8 1 1
+                // - OpExecutionMode %main OutputVertices 3
                 assert(deco->operands[1].type == Token::Type::CONST);
                 switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
                 case spv::ExecutionMode::ExecutionModeLocalSize:
@@ -637,6 +638,10 @@ bool Instruction::makeResult(
                     ep->sizeX = std::get<uint32_t>(deco->operands[2].raw);
                     ep->sizeY = std::get<uint32_t>(deco->operands[3].raw);
                     ep->sizeZ = std::get<uint32_t>(deco->operands[4].raw);
+                    break;
+                case spv::ExecutionMode::ExecutionModeOutputVertices:
+                    assert(deco->operands.size() == 3);
+                    ep->sizeX = std::get<uint32_t>(deco->operands[2].raw);
                     break;
                 default:
                     break;
@@ -839,7 +844,11 @@ bool Instruction::makeResult(
     }
     case spv::OpUMod: // 137
         // Result undefined if the denominator is 0. Maybe print an undefined warning?
-        TYPICAL_E_BIN_OP(FLOAT, (b->data.u32 != 0)? a->data.u32 % b->data.u32 : 0);
+        TYPICAL_E_BIN_OP(UINT, (b->data.u32 != 0)? a->data.u32 % b->data.u32 : 0);
+    case spv::OpSMod: // 139
+        // Result undefined if denominator is 0 or denominator is -1 and numerator is -max (in which case, there is an
+        // overflow).
+        TYPICAL_E_BIN_OP(INT, (b->data.u32 != 0)? a->data.u32 % b->data.u32 : 0);
     case spv::OpFMod: // 141
         // Result undefined if the denominator is 0. Maybe print an undefined warning?
         TYPICAL_E_BIN_OP(FLOAT, (b->data.fp32 != 0.0f)? std::fmod(a->data.fp32, b->data.fp32) : 0.0f);

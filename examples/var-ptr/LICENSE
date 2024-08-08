@@ -1,5 +1,5 @@
 Example shader from https://github.com/KhronosGroup/VK-GL-CTS/
-external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmSpirvVersion1p4Tests.cpp
+external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/opptrequal/wg_comparisons_equal.amber
 
 Copyright Khronos
 

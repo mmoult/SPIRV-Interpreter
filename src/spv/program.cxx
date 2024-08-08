@@ -186,6 +186,7 @@ public:
                     // others just need to report results, in which they can be saved and break.
                     switch (inst.getVarBuiltIn(global)) {
                     case spv::BuiltIn::BuiltInLocalInvocationIndex:
+                    case spv::BuiltIn::BuiltInInvocationId:
                         localInvocIdx = inst.getResult();
                         continue;
                     case spv::BuiltIn::BuiltInLocalInvocationId:
