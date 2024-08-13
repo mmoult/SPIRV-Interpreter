@@ -8,6 +8,8 @@ module;
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <functional>
+#include <iostream>
 #include <limits> // for nan
 #include <sstream>
 #include <stdexcept>
@@ -137,19 +139,16 @@ Value* composite_extract(Value* composite, unsigned index_start, const std::vect
     return composite;
 }
 
-struct OpSrc {
-    DataType type;
-    unsigned val1;
-    unsigned val2;
-};
 struct OpDst {
     unsigned type;
     unsigned at;
 };
-template<typename F> // (const Primitive*, const Primitive* -> data primitive)
-void element_bin_op(const OpSrc& srcs, const OpDst& dst, DataView& data, F&& op) {
-    const Value* src1 = data[srcs.val1].getValue();
-    const Value* src2 = data[srcs.val2].getValue();
+
+using BinOp = std::function<Primitive(const Primitive*, const Primitive*)>;
+
+void element_bin_op(DataType type, unsigned bin0, unsigned bin1, const OpDst& dst, DataView& data, BinOp& op) {
+    const Value* src1 = data[bin0].getValue();
+    const Value* src2 = data[bin1].getValue();
 
     // Operate on two primitive arrays or two primitive scalars
     const Type& type1 = src1->getType();
@@ -160,7 +159,7 @@ void element_bin_op(const OpSrc& srcs, const OpDst& dst, DataView& data, F&& op)
     std::vector<const Value*> pprims;
 
     if (type1.getBase() == DataType::ARRAY) {
-        if (type1.getElement().getBase() != srcs.type)
+        if (type1.getElement().getBase() != type)
             throw std::runtime_error("Cannot do binary operation on other-typed arrays!");
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
@@ -178,7 +177,7 @@ void element_bin_op(const OpSrc& srcs, const OpDst& dst, DataView& data, F&& op)
             pprims.push_back(&prims[i]);
         }
     } else {
-        if (type1.getBase() != srcs.type)
+        if (type1.getBase() != type)
             throw std::runtime_error("Cannot do binary operation on other-typed elements!");
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
@@ -190,28 +189,37 @@ void element_bin_op(const OpSrc& srcs, const OpDst& dst, DataView& data, F&& op)
     Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
+
 // Sources can be either of the integral types (int or uint) but must match
-template<typename UF, typename IF>
-void element_int_bin_op(const OpSrc& srcs, const OpDst& dst, DataView& data, UF&& u_op, IF&& i_op) {
-    Value* first = data[srcs.val1].getValue();
-    const Type& type = first->getType();
-    DataType dt = type.getBase();
+void element_int_bin_op(
+    unsigned bin0,
+    unsigned bin1,
+    const OpDst& dst,
+    DataView& data,
+    BinOp& u_op,
+    BinOp& i_op
+) {
+    Value* first = data[bin0].getValue();
+    const Type& first_type = first->getType();
+    DataType dt = first_type.getBase();
     if (dt == DataType::ARRAY)
-        dt = type.getElement().getBase();
+        dt = first_type.getElement().getBase();
     if (dt != DataType::INT && dt != DataType::UINT)
         throw std::runtime_error("Cannot perform integer-typed binary operation on non-integer base operands!");
-    OpSrc src{dt, srcs.val1, srcs.val2};
 
-    if (dt == DataType::UINT)
-        element_bin_op(src, dst, data, u_op);
-    else
-        element_bin_op(src, dst, data, i_op);
+    element_bin_op(dt, bin0, bin1, dst, data, (dt == DataType::UINT)? u_op : i_op);
 }
+
 // Sources can be either integral. Result must be *casted* from unsigned result to type which dest specifies.
-template<typename F> // (const Primitive*, const Primitive* -> data primitive)
-void element_shift_op(const OpSrc& srcs, const OpDst& dst, DataView& data, F&& op) {
-    const Value* src1 = data[srcs.val1].getValue();
-    const Value* src2 = data[srcs.val2].getValue();
+void element_shift_op(
+    unsigned bin0,
+    unsigned bin1,
+    const OpDst& dst,
+    DataView& data,
+    std::function<unsigned(const Primitive*, const Primitive*)>& op
+) {
+    const Value* src1 = data[bin0].getValue();
+    const Value* src2 = data[bin1].getValue();
     const Type& dst_type = *data[dst.type].getType();
 
     // Operate on two primitive arrays or two primitive scalars
@@ -257,9 +265,11 @@ void element_shift_op(const OpSrc& srcs, const OpDst& dst, DataView& data, F&& o
     Value* res = dst_type.construct(pprims);
     data[dst.at].redefine(res);
 }
-template<typename F> // (const Primitive*, const Primitive* -> data primitive)
-void element_unary_op(const OpSrc& src, const OpDst& dst, DataView& data, F&& op) {
-    const Value* src1 = data[src.val1].getValue();
+
+using UnOp = std::function<Primitive(const Primitive*)>;
+
+void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataView& data, UnOp& op) {
+    const Value* src1 = data[unary].getValue();
 
     // Operate on a single primitive scalar or array of primitives
     const Type& type = src1->getType();
@@ -267,7 +277,7 @@ void element_unary_op(const OpSrc& src, const OpDst& dst, DataView& data, F&& op
     std::vector<const Value*> pprims;
 
     if (type.getBase() == DataType::ARRAY) {
-        if (type.getElement().getBase() != src.type)
+        if (type.getElement().getBase() != chtype)
             throw std::runtime_error("Cannot do unary operation on other-typed array!");
         const Array& operand = *static_cast<const Array*>(src1);
         unsigned asize = operand.getSize();
@@ -279,7 +289,7 @@ void element_unary_op(const OpSrc& src, const OpDst& dst, DataView& data, F&& op
             pprims.push_back(&prims[i]);
         }
     } else {
-        if (type.getBase() != src.type)
+        if (type.getBase() != chtype)
             throw std::runtime_error("Cannot do unary operation on other-typed value!");
         const Primitive* operand = static_cast<const Primitive*>(src1);
         auto result = op(operand);
@@ -290,29 +300,90 @@ void element_unary_op(const OpSrc& src, const OpDst& dst, DataView& data, F&& op
     Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
-// Sources can be either of the integral types (int or uint) but must match
-template<typename UF, typename IF>
-void element_int_unary_op(const OpSrc& srcs, const OpDst& dst, DataView& data, UF&& u_op, IF&& i_op) {
-    Value* first = data[srcs.val1].getValue();
-    const Type& type = first->getType();
-    DataType dt = type.getBase();
+
+// Source can be either of the integral types (int or uint)
+void element_int_unary_op(
+    unsigned unary,
+    const OpDst& dst,
+    DataView& data,
+    UnOp& u_op,
+    UnOp& i_op
+) {
+    Value* first = data[unary].getValue();
+    const Type& first_type = first->getType();
+    DataType dt = first_type.getBase();
     if (dt == DataType::ARRAY)
-        dt = type.getElement().getBase();
+        dt = first_type.getElement().getBase();
     if (dt != DataType::INT && dt != DataType::UINT)
         throw std::runtime_error("Cannot perform integer-typed unary operation on non-integer base operand!");
-    OpSrc src{dt, srcs.val1, srcs.val2};
 
-    if (dt == DataType::UINT)
-        element_unary_op(src, dst, data, u_op);
-    else
-        element_unary_op(src, dst, data, i_op);
+    element_unary_op(dt, unary, dst, data, (dt == DataType::UINT)? u_op : i_op);
+}
+
+using TernOp = std::function<Primitive(const Primitive*, const Primitive*, const Primitive*)>;
+
+void element_tern_op(
+    DataType type,
+    unsigned tern0,
+    unsigned tern1,
+    unsigned tern2,
+    const OpDst& dst,
+    DataView& data,
+    TernOp& op
+) {
+    const Value* src1 = data[tern0].getValue();
+    const Value* src2 = data[tern1].getValue();
+    const Value* src3 = data[tern2].getValue();
+
+    // Operate on two primitive arrays or two primitive scalars
+    const Type& type1 = src1->getType();
+    const Type& type2 = src2->getType();
+    const Type& type3 = src3->getType();
+    if (!type1.sameBase(type2) || !type2.sameBase(type3))
+        throw std::runtime_error("Cannot use operands of different bases!");
+    std::vector<Primitive> prims;
+    std::vector<const Value*> pprims;
+
+    if (type1.getBase() == DataType::ARRAY) {
+        if (type1.getElement().getBase() != type)
+            throw std::runtime_error("Cannot do binary operation on other-typed arrays!");
+        const Array& op1 = *static_cast<const Array*>(src1);
+        const Array& op2 = *static_cast<const Array*>(src2);
+        const Array& op3 = *static_cast<const Array*>(src3);
+        if ((op1.getSize() != op2.getSize()) || (op2.getSize() != op3.getSize()))
+            throw std::runtime_error("Cannot do binary operation on arrays of different size!");
+        unsigned asize = op1.getSize();
+        prims.reserve(asize);
+        pprims.reserve(asize);
+        for (unsigned i = 0; i < asize; ++i) {
+            auto result = op(
+                static_cast<const Primitive*>(op1[i]),
+                static_cast<const Primitive*>(op2[i]),
+                static_cast<const Primitive*>(op3[i])
+            );
+            prims.emplace_back(result);
+            pprims.push_back(&prims[i]);
+        }
+    } else {
+        if (type1.getBase() != type)
+            throw std::runtime_error("Cannot do binary operation on other-typed elements!");
+        const Primitive* op1 = static_cast<const Primitive*>(src1);
+        const Primitive* op2 = static_cast<const Primitive*>(src2);
+        const Primitive* op3 = static_cast<const Primitive*>(src3);
+        auto result = op(op1, op2, op3);
+        prims.emplace_back(result);
+        pprims.push_back(&prims[0]);
+    }
+
+    Value* res = data[dst.type].getType()->construct(pprims);
+    data[dst.at].redefine(res);
 }
 
 // Typical element-wise binary operation
 #define TYPICAL_E_BIN_OP(E_TYPE, BIN_OP) { \
-    OpSrc src{DataType::E_TYPE, checkRef(src_at, data_len), checkRef(src_at + 1, data_len)}; \
+    BinOp fx = [](const Primitive* a, const Primitive* b) { return BIN_OP; }; \
     OpDst dst{checkRef(dst_type_at, data_len), result_at}; \
-    element_bin_op(src, dst, data, [](const Primitive* a, const Primitive* b) { return BIN_OP; }); \
+    element_bin_op(DataType::E_TYPE, checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx); \
     break; \
 }
 // Integer (either signed or unsigned as long as they match) element-wise binary operation
@@ -323,37 +394,43 @@ void element_int_unary_op(const OpSrc& srcs, const OpDst& dst, DataView& data, U
 // For the time being, we are ignoring this stipulation because checking is slow and well-formed programs are typically
 // expected not to overflow or underflow.
 #define INT_E_BIN_OP(BIN_OP) { \
+    BinOp ufx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }; \
+    BinOp ifx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; }; \
     element_int_bin_op( \
-        OpSrc{DataType::INT, checkRef(src_at, data_len), checkRef(src_at + 1, data_len)}, \
+        checkRef(src_at, data_len), checkRef(src_at + 1, data_len), \
         OpDst{checkRef(dst_type_at, data_len), result_at}, \
         data, \
-        [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }, \
-        [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; } \
+        ufx, \
+        ifx \
     ); \
     break; \
 }
 #define INT_E_UNARY_OP(UNARY_OP) { \
+    UnOp ufx = [](const Primitive* a) { return UNARY_OP a->data.u32; }; \
+    UnOp ifx = [](const Primitive* a) { return UNARY_OP a->data.i32; }; \
     element_int_unary_op( \
-        OpSrc{DataType::INT, checkRef(src_at, data_len), 0}, \
-        OpDst{checkRef(dst_type_at, data_len), result_at}, \
-        data, \
-        [](const Primitive* a) { return UNARY_OP a->data.u32; }, \
-        [](const Primitive* a) { return UNARY_OP a->data.i32; } \
+        checkRef(src_at, data_len), OpDst{checkRef(dst_type_at, data_len), result_at}, data, ufx, ifx \
     ); \
     break; \
 }
 // Element shift operation, which may have integral operands
-#define E_SHIFT_OP(SHIFT_LAMBDA) \
-    OpSrc src{DataType::UINT, checkRef(src_at, data_len), checkRef(src_at + 1, data_len)}; \
+#define E_SHIFT_OP(SHIFT_OP) \
+    std::function<unsigned(const Primitive*, const Primitive*)> op = SHIFT_OP; \
     OpDst dst{checkRef(dst_type_at, data_len), result_at}; \
-    element_shift_op(src, dst, data, SHIFT_LAMBDA);
+    element_shift_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, op);
 // Typical unary operation
 #define TYPICAL_E_UNARY_OP(E_TYPE, UNARY_OP) { \
-    OpSrc src{DataType::E_TYPE, checkRef(src_at, data_len), 0}; \
+    UnOp op = [](const Primitive* a) { return UNARY_OP; }; \
     OpDst dst{checkRef(dst_type_at, data_len), result_at}; \
-    element_unary_op(src, dst, data, [](const Primitive* a) { return UNARY_OP; }); \
+    element_unary_op(DataType::E_TYPE, checkRef(src_at, data_len), dst, data, op); \
     break; \
 }
+#define E_TERN_OP(E_TYPE, OP_LAMBDA) \
+    OpDst dst{checkRef(dst_type_at, data_len), result_at}; \
+    element_tern_op( \
+        DataType::E_TYPE, checkRef(src_at, data_len), checkRef(src_at + 1, data_len), checkRef(src_at + 2, data_len), \
+        dst, data, OP_LAMBDA \
+    );
 
 bool Instruction::makeResult(
     DataView& data,
@@ -826,9 +903,8 @@ bool Instruction::makeResult(
     case spv::OpSDiv: // 135
         TYPICAL_E_BIN_OP(INT, a->data.fp32 / b->data.fp32);
     case spv::OpFDiv: { // 136
-        OpSrc src{DataType::FLOAT, checkRef(2, data_len), checkRef(3, data_len)};
         OpDst dst{checkRef(0, data_len), result_at};
-        auto op = [](const Primitive* a, const Primitive* b) {
+        BinOp op = [](const Primitive* a, const Primitive* b) {
             // Spec says that the behavior is undefined if divisor is 0
             // We will go with explicit IEE754 because it is a common (and often expected) standard
             if (b->data.fp32 == 0.0) { // divisor is neg or pos zero
@@ -839,7 +915,7 @@ bool Instruction::makeResult(
             }
             return a->data.fp32 / b->data.fp32;
         };
-        element_bin_op(src, dst, data, op);
+        element_bin_op(DataType::FLOAT, checkRef(2, data_len), checkRef(3, data_len), dst, data, op);
         break;
     }
     case spv::OpUMod: // 137
@@ -1609,9 +1685,8 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450Round: // 1
         TYPICAL_E_UNARY_OP(FLOAT, std::round(a->data.fp32));
     case GLSLstd450RoundEven: { // 2
-        OpSrc src{DataType::FLOAT, checkRef(2, data_len), 0};
         OpDst dst{checkRef(0, data_len), result_at};
-        element_unary_op(src, dst, data, [](const Primitive* a) {
+        UnOp op = [](const Primitive* a) {
             auto whole = a->data.fp32;
             auto frac = std::abs(std::modf(whole, &whole));
             bool to_trunc;
@@ -1626,7 +1701,8 @@ bool Instruction::makeResultGlsl(
                 return whole;
             else
                 return whole + ((whole >= 0)? 1.0f : -1.0f);
-        });
+        };
+        element_unary_op(DataType::FLOAT, checkRef(2, data_len), dst, data, op);
         break;
     }
     case GLSLstd450Trunc: // 3
@@ -1636,12 +1712,12 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450SAbs: // 5
         TYPICAL_E_UNARY_OP(INT, (a->data.i32 > 0)? a->data.i32 : -a->data.i32);
     case GLSLstd450FSign: { // 6
-        OpSrc src{DataType::FLOAT, checkRef(src_at, data_len), 0};
-        OpDst dst{checkRef(dst_type_at, data_len), result_at};
-        element_unary_op(src, dst, data, [](const Primitive* a) {
+        UnOp op = [](const Primitive* a) {
             bool sgnbit = std::signbit(a->data.fp32);
             return (a->data.fp32 == 0.0)? (sgnbit? -0.0f : 0.0f) : (sgnbit? -1.0f : 1.0f);
-        });
+        };
+        OpDst dst{checkRef(dst_type_at, data_len), result_at};
+        element_unary_op(DataType::FLOAT, checkRef(src_at, data_len), dst, data, op);
         break;
     }
     case GLSLstd450SSign: // 7
@@ -1673,7 +1749,6 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450Modf: { // 35
         // fraction = modf(input, whole_pointer);
         // OpExtInst %float %23 = %1 Modf %20 %22
-        OpSrc src{DataType::FLOAT, checkRef(4, data_len), 0};
         OpDst dst{checkRef(0, data_len), result_at};
         // whole_pointer is a pointer to a float value which can be modified. The only modifiable values in SPIR-V are
         // variables, so we know whole_pointer should resolve to a float variable
@@ -1701,7 +1776,7 @@ bool Instruction::makeResultGlsl(
             comp = 0;
         }
 
-        element_unary_op(src, dst, data, [&](const Primitive* a) {
+        UnOp op = [&](const Primitive* a) {
             float whole;
             float fract = std::modf(a->data.fp32, &whole);
             Primitive whole_pr(whole);
@@ -1712,7 +1787,9 @@ bool Instruction::makeResultGlsl(
                 ++comp;
             }
             return fract;
-        });
+        };
+
+        element_unary_op(DataType::FLOAT, checkRef(4, data_len), dst, data, op);
         break;
     }
     case GLSLstd450FMin: // 37
@@ -1727,11 +1804,38 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.u32, b->data.u32));
     case GLSLstd450SMax: // 42
         TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.i32, b->data.i32));
+    case GLSLstd450FMix: { // 46
+        TernOp fx = [](const Primitive* x, const Primitive* y, const Primitive* a) {
+            return x->data.fp32 * (1.0f - a->data.fp32) + y->data.fp32 * a->data.fp32;
+        };
+        E_TERN_OP(FLOAT, fx);
+        break;
+    }
+    case GLSLstd450SmoothStep: { // 49
+        TernOp fx = [](const Primitive* lo, const Primitive* hi, const Primitive* x) {
+            float t = std::clamp((x->data.fp32 - lo->data.fp32) / (hi->data.fp32 - lo->data.fp32), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        };
+        E_TERN_OP(FLOAT, fx);
+        break;
+    }
     case GLSLstd450Normalize: { // 69
         Value* vec_val = getValue(4, data);
         const Type& vec_type = vec_val->getType();
-        if (vec_type.getBase() != DataType::ARRAY)
-            throw std::runtime_error("Could not load vector in Normalize!");
+        Type* res_type = getType(0, data);
+        if (vec_type.getBase() != DataType::ARRAY) {
+            // "Normalize" a scalar value
+            assert(vec_type.getBase() == DataType::FLOAT);
+            auto single = static_cast<Primitive*>(vec_val)->data.fp32;
+            if (single != 0.0)
+                single = 1.0;
+            Primitive prim_single(single);
+            std::vector<const Value*> pfloats{&prim_single};
+            Value* res = res_type->construct(pfloats);
+            data[result_at].redefine(res);
+            break;
+        }
+
         const Array& vec = *static_cast<Array*>(vec_val);
         if (vec_type.getElement().getBase() != DataType::FLOAT)
             throw std::runtime_error("Normalize vector element must have float type!");
@@ -1757,7 +1861,6 @@ bool Instruction::makeResultGlsl(
             pfloats.push_back(&floats[i]);
         }
 
-        Type* res_type = getType(0, data);
         Value* res = res_type->construct(pfloats);
         data[result_at].redefine(res);
         break;
@@ -1769,3 +1872,4 @@ bool Instruction::makeResultGlsl(
 #undef INT_E_BIN_OP
 #undef TYPICAL_E_UNARY_OP
 #undef E_SHIFT_OP
+#undef E_TERN_OP
