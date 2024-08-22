@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "value.hpp"
-import value.accelStruct;
+import rayTrace.accelStruct;
+import rayTrace.rayQuery;
 import value.aggregate;
 import value.primitive;
-import value.rayQuery;
 import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values) const {
@@ -87,6 +87,7 @@ bool Type::operator==(const Type& rhs) const {
     case DataType::UINT:
     case DataType::INT:
         return subSize == rhs.subSize;
+    case DataType::STRING: // TODO
     case DataType::BOOL:
     case DataType::VOID:
         return true;
@@ -209,6 +210,12 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
         }
 
         throw std::runtime_error("Cannot currently take union of different struct types!");
+    }
+    case DataType::STRING: {
+        // TODO
+        if (base == other.base)
+            break;
+        throw std::runtime_error("Cannot find union of string and non-string types!");
     }
     // TODO support other types
     }

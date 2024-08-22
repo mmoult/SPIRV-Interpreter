@@ -12,11 +12,11 @@ module;
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
-#include "type.hpp"
-#include "value.hpp"
+#include "../type.hpp"
+#include "../value.hpp"
 
-export module value.rayQuery;
-import value.accelStruct;
+export module rayTrace.rayQuery;
+import rayTrace.accelStruct;
 
 export class RayQuery : public Value {
 private:

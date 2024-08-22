@@ -1,0 +1,87 @@
+#version 460 core
+#extension GL_EXT_ray_tracing : require
+
+layout(shaderRecordEXT) buffer sphereInfo
+{
+    vec3 sphereCenter;
+    float sphereRadius;
+};
+
+struct IntersectionProperties
+{
+    vec3 normal;
+    float hit_t;
+    bool intersected;
+};
+
+hitAttributeEXT vec3 normal;
+
+const float MAX_HIT_T = 1000000000000000.0;
+const uint HIT_KIND_NONE = 0;
+const uint HIT_KIND_SPHERE = 1;
+
+IntersectionProperties raySphereIntersection(
+    vec3 sphere_center, 
+    float sphere_radius, 
+    vec3 ray_origin, 
+    vec3 ray_direction, 
+    float ray_t_min, 
+    float ray_t_max)
+{
+    // Assume the ray will miss
+    IntersectionProperties result;
+    result.normal = vec3(0.0);
+    result.hit_t = MAX_HIT_T;
+    result.intersected = false;
+
+    // Solves the intersection by using an analytic solution.
+    // Let (origin - sphere_center) be x.
+    // We are solving [(dir * dir) * t^2 + (2 * dir . x) * t + (x . x) - radius^2 = 0],
+    // or ||ray_o + ray_dir * t||^2 = r^2.
+    vec3 dist_o_c = ray_origin - sphere_center; // Distance between the ray's origin and the sphere's center
+    float a = dot(ray_direction, ray_direction);
+    float b = 2.0 * dot(ray_direction, dist_o_c);
+    float c = dot(dist_o_c, dist_o_c) - (sphere_radius * sphere_radius);
+
+    float discriminant = (b * b) - (4.0 * a * c);
+
+    if (discriminant >= 0)
+    {
+        // Set it to the smaller solution
+        float hit_t = (-b - sqrt(discriminant)) / (2.0 * a);
+
+        if (hit_t < ray_t_min || hit_t > ray_t_max)
+        {
+            // Set it to the other solution
+            hit_t = (-b - sqrt(discriminant)) / (2.0 * a);
+        }
+
+        if (hit_t < ray_t_min || hit_t > ray_t_max)
+        {
+            // If entered this if-statement, both solutions are bad
+            return result;
+        }
+
+        result.intersected = true;
+        result.hit_t = hit_t;
+        result.normal = normalize((ray_origin + ray_direction * result.hit_t) - sphere_center);
+    }
+
+    return result;
+}
+
+void main() 
+{
+    const IntersectionProperties result = raySphereIntersection (
+        sphereCenter,
+        sphereRadius,
+        gl_WorldRayOriginEXT,
+        gl_WorldRayDirectionEXT,
+        gl_RayTminEXT,
+        gl_RayTmaxEXT
+    );
+
+    uint hit_kind = result.intersected ? HIT_KIND_SPHERE : HIT_KIND_NONE;
+    normal = result.normal;
+    reportIntersectionEXT(result.hit_t, hit_kind);
+}

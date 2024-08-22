@@ -335,7 +335,7 @@ public:
         return std::tuple(outputs.empty(), total_tests);
     }
 
-    void execute(bool verbose, bool debug, ValueFormat& format) noexcept(false) {
+    void execute(bool verbose, bool debug, ValueFormat& format, void* extra_data = nullptr) noexcept(false) {
         Instruction& entry_inst = insts[entry];
         DataView& global = data.getGlobal();
 
@@ -450,7 +450,7 @@ public:
             }
 
             unsigned frame_depth = frame_stack.size();
-            if (insts[i_at].execute(cur_data, frame_stack, verbose))
+            if (insts[i_at].execute(cur_data, frame_stack, verbose, extra_data))
                 active_threads.erase(next_invoc);
 
             // print the result if verbose
@@ -480,5 +480,22 @@ public:
     }
     ValueMap getOutputs() const {
         return getVariables(outs);
+    }
+
+    std::map<std::string, spv::StorageClass> getStorageClasses() const {
+        std::map<std::string, spv::StorageClass> ret;
+        for (const auto v : ins) {
+            const auto var = data.getGlobal()[v].getVariable();
+            ret.emplace(var->getName(), var->getStorageClass());
+        }
+        return ret;
+    }
+    std::map<std::string, spv::BuiltIn> getBuiltIns() const {
+        std::map<std::string, spv::BuiltIn> ret;
+        for (const auto v : ins) {
+            const auto var = data.getGlobal()[v].getVariable();
+            ret.emplace(var->getName(), var->getBuiltIn());
+        }
+        return ret;
     }
 };

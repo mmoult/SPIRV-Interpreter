@@ -22,12 +22,12 @@ target_sources(spv-interp
       spv/program.cxx
       spv/token.cxx
       util/compare.cxx
-      values/accel-struct.cxx
       values/aggregate.cxx
       values/pointer.cxx
       values/primitive.cxx
-      values/ray-query.cxx
       values/string.cxx
+      values/ray-trace/accel-struct.cxx
+      values/ray-trace/ray-query.cxx
 )
 # Add other source files
 target_sources(spv-interp
@@ -38,6 +38,7 @@ target_sources(spv-interp
     spv/inst-read.cpp
     util/trie.cpp
     values/type.cpp
+    values/ray-trace/shader-binding-table.cpp
 )
 
 # git rev-parse --short HEAD

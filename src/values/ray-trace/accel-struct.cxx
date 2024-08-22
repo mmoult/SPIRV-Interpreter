@@ -6,26 +6,32 @@
 module;
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
+#include <cstdint>
+#include <fstream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <stack>
 #include <string>
 #include <tuple>
 
-// TODO: plan to remove/change header(s) below
-#include <iostream>
-
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext.hpp>
 
-#include "../external/spirv.hpp"
-#include "type.hpp"
-#include "value.hpp"
+#define SPV_ENABLE_UTILITY_CODE 1
+#include "../../external/spirv.hpp"
+#include "../type.hpp"
+#include "../value.hpp"
+#include "./shader-binding-table.hpp"
 
-export module value.accelStruct;
+export module rayTrace.accelStruct;
 import value.aggregate;
 import value.primitive;
+
+static constexpr unsigned HIT_KIND_FRONT_FACING_TRIANGLE_KHR = 0xFE;
+static constexpr unsigned HIT_KIND_BACK_FACING_TRIANGLE_KHR = 0xFF;
 
 namespace Util {
 
@@ -59,8 +65,56 @@ std::string glmVec3ToString(const glm::vec3& vec) {
 
 }  // namespace Util
 
+/// @brief Fills the payload with whether a geometry was intersected.
+/// @param payload_info payload to modify.
+/// @param intersected whether a geometry was intersected.
+static void fillPayloadWithBool(Value* payload_info, const bool intersected) {
+    std::stack<Value*> frontier;
+    frontier.push(payload_info);
+
+    while (!frontier.empty()) {
+        Value* curr = frontier.top();
+        frontier.pop();
+
+        switch (curr->getType().getBase()) {
+        default: {
+            std::stringstream err;
+            err << "Encountered unsupported data type in fill payload: " << curr->getType().getBase();
+            throw std::runtime_error(err.str());
+        }
+        case DataType::FLOAT: {
+            Primitive& val = static_cast<Primitive&>(*curr);
+            val.copyFrom(Primitive(static_cast<float>(intersected)));
+            break;
+        }
+        case DataType::UINT: {
+            Primitive& val = static_cast<Primitive&>(*curr);
+            val.copyFrom(Primitive(static_cast<unsigned>(intersected)));
+            break;
+        }
+        case DataType::INT: {
+            Primitive& val = static_cast<Primitive&>(*curr);
+            val.copyFrom(Primitive(static_cast<int>(intersected)));
+            break;
+        }
+        case DataType::BOOL: {
+            Primitive& val = static_cast<Primitive&>(*curr);
+            val.copyFrom(Primitive(intersected));
+            break;
+        }
+        case DataType::ARRAY:
+        case DataType::STRUCT: {
+            const Aggregate& agg = static_cast<const Aggregate&>(*curr);
+            for (auto it = agg.begin(); it != agg.end(); ++it)
+                frontier.push(*it);
+            break;
+        }
+        }
+    }
+}
+
 // TODO: handle the effects of winding order on intersections; currently, front face is CCW
-class AccelerationStructure {
+export class AccelerationStructure {
 private:
     enum class NodeType { Box, Instance, Triangle, Procedural };
 
@@ -127,8 +181,6 @@ private:
         const glm::mat4x3 worldToObject;  // Column-major order
         const unsigned id;  // Id relative to other instance nodes in the same acceleration structure
         const unsigned customIndex;  // For shading
-        const unsigned geometryIndex;  // Geometry this node is a part of
-        const unsigned primitiveIndex;  // Index of node in geometry
         const unsigned mask;  // Mask that can make the ray ignore this instance
         const unsigned sbtRecordOffset;  // Shader binding table record offset (a.k.a. hit group id)
         const std::shared_ptr<AccelerationStructure> accelStruct;
@@ -137,8 +189,6 @@ private:
         /// @param object_to_world object-to-world matrix.
         /// @param id identifier during construction.
         /// @param custom_index identifier for shading.
-        /// @param geometry_index geometry it is a part of.
-        /// @param primitive_index Iindex in the geometry.
         /// @param mask mask that determines if a ray will ignore thsi instance.
         /// @param sbt_record_offset index of the hit group.
         /// @param accel_struct acceleration structure this instance points to.
@@ -146,8 +196,6 @@ private:
             const glm::mat4x3& object_to_world,
             const unsigned id,
             const unsigned custom_index,
-            const unsigned geometry_index,
-            const unsigned primitive_index,
             const unsigned mask,
             const unsigned sbt_record_offset,
             const std::shared_ptr<AccelerationStructure>& accel_struct
@@ -162,8 +210,6 @@ private:
               }(objectToWorld)),
               id(id),
               customIndex(custom_index),
-              geometryIndex(geometry_index),
-              primitiveIndex(primitive_index),
               mask(mask),
               sbtRecordOffset(sbt_record_offset),
               accelStruct(accel_struct) {};
@@ -173,8 +219,6 @@ private:
                 objectToWorld,
                 id,
                 customIndex,
-                geometryIndex,
-                primitiveIndex,
                 mask,
                 sbtRecordOffset,
                 std::make_shared<AccelerationStructure>(*accelStruct)
@@ -221,14 +265,6 @@ private:
 
             // Custom index
             result << Util::repeatedString(indent + 1, indent_string) << "custom_index = " << customIndex << std::endl;
-
-            // Geometry index
-            result << Util::repeatedString(indent + 1, indent_string) << "geometry_index = " << geometryIndex
-                   << std::endl;
-
-            // Primitive index
-            result << Util::repeatedString(indent + 1, indent_string) << "primitive_index = " << primitiveIndex
-                   << std::endl;
 
             // Mask
             result << Util::repeatedString(indent + 1, indent_string) << "mask = " << mask << std::endl;
@@ -383,6 +419,7 @@ private:
     const unsigned id;
     const bool isTLAS;  // Whether the acceleration structure is top-level
     std::shared_ptr<Node> root;  // Start of the acceleration structure
+    std::shared_ptr<ShaderBindingTable> shaderBindingTable;
 
 public:
     /// @brief AccelerationStructure constructor.
@@ -390,14 +427,17 @@ public:
     /// @param structure_info acceleration structure information.
     /// @param all_accel_structs all constructed acceleration structures.
     /// @param num_accel_structs total expected number of acceleration structures after construction.
+    /// @param sbt shader binding table the acceleration structure will use.
     AccelerationStructure(
         const unsigned id,
         const Struct& structure_info,
         std::vector<std::shared_ptr<AccelerationStructure>>& all_accel_structs,
-        const unsigned num_accel_structs
+        const unsigned num_accel_structs,
+        std::shared_ptr<ShaderBindingTable> sbt
     )
         : id(id),
-          isTLAS(static_cast<const Primitive&>(*(structure_info[0])).data.b32) {
+          isTLAS(static_cast<const Primitive&>(*(structure_info[0])).data.b32),
+          shaderBindingTable(sbt) {
 
         // Get node information
         const Array& box_node_infos = static_cast<const Array&>(*(structure_info[1]));
@@ -505,33 +545,20 @@ public:
             // Custom index
             const unsigned custom_index = static_cast<const Primitive&>(*(instance_info[2])).data.u32;
 
-            // Geometry index
-            const unsigned geometry_index = static_cast<const Primitive&>(*(instance_info[3])).data.u32;
-
-            // Primitive index
-            const unsigned primitive_index = static_cast<const Primitive&>(*(instance_info[4])).data.u32;
-
             // Mask
-            const unsigned mask = static_cast<const Primitive&>(*(instance_info[5])).data.u32;
+            const unsigned mask = static_cast<const Primitive&>(*(instance_info[3])).data.u32;
 
             // Shader binding table record offset
-            const unsigned sbt_record_offset = static_cast<const Primitive&>(*(instance_info[6])).data.u32;
+            const unsigned sbt_record_offset = static_cast<const Primitive&>(*(instance_info[4])).data.u32;
 
             // Get respective acceleration structure
-            const unsigned accel_struct_index = static_cast<const Primitive&>(*(instance_info[7])).data.u32;
+            const unsigned accel_struct_index = static_cast<const Primitive&>(*(instance_info[5])).data.u32;
             const unsigned index = num_accel_structs - 1 - accel_struct_index;
             std::shared_ptr<AccelerationStructure>& as = all_accel_structs[index];
 
-            nodes.push_back(std::make_shared<InstanceNode>(
-                object_to_world_matrix,
-                id,
-                custom_index,
-                geometry_index,
-                primitive_index,
-                mask,
-                sbt_record_offset,
-                as
-            ));
+            nodes.push_back(
+                std::make_shared<InstanceNode>(object_to_world_matrix, id, custom_index, mask, sbt_record_offset, as)
+            );
         }
 
         // Box nodes
@@ -614,6 +641,7 @@ public:
         nodesToEval = other.nodesToEval;
         root = other.root->clone();
 
+        shaderBindingTable = std::make_shared<ShaderBindingTable>(*(other.shaderBindingTable));
         useSBT = other.useSBT;
         missIndex = other.missIndex;
         offsetSBT = other.offsetSBT;
@@ -645,27 +673,12 @@ private:
         glm::vec2 barycentrics = glm::vec2(0.0f, 0.0f);
         bool isOpaque = true;
         bool enteredTriangleFrontFace = false;
-
-        /// @brief Resets the properties to its default values.
-        void reset() {
-            instance = nullptr;
-            geometryIndex = -1;
-            primitiveIndex = -1;
-            hitT = std::numeric_limits<float>::max();
-            barycentrics = glm::vec2(0.0f, 0.0f);
-            isOpaque = true;
-            enteredTriangleFrontFace = false;
-        }
+        unsigned hitKind = std::numeric_limits<unsigned>::max();
+        const Value* hitAttribute = nullptr;
     };
     struct CandidateIntersection {
         CandidateIntersectionType type = CandidateIntersectionType::Triangle;
         IntersectionProperties properties {};
-
-        /// @brief Resets the intersection to its default values.
-        void reset() {
-            type = CandidateIntersectionType::Triangle;
-            properties.reset();
-        }
 
         /// @brief Update the candidate to the most recent intersection.
         /// @param is_triangle whether this is a triangle intersection.
@@ -678,12 +691,6 @@ private:
     struct CommittedIntersection {
         CommittedIntersectionType type = CommittedIntersectionType::None;
         IntersectionProperties properties {};
-
-        /// @brief Resets the intersection to its default values.
-        void reset() {
-            type = CommittedIntersectionType::None;
-            properties.reset();
-        }
 
         /// @brief Update the committed to match the given candidate.
         /// @param is_triangle whether this is a triangle intersection.
@@ -747,8 +754,8 @@ private:
 
     /// @brief Initialize the trace; the acceleration structure can now be stepped through.
     void initTrace() {
-        committedIntersection.reset();
-        candidateIntersection.reset();
+        committedIntersection = CommittedIntersection {};
+        candidateIntersection = CandidateIntersection {};
         nodesToEval.push(&root);
         activeTrace = true;
     }
@@ -916,6 +923,7 @@ public:
 
 private:
     bool didPopNodePreviously = true;  // Used in the stepTrace() method
+    bool intersectedProcedural = false;  // Used in the stepTrace() method
 
 public:
     /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.
@@ -968,6 +976,8 @@ public:
                 glm::vec3 object_ray_origin = instance_node->worldToObject * rayOrigin;
                 glm::vec3 object_ray_direction = instance_node->worldToObject * rayDirection;
 
+                // TODO: the ray interval might need to be scaled (t-min and t-max) if any problems arise in the future.
+
                 const auto& ref_accel_struct = instance_node->accelStruct;
 
                 // Trace the ray in the respective acceleration structure.
@@ -999,6 +1009,54 @@ public:
                     // Update candidate
                     candidateIntersection = ref_accel_struct->candidateIntersection;
                     candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*curr_node_ref);
+
+                    // Run the intersection shader if the intersection was with a procedural node.
+                    // Running the shader here because we need the instance SBT offset for calculating the index.
+                    const bool sbt_exist = useSBT && (shaderBindingTable != nullptr);
+                    if (sbt_exist && (getCandidateIntersectionType() == CandidateIntersectionType::AABB)) {
+                        intersectedProcedural = true;
+                        const int geometry_index = getIntersectionGeometryIndex(false);
+                        const unsigned instance_sbt_offset =
+                            getIntersectionInstanceShaderBindingTableRecordOffset(false);
+                        const Program* shader = shaderBindingTable->getHitShader(
+                            offsetSBT,
+                            strideSBT,
+                            geometry_index,
+                            instance_sbt_offset,
+                            HitGroupType::Intersection
+                        );
+                        ValueMap inputs = getNewShaderInputs(*shader, true, nullptr);
+                        SBTShaderOutput outputs = shaderBindingTable->executeHit(
+                            inputs,
+                            offsetSBT,
+                            strideSBT,
+                            geometry_index,
+                            instance_sbt_offset,
+                            HitGroupType::Intersection
+                        );
+
+                        // If it fails the intersection, then cancel it.
+                        // Note: variable <intersectedProcedural> will be modified when invoking intersection and
+                        // any-hit shaders.
+                        const bool missed = !intersectedProcedural;
+                        if (missed) {
+                            found_primitive = false;
+                            candidateIntersection.update(false, IntersectionProperties {});
+                            break;
+                        }
+
+                        // Otherwise, store the hit attribute for later use.
+                        assert(isTLAS);
+                        for (const auto& [name, info] : outputs) {
+                            const auto value = get<0>(info);
+                            const auto storage_class = get<1>(info);
+                            if (storage_class == spv::StorageClass::StorageClassHitAttributeKHR) {
+                                Value* hit_attribute = value->getType().construct();
+                                hit_attribute->copyFrom(*value);
+                                candidateIntersection.properties.hitAttribute = hit_attribute;
+                            }
+                        }
+                    }
 
                     // Terminate on the first hit if the flag was risen
                     if (rayFlagTerminateOnFirstHit) {
@@ -1053,6 +1111,10 @@ public:
                     properties.barycentrics = glm::vec2(u, v);
                     properties.isOpaque = triangle_node->opaque;
                     properties.enteredTriangleFrontFace = entered_front;
+                    properties.geometryIndex = triangle_node->geometryIndex;
+                    properties.primitiveIndex = triangle_node->primitiveIndex;
+                    properties.hitKind =
+                        entered_front ? HIT_KIND_FRONT_FACING_TRIANGLE_KHR : HIT_KIND_BACK_FACING_TRIANGLE_KHR;
                     candidateIntersection.update(true, properties);
 
                     // Terminate on the first hit if the flag was risen
@@ -1065,13 +1127,6 @@ public:
                 break;
             }
             case NodeType::Procedural: {
-                // TODO: Not correct until shader binding table support.
-                // Currently, it returns an intersection if it intersects the
-                // respective AABB for the procedural.
-                // std::cout << "WARNING: encountered procedural; multi-shader invocation not a feature; will return "
-                //              "its AABB intersection result instead"
-                //           << std::endl;
-
                 // Check skip AABBs (procedurals) flag
                 if (rayFlagSkipAABBs)
                     break;
@@ -1102,15 +1157,14 @@ public:
                     // Update candidate
                     IntersectionProperties properties;
                     properties.isOpaque = procedural_node->opaque;
+                    properties.geometryIndex = procedural_node->geometryIndex;
+                    properties.primitiveIndex = procedural_node->primitiveIndex;
                     candidateIntersection.update(false, properties);
+                    assert(getCandidateIntersectionType() == CandidateIntersectionType::AABB);
 
-                    // Terminate on the first hit if the flag was risen
-                    if (rayFlagTerminateOnFirstHit) {
-                        activeTrace = false;
-                        return true;
-                    }
+                    // Cannot terminate early if ray flag "terminate on first hit" was raised because we do not know if
+                    // the ray actually intersected the primitive.
                 }
-
                 break;
             }
             }
@@ -1123,6 +1177,48 @@ public:
         return found_primitive;
     }
 
+    /// @brief Check if some hit t is within the ray's interval.
+    /// @param hit_t distance from the ray to the intersection.
+    /// @return whether hit t is within the ray's interval.
+    bool isIntersectionValid(const float hit_t) {
+        return (hit_t >= rayTMin) && (hit_t <= rayTMax);
+    }
+
+    /// @brief Invokes the any-hit shader.
+    /// @param hit_t distance from the ray to the intersection.
+    /// @param hit_kind object kind that was intersected.
+    /// @return whether to accept the intersection.
+    bool invokeAnyHitShader(const float hit_t, const unsigned hit_kind) {
+        assert(isTLAS);
+        const int geometry_index = getIntersectionGeometryIndex(false);
+        const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(false);
+        const Program* shader =
+            shaderBindingTable
+                ->getHitShader(offsetSBT, strideSBT, geometry_index, instance_sbt_offset, HitGroupType::Any);
+        ValueMap inputs = getNewShaderInputs(*shader, true, nullptr);
+        bool ignore_intersection = false;
+        SBTShaderOutput outputs = shaderBindingTable->executeHit(
+            inputs,
+            offsetSBT,
+            strideSBT,
+            geometry_index,
+            instance_sbt_offset,
+            HitGroupType::Any,
+            static_cast<void*>(&ignore_intersection)
+        );
+
+        if (ignore_intersection) {
+            intersectedProcedural = false;
+            return false;
+        }
+
+        // Otherwise, update respective properties
+        candidateIntersection.properties.hitT = hit_t;
+        candidateIntersection.properties.hitKind = hit_kind;
+
+        return true;
+    }
+
     /// @brief Include the current AABB/procedural intersection in determining the closest hit.
     /// The candidate intersection must be of type AABB.
     /// @param hit_t distance from the ray to the intersection.
@@ -1133,6 +1229,7 @@ public:
         if (hit_t >= committedIntersection.properties.hitT)
             return;
 
+        rayTMax = hit_t;
         candidateIntersection.properties.hitT = hit_t;
         committedIntersection.update(false, candidateIntersection);
     }
@@ -1146,6 +1243,7 @@ public:
         if (candidateIntersection.properties.hitT >= committedIntersection.properties.hitT)
             return;
 
+        rayTMax = candidateIntersection.properties.hitT;
         committedIntersection.update(true, candidateIntersection);
     }
 
@@ -1298,17 +1396,17 @@ public:
     /// @param stride_sbt shader binding table stride.
     /// @param miss_index shader binding table miss index.
     /// @return whether the trace intersected a geometry.
-    bool traceRay(
+    void traceRay(
         const unsigned ray_flags,
         const unsigned cull_mask,
         const glm::vec4& ray_origin,
         const glm::vec4& ray_direction,
         const float ray_t_min,
         const float ray_t_max,
-        const bool use_sbt,
-        const unsigned offset_sbt = 0,
-        const unsigned stride_sbt = 0,
-        const unsigned miss_index = 0
+        const unsigned sbt_offset,
+        const unsigned sbt_stride,
+        const unsigned miss_index,
+        Value* payload
     ) {
         initTrace(
             ray_flags,
@@ -1317,31 +1415,78 @@ public:
             ray_direction,
             ray_t_min,
             ray_t_max,
-            use_sbt,
-            offset_sbt,
-            stride_sbt,
+            true,
+            sbt_offset,
+            sbt_stride,
             miss_index
         );
 
         bool intersect_once = false;
-        bool continue_trace = false;
+        bool found_primitive = false;
         do {
-            continue_trace = stepTrace();
-            if (continue_trace)
+            found_primitive = stepTrace();
+            if (found_primitive)
                 intersect_once = true;
-        } while (continue_trace);
 
-        // TODO: Need to handle hit and miss shaders.
-        // Root acceleration structure has an id of 0; shouldn't be calling the closest hit shader because it is a TLAS.
-        if (id != 0 || rayFlagSkipClosestHitShader) {
-            // Do not execute the closest hit shader.
-            std::cout << "Skip the closest hit shader" << std::endl;
-            return intersect_once;
+            if (found_primitive) {
+                if (getCandidateIntersectionType() == CandidateIntersectionType::Triangle)
+                    confirmIntersection();
+                else  // ... == CandidateIntersectionType::AABB
+                    generateIntersection(getIntersectionT(false));
+            }
+
+        } while (found_primitive);
+
+        // Do not invoke any shaders if a shader binding table was not specified
+        if (!useSBT || shaderBindingTable == nullptr) {
+            fillPayloadWithBool(payload, intersect_once);
+            return;
+        }
+        assert(shaderBindingTable != nullptr);
+
+        // Otherwise, invoke either the closest hit or miss shaders
+        SBTShaderOutput outputs;
+        if (getCommittedIntersectionType() != CommittedIntersectionType::None) {
+            // Closest hit
+            if (rayFlagSkipClosestHitShader)
+                return;
+            const int geometry_index = getIntersectionGeometryIndex(true);
+            const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(true);
+            const Program* shader =
+                shaderBindingTable
+                    ->getHitShader(sbt_offset, sbt_stride, geometry_index, instance_sbt_offset, HitGroupType::Closest);
+            ValueMap inputs = getNewShaderInputs(*shader, true, payload);
+            outputs = shaderBindingTable->executeHit(
+                inputs,
+                sbt_offset,
+                sbt_stride,
+                geometry_index,
+                instance_sbt_offset,
+                HitGroupType::Closest
+            );
+        } else {
+            // Miss
+            const Program* shader = shaderBindingTable->getMissShader(miss_index);
+            ValueMap inputs = getNewShaderInputs(*shader, true, payload);
+            outputs = shaderBindingTable->executeMiss(inputs, miss_index);
         }
 
-        // Invoke a hit or miss shader here
-        std::cout << "Invoke closest hit shader / miss shader" << std::endl;
-        return intersect_once;
+        // Get the payload from the output
+        const Value* incoming_payload = nullptr;
+        for (const auto& [name, info] : outputs) {
+            const auto value = get<0>(info);
+            const auto storage_class = get<1>(info);
+            if (storage_class == spv::StorageClass::StorageClassIncomingRayPayloadKHR)
+                incoming_payload = value;
+        }
+        if (incoming_payload == nullptr)
+            throw std::runtime_error("Could not find the payload from a closest-hit / miss shader!");
+
+        // Update the payload
+        if (!(payload->getType().sameBase(incoming_payload->getType())))
+            throw std::runtime_error("Incoming payload type does not match payload type!");
+        payload->copyFrom(*incoming_payload);
+        assert(payload->equals(*incoming_payload));
     }
 
 private:
@@ -1495,6 +1640,134 @@ private:
         return {true, t, u, v, intersect_front};
     }
 
+    /// @brief Get populated shader inputs for the next shader in the ray tracing pipeline.
+    /// @param shader provides the inputs to populate.
+    /// @param get_committed whether to get the inputs of a candidate or committed intersection.
+    /// @param payload used to populate a shader input.
+    /// @return populated inputs that the respective shader can use.
+    ValueMap getNewShaderInputs(const Program& shader, bool get_committed, const Value* payload) const {
+        assert(isTLAS);
+        ValueMap result = shader.getInputs();
+
+        // Handle built-ins
+        for (const auto& [name, built_in] : shader.getBuiltIns()) {
+            switch (built_in) {
+            default:
+                break;
+            case spv::BuiltIn::BuiltInWorldRayOriginKHR: {  // 5321
+                Array* new_val = new Array(Type::primitive(DataType::FLOAT), 3);
+                Primitive x(rayOrigin.x);
+                Primitive y(rayOrigin.y);
+                Primitive z(rayOrigin.z);
+                std::vector<const Value*> world_ray_origin;
+                world_ray_origin.push_back(&x);
+                world_ray_origin.push_back(&y);
+                world_ray_origin.push_back(&z);
+                new_val->addElements(world_ray_origin);
+                result[name] = new_val;
+                break;
+            }
+            case spv::BuiltIn::BuiltInWorldRayDirectionKHR: {  // 5322
+                Array* new_val = new Array(Type::primitive(DataType::FLOAT), 3);
+                Primitive x(rayDirection.x);
+                Primitive y(rayDirection.y);
+                Primitive z(rayDirection.z);
+                std::vector<const Value*> world_ray_direction;
+                world_ray_direction.push_back(&x);
+                world_ray_direction.push_back(&y);
+                world_ray_direction.push_back(&z);
+                new_val->addElements(world_ray_direction);
+                result[name] = new_val;
+                break;
+            }
+            case spv::BuiltInObjectRayOriginKHR: {  // 5323
+                throw std::runtime_error("BuiltInObjectRayOriginKHR not implemented!");
+            }
+            case spv::BuiltInObjectRayDirectionKHR: {  // 5324
+                throw std::runtime_error("BuiltInObjectRayDirectionKHR not implemented!");
+            }
+            case spv::BuiltIn::BuiltInRayTminKHR: {  // 5325
+                result[name] = new Primitive(rayTMin);
+                break;
+            }
+            case spv::BuiltIn::BuiltInRayTmaxKHR: {  // 5326
+                result[name] = new Primitive(rayTMax);
+                break;
+            }
+            case spv::BuiltIn::BuiltInInstanceCustomIndexKHR: {  // 5327
+                result[name] = new Primitive(getIntersectionInstanceCustomIndex(get_committed));
+                break;
+            }
+            case spv::BuiltIn::BuiltInObjectToWorldKHR: {
+                throw std::runtime_error("BuiltInObjectToWorldKHR not implemented!");
+            }
+            case spv::BuiltIn::BuiltInWorldToObjectKHR: {
+                throw std::runtime_error("BuiltInWorldToObjectKHR not implemented!");
+            }
+            case spv::BuiltIn::BuiltInHitKindKHR: {
+                throw std::runtime_error("BuiltInHitKindKHR not implemented!");
+            }
+            case spv::BuiltIn::BuiltInIncomingRayFlagsKHR: {
+                throw std::runtime_error("BuiltInIncomingRayFlagsKHR not implemented!");
+            }
+            case spv::BuiltIn::BuiltInRayGeometryIndexKHR: {
+                throw std::runtime_error("BuiltInRayGeometryIndexKHR not implemented!");
+            }
+            }
+        }
+
+        // Handle storage classes
+        for (const auto& [name, storage_class] : shader.getStorageClasses()) {
+            switch (storage_class) {
+            default:
+                break;
+            case spv::StorageClass::StorageClassCallableDataKHR: {  // 5328
+                throw std::runtime_error("StorageClassCallableDataKHR not implemented!");
+            }
+            case spv::StorageClass::StorageClassIncomingCallableDataKHR: {  // 5329
+                throw std::runtime_error("StorageClassIncomingCallableDataKHR not implemented!");
+            }
+            case spv::StorageClass::StorageClassRayPayloadKHR: {  // 5338
+                // TODO: probably not necessary to handle this case, but will leave this comment
+                // in the case this storage class could be the problem.
+                break;
+            }
+            case spv::StorageClass::StorageClassHitAttributeKHR: {  // 5339
+                if (committedIntersection.properties.hitAttribute != nullptr) {
+                    const Value* hit = committedIntersection.properties.hitAttribute;
+                    assert(hit->getType().getBase() == DataType::ARRAY);
+                    const Array& hit_array = static_cast<const Array&>(*hit);
+                    for (unsigned a = 0; a < hit_array.getSize(); ++a)
+                        const Primitive& val = static_cast<const Primitive&>(*(hit_array[a]));
+                    result[name] = committedIntersection.properties.hitAttribute;
+                }
+                break;
+            }
+            case spv::StorageClass::StorageClassIncomingRayPayloadKHR: {  // 5342
+                if (payload == nullptr)
+                    throw std::runtime_error("Trying to fill an incoming payload but it doesn't exist!");
+                if (!(payload->getType().sameBase((result[name])->getType()))) {
+                    std::stringstream err;
+                    err << "Trying to fill an incoming payload but the input and payload types do not match (<payload "
+                           "type> != <input type>): "
+                        << payload->getType().getBase() << " != " << (result[name])->getType().getBase();
+                    throw std::runtime_error(err.str());
+                }
+                Value* incoming_payload = payload->getType().construct();
+                incoming_payload->copyFrom(*payload);
+                result[name] = incoming_payload;
+                break;
+            }
+            }
+            // Note: case shader record buffer is handled in shader binding table execution.
+        }
+
+        // Any acceleration structure input is handled in SBT class when executing.
+        // Same goes for any data tied to a shader record (shader record buffer).
+
+        return result;
+    }
+
 public:
     /// @brief Get the string representation of the acceleration structure.
     /// @param tab_level number of tabs to indent each line with.
@@ -1549,6 +1822,7 @@ public:
 export class AccelStructManager : public Value {
 private:
     std::shared_ptr<AccelerationStructure> root;
+    std::shared_ptr<ShaderBindingTable> shaderBindingTable;
     std::unique_ptr<Struct> structureInfo;
 
 public:
@@ -1559,11 +1833,10 @@ private:
     /// @param new_val "Value" to copy the type from.
     void copyType(const Value& new_val) {
         assert(
-            new_val.getType().getBase() == DataType::ACCEL_STRUCT ||
-            new_val.getType().getBase() == DataType::STRUCT
+            new_val.getType().getBase() == DataType::ACCEL_STRUCT || new_val.getType().getBase() == DataType::STRUCT
         );
 
-        // "new_val" could be an "Array" or "AccelStructManager" depending on when it is copied
+        // "new_val" could be an "Struct" or "AccelStructManager" depending on when it is copied
         const Struct& other = new_val.getType().getBase() == DataType::ACCEL_STRUCT
                                   ? *((static_cast<const AccelStructManager&>(new_val)).structureInfo)
                                   : static_cast<const Struct&>(new_val);
@@ -1593,7 +1866,8 @@ private:
                 i,
                 static_cast<const Struct&>(*(accel_structs_info[i])),
                 accel_structs,
-                num_accel_structs
+                num_accel_structs,
+                shaderBindingTable
             ));
         }
 
@@ -1602,25 +1876,65 @@ private:
         assert(accel_structs[num_accel_structs - 1] == nullptr);
     }
 
+    /// @brief Build the shader binding table.
+    void buildShaderBindingTable() {
+        assert(structureInfo != nullptr);
+        const Struct& structure_info_ref = *structureInfo;
+        const Struct& shader_binding_table = static_cast<const Struct&>(*(structure_info_ref[1]));
+
+        // Get the non-optional groups
+        const Array& ray_gen_group = static_cast<const Array&>(*(shader_binding_table[0]));
+        const Array& miss_group = static_cast<const Array&>(*(shader_binding_table[1]));
+        const Array& hit_group = static_cast<const Array&>(*(shader_binding_table[2]));
+
+        const unsigned ray_gen_group_size = ray_gen_group.getSize();
+        const unsigned miss_group_size = miss_group.getSize();
+        const unsigned hit_group_size = hit_group.getSize();
+
+        // Check if an SBT needs to be used
+        if ((ray_gen_group_size == 0) && (miss_group_size == 0) && (hit_group_size == 0))
+            return;
+
+        // Throw an error if any of the required groups in the SBT is empty
+        if ((ray_gen_group_size == 0) || (miss_group_size == 0) || (hit_group_size == 0)) {
+            std::stringstream err;
+            err << "Cannot build an unusable shader binding table where the number of entries in the required groups "
+                   "(ray generation, miss, hit) are "
+                << ray_gen_group_size << ", " << miss_group_size << ", " << hit_group_size << " respectively!";
+            throw std::runtime_error(err.str());
+        }
+
+        shaderBindingTable = std::make_shared<ShaderBindingTable>(shader_binding_table);
+    }
+
 public:
     AccelStructManager& operator=(const AccelStructManager& other) {
         // Copy the type
         copyType(other);
 
-        // Copy the acceleration structures instead of building them
-        root = std::make_shared<AccelerationStructure>(*(other.root));
+        // Copy the shader binding table (SBT) and make sure all shaders have access to the acceleration structures
+        if (other.shaderBindingTable != nullptr) {
+            shaderBindingTable = std::make_shared<ShaderBindingTable>(*(other.shaderBindingTable));
+            shaderBindingTable->setAccelStructManager(static_cast<void*>(this));
+        }
+
+        // Build the acceleration structures
+        buildAccelerationStructures();
+
         return *this;
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
-        // Copy the type of "other"
-        copyType(new_val);
-
-        // Construct the acceleration structures based on the type of "other"
-        if (new_val.getType().getBase() == DataType::ACCEL_STRUCT)
+        // Construct the acceleration structures and shader binding table based on the type of "other"
+        if (new_val.getType().getBase() == DataType::ACCEL_STRUCT) {
             *this = static_cast<const AccelStructManager&>(new_val);
-        else
+        } else {
+            copyType(new_val);
+            buildShaderBindingTable();
             buildAccelerationStructures();
+            if (shaderBindingTable != nullptr)
+                shaderBindingTable->setAccelStructManager(static_cast<void*>(this));
+        }
     }
 
     /// @brief Initialize the step trace.
@@ -1678,35 +1992,50 @@ public:
     /// @param stride_sbt shader binding table stride.
     /// @param miss_index shader binding table miss index.
     /// @return whether a geometry was intersected.
-    bool traceRay(
+    void traceRay(
         const unsigned ray_flags,
         const unsigned cull_mask,
         const std::vector<float>& ray_origin,
         const std::vector<float>& ray_direction,
         const float ray_t_min,
         const float ray_t_max,
-        const bool use_sbt,
-        const unsigned offset_sbt = 0,
-        const unsigned stride_sbt = 0,
-        const unsigned miss_index = 0
+        const unsigned offset_sbt,
+        const unsigned stride_sbt,
+        const unsigned miss_index,
+        Value* payload
     ) const {
         glm::vec4 ray_origin_glm = glm::make_vec4(ray_origin.data());
         ray_origin_glm.w = 1.0f;
         glm::vec4 ray_direction_glm = glm::make_vec4(ray_direction.data());
         ray_direction_glm.w = 0.0f;
 
-        return root->traceRay(
+        root->traceRay(
             ray_flags,
             cull_mask,
             ray_origin_glm,
             ray_direction_glm,
             ray_t_min,
             ray_t_max,
-            use_sbt,
             offset_sbt,
             stride_sbt,
-            miss_index
+            miss_index,
+            payload
         );
+    }
+
+    /// @brief Check if some hit t is within the ray's interval.
+    /// @param hit_t distance from the ray to the intersection.
+    /// @return whether hit t is within the ray's interval.
+    bool isIntersectionValid(const float hit_t) {
+        return root->isIntersectionValid(hit_t);
+    }
+
+    /// @brief Invokes the any-hit shader.
+    /// @param hit_t distance from the ray to the intersection.
+    /// @param hit_kind object kind that was intersected.
+    /// @return whether to accept the intersection.
+    bool invokeAnyHitShader(const float hit_t, const unsigned hit_kind) {
+        return root->invokeAnyHitShader(hit_t, hit_kind);
     }
 
     /// @brief Include the current AABB/procedural intersection in determining the closest hit.
@@ -1821,56 +2150,7 @@ public:
         return root->getIntersectionWorldToObject(get_committed);
     }
 
-    /// @brief (TODO: change "payload_info" to not be a pseudo-return, TODO: change once SBTs are implemented)
-    /// Fills the payload with whether a geometry was intersected.
-    /// @param payload_info payload to modify.
-    /// @param intersected whether a geometry was intersected.
-    void fillPayloadWithBool(Value* payload_info, const bool intersected) const {
-        std::stack<Value*> frontier;
-        frontier.push(payload_info);
-
-        while (!frontier.empty()) {
-            Value* curr = frontier.top();
-            frontier.pop();
-
-            switch (curr->getType().getBase()) {
-            default: {
-                std::stringstream err;
-                err << "Encountered unsupported data type in fill payload: " << curr->getType().getBase();
-                throw std::runtime_error(err.str());
-            }
-            case DataType::FLOAT: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(static_cast<float>(intersected)));
-                break;
-            }
-            case DataType::UINT: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(static_cast<unsigned>(intersected)));
-                break;
-            }
-            case DataType::INT: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(static_cast<int>(intersected)));
-                break;
-            }
-            case DataType::BOOL: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(intersected));
-                break;
-            }
-            case DataType::ARRAY:
-            case DataType::STRUCT: {
-                const Aggregate& agg = static_cast<const Aggregate&>(*curr);
-                for (auto it = agg.begin(); it != agg.end(); ++it)
-                    frontier.push(*it);
-                break;
-            }
-            }
-        }
-    }
-
-private:
+private:  // String helper methods
     /// @brief Get "Primitive" as a string.
     /// @param primitive value to get a string representation.
     /// @return string representation of primitive.
@@ -1997,6 +2277,31 @@ public:
         return result.str();
     }
 
+private:  // Type helper methods
+    static Type* makeShaderRecord(const unsigned num_shaders) {
+        using Names = std::vector<std::string>;  // Field names
+        using Fields = std::vector<const Type*>;  // Fields
+
+        const Type* string_type = new Type(Type::string());
+
+        Names shader_record_names {"inputs", "shaders", "buffer"};
+        Fields shader_record_fields;
+        {
+            // <inputs>
+            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
+
+            // <shaders>
+            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
+
+            // <buffer>
+            shader_record_fields.push_back(new Type(Type::array(0, *string_type)));
+        }
+        Type* shader_record_type = new Type(Type::structure(shader_record_fields, shader_record_names));
+
+        return shader_record_type;
+    }
+
+public:
     /// @brief Get the type for an acceleration structure manager.
     /// @return acceleration structure type.
     static Type getExpectedType() {
@@ -2006,6 +2311,7 @@ public:
         const Type* float_type = new Type(Type::primitive(DataType::FLOAT));
         const Type* bool_type = new Type(Type::primitive(DataType::BOOL));
         const Type* uint_type = new Type(Type::primitive(DataType::UINT));
+        const Type* void_type = new Type(Type::primitive(DataType::VOID));
 
         // TODO: allow user-defined names (names from input), and if not provided to this method, use default names
         Names names {"acceleration_structures", "shader_binding_table"};
@@ -2048,8 +2354,6 @@ public:
                 "object_to_world_matrix",
                 "id",
                 "custom_index",
-                "geometry_index",
-                "primitive_index",
                 "mask",
                 "shader_binding_table_record_offset",
                 "acceleration_structure_index"
@@ -2067,12 +2371,6 @@ public:
                 instance_node_fields.push_back(uint_type);
 
                 // <custom_index>
-                instance_node_fields.push_back(uint_type);
-
-                // <geometry_index>
-                instance_node_fields.push_back(uint_type);
-
-                // <primitive_index>
                 instance_node_fields.push_back(uint_type);
 
                 // <mask>
@@ -2137,8 +2435,29 @@ public:
         fields.push_back(new Type(Type::array(0, *acceleration_structure_type)));
 
         // <shader_binding_table>
-        // TODO: update when implementing shader binding tables
-        fields.push_back(new Type(Type::array(0, *(new Type(Type::primitive(DataType::UINT))))));
+        Names shader_binding_table_names {
+            "ray_gen_shader_records",
+            "miss_shader_records",
+            "hit_group_shader_records",
+            "callable_shader_records"
+        };
+        Fields shader_binding_table_fields;
+        {
+            // <ray_gen_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(1)))));
+
+            // <miss_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(1)))));
+
+            // <hit_group_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(3)))));
+
+            // <callable_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(0)))));
+        }
+        Type* shader_binding_table_type =
+            new Type(Type::structure(shader_binding_table_fields, shader_binding_table_names));
+        fields.push_back(shader_binding_table_type);
 
         return Type::accelStruct(fields, names);
     }

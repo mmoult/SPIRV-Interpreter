@@ -16,7 +16,7 @@ module;
 #include "../values/value.hpp"
 export module format.yaml;
 import format.parse;
-import value.accelStruct;
+import rayTrace.accelStruct;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
@@ -447,8 +447,7 @@ private:
             break;
         }
         case DataType::ACCEL_STRUCT: {
-            const auto& accel_struct_manager = static_cast<const AccelStructManager&>(value);
-            const Type accel_struct_type = accel_struct_manager.getExpectedType();
+            const Type accel_struct_type = AccelStructManager::getExpectedType();
             Struct structure = Struct(Type::structure(accel_struct_type.getFields(), accel_struct_type.getNames()));
             structure.dummyFill();
             printValue(out, structure, 1);
