@@ -14,7 +14,6 @@ struct IntersectionProperties
 
 hitAttributeEXT IntersectionProperties intersectionResults;
 
-const float MAX_HIT_T = 10000000000.0;
 const uint HIT_KIND_NONE = 0;
 const uint HIT_KIND_SPHERE = 1;
 
@@ -23,7 +22,7 @@ IntersectionProperties raySphereIntersection(vec3 sphere_center, float sphere_ra
     // Assume the ray will miss
     IntersectionProperties result;
     result.normal = vec3(0.0);
-    result.hit_t = MAX_HIT_T;
+    result.hit_t = -1.0;
     result.intersected = false;
 
     // Solves the intersection by using an analytic solution.

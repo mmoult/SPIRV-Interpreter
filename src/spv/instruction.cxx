@@ -205,6 +205,7 @@ public:
                 default:
                     throw std::runtime_error("Bad execution model using storage class HitAttributeKHR.");
                 case spv::ExecutionModelIntersectionKHR:
+                    ins.push_back(id);
                     outs.push_back(id);
                     break;
                 case spv::ExecutionModelAnyHitKHR:
@@ -312,8 +313,10 @@ public:
     /// execution for instructions which have shared behavior / don't distinguish between the two.
     /// @param data the vector of Data objects used by the program
     /// @param location the index of this instruction in the program
+    /// @param queue the decorations to apply
+    /// @param extra_data a pointer to any kind of data that an instruction may need
     /// @return whether some result was made. If used as a fallback, this should be true!
-    bool makeResult(DataView& data, unsigned location, DecoQueue* queue) const noexcept(false);
+    bool makeResult(DataView& data, unsigned location, DecoQueue* queue, void* extra_data = nullptr) const noexcept(false);
 
     /// @brief whether instruction in non-static sections should make its result statically
     /// Some instructions, such as OpFunction and OpLabel, appear in non-static code sections, but need to
@@ -327,8 +330,9 @@ public:
     /// @param data the data view at the current frame or the global if the frame stack is empty
     /// @param frame_stack holds variables, arguments, return addresses, and program counters
     /// @param verbose whether to print a verbose trace of execution
+    /// @param extra_data a pointer to any kind of data that an instruction may need
     /// @return whether the instruction execution blocks the invocation (such as by a barrier)
-    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const;
+    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, void* extra_data = nullptr) const;
 
     void print() const;
 
