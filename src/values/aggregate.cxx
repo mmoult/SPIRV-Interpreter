@@ -25,10 +25,12 @@ protected:
 
 public:
     Aggregate(Type t): Value(t) {}
+
     virtual ~Aggregate() {
         for (const auto& e : elements)
             delete e;
     }
+
     Aggregate(const Aggregate& other) = delete;
     Aggregate& operator=(const Aggregate& other) = delete;
 
@@ -127,6 +129,17 @@ protected:
 public:
     Array(const Type& sub_element, unsigned size): Aggregate(Type::array(size, sub_element)) {}
 
+    /// @brief Constructs an array from a list of elements.
+    ///
+    /// Be careful, since no checking is done to verify that all elements match type. This should only be used
+    /// internally, never through some user-generated parsing logic
+    /// @param elements a pointer of value elements to pull types from in constructing this's type. When this
+    /// constructor is used, the struct takes ownership of all elements given (and will delete them on destruction).
+    Array(std::vector<Value*>& elements)
+        : Aggregate(Type::array(elements.size(), elements[0]->getType())) {
+        this->elements = elements;
+    }
+
     unsigned getSize() const override {
         unsigned tsize = type.getSize();
         if (tsize == 0)
@@ -161,8 +174,26 @@ protected:
         return *type.getFields()[idx];
     }
 
+    Type createTypeFrom(const std::vector<Value*>& elements, const std::vector<std::string>& names) {
+        std::vector<const Type*> types;
+        types.reserve(elements.size());
+        for (const Value* element : elements)
+            types.push_back(&element->getType());
+        return Type::structure(types, names);
+    }
+
 public:
     Struct(Type t): Aggregate(t) {}
+
+    /// @brief Constructs a structure from elements and names.
+    ///
+    /// @param elements a pointer of value elements to pull types from in constructing this's type. When this
+    /// constructor is used, the struct takes ownership of all elements given (and will delete them on destruction).
+    /// @param names names of the elements, in order
+    Struct(std::vector<Value*>& elements, std::vector<std::string> names)
+        : Aggregate(createTypeFrom(elements, names)) {
+        this->elements = elements;
+    }
 
     unsigned getSize() const override {
         return type.getFields().size();

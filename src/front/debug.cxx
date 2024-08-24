@@ -186,7 +186,6 @@ public:
 
         const Value* val;
         bool deleteAfter = true;
-        std::vector<Type*> to_delete;
 
         const String empty("null");
         bool defaulted = false;
@@ -198,13 +197,13 @@ public:
                 val = agot;
                 deleteAfter = false;
             } else if (const Type* tgot = dat.getType(); tgot != nullptr)
-                val = tgot->asValue(to_delete);
+                val = tgot->asValue();
             else if (const Variable* vgot = dat.getVariable(); vgot != nullptr)
-                val = vgot->asValue(to_delete);
+                val = vgot->asValue();
             else if (const Function* fgot = dat.getFunction(); fgot != nullptr)
-                val = fgot->asValue(to_delete);
+                val = fgot->asValue();
             else if (const EntryPoint* egot = dat.getEntryPoint(); egot != nullptr)
-                val = egot->asValue(to_delete);
+                val = egot->asValue();
             else
                 defaulted = true;
         }
@@ -220,11 +219,8 @@ public:
         std::cout << out.str() << std::flush;
 
         // Clean up temporary variables
-        if (deleteAfter) {
+        if (deleteAfter)
             delete val;
-            for (const Type* t : to_delete)
-                delete t;
-        }
     }
 
     void printLine(unsigned invoc, unsigned i_at) const {

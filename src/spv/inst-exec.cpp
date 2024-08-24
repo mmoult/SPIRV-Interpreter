@@ -23,10 +23,10 @@ module spv.instruction;
 import spv.data.data;
 import spv.frame;
 import spv.token;
-import value.accelStruct;
 import value.aggregate;
 import value.primitive;
-import value.rayQuery;
+import value.raytrace.accelManager;
+import value.raytrace.rayQuery;
 
 bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
     bool inc_pc = true;

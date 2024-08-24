@@ -28,11 +28,11 @@ module spv.instruction;
 import spv.data.data;
 import spv.frame;
 import spv.token;
-import value.accelStruct;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
-import value.rayQuery;
+import value.raytrace.accelStruct;
+import value.raytrace.rayQuery;
 
 const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
     if (queue != nullptr) {

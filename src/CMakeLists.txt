@@ -22,12 +22,14 @@ target_sources(spv-interp
       spv/program.cxx
       spv/token.cxx
       util/compare.cxx
-      values/accel-struct.cxx
+      util/string.cxx
       values/aggregate.cxx
       values/pointer.cxx
       values/primitive.cxx
-      values/ray-query.cxx
       values/string.cxx
+      values/raytrace/accel-struct.cxx
+      values/raytrace/accel-manager.cxx
+      values/raytrace/ray-query.cxx
 )
 # Add other source files
 target_sources(spv-interp

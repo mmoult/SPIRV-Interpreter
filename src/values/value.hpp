@@ -38,4 +38,5 @@ public:
 };
 
 using ValueMap = std::map<std::string, const Value*>;
+
 #endif
