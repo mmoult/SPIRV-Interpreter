@@ -28,7 +28,7 @@ import value.primitive;
 import value.raytrace.accelManager;
 import value.raytrace.rayQuery;
 
-bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
+bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, void* extra_data) const {
     bool inc_pc = true;
     bool blocked = false;
     Frame& frame = *frame_stack.back();
@@ -51,7 +51,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     switch (opcode) {
     default:
         // fall back on the makeResult function (no fallback should use location!)
-        if (!makeResult(data, 0, nullptr)) {
+        if (!makeResult(data, 0, nullptr, extra_data)) {
             std::stringstream err;
             err << "Unsupported instruction execution (" << spv::OpToString(opcode) << ")!";
             throw std::runtime_error(err.str());
@@ -180,6 +180,13 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         inc_pc = false;
         break;
     }
+    case spv::OpIgnoreIntersectionKHR: // 4448
+    case spv::OpTerminateRayKHR: { // 4449
+        assert(extra_data != nullptr);
+        bool* ignore_intersection = static_cast<bool*>(extra_data);
+        *ignore_intersection = (opcode == spv::OpIgnoreIntersectionKHR);
+        [[fallthrough]];
+    }
     case spv::OpReturn: // 253
         // verify that the stack didn't expect a return value
         if (frame.hasReturn())
@@ -201,7 +208,6 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         break;
     }
     case spv::OpTraceRayKHR: { // 4445
-        // --- Get the arguments
         AccelStructManager& as = static_cast<AccelStructManager&>(*getValue(0, data));
 
         const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
@@ -234,62 +240,31 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // Only the 4 least-significant bits of SBT Offset are used in this instruction
         // Only the 4 least-significant bits of SBT Stride are used in this instruction
         // Only the 16 least-significant bits of Miss Index are used in this instruction
-        const bool intersect_geometry = as.traceRay(
+        as.traceRay(
             ray_flags,
             cull_mask & 0xFF,
             ray_origin,
             rayDirection,
             ray_t_min,
             ray_t_max,
-            true,
             offset_sbt & 0xF,
             stride_sbt & 0xF,
-            miss_index & 0xFFFF
+            miss_index & 0xFFFF,
+            payload_pointer
         );
 
-        // --- Store the data into the payload
-
-        // TODO: currently, payload stores if a geometry was intersected (a boolean).
-        // Must update once SBTs are implemented.
-        as.fillPayloadWithBool(payload_pointer, intersect_geometry);
+        // Payload will either be filled with whether the trace intersected a geometry (a boolean)
+        // or the user-defined payload output.
 
         break;
     }
     case spv::OpExecuteCallableKHR: { // 4446
-        // TODO: call the callable shader once there is SBT support
+        // TODO: implement callable shader execution
         const unsigned index_sbt = static_cast<Primitive&>(*getValue(0, data)).data.u32;
         const auto shader_args = getFromPointer(1, data);
         std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
         std::cout << "Invoking callable shader at SBT index = (" << index_sbt << ") with argument of type ("
                   << shader_args->getType().getBase() << ")" << std::endl;
-        break;
-    }
-    case spv::OpIgnoreIntersectionKHR: { // 4448
-        // TODO: update once interpreter supports SBTs
-        std::cout << "WARNING: OpIgnoreIntersectionKHR instruction does nothing as the moment!" << std::endl;
-        std::cout << "\tShould terminate the calling any-hit shader and continue ray traversal without modifying "
-                     "gl_RayTmaxEXT and gl_RayTminEXT."
-                  << std::endl;
-
-        // TODO: temporarily do what OpReturn does
-        // verify that the stack didn't expect a return value
-        if (frame.hasReturn())
-            throw std::runtime_error("Missing value for function return!");
-        inc_pc = pop_frame();  // don't increment PC if we are at the end of program
-
-        break;
-    }
-    case spv::OpTerminateRayKHR: { // 4449
-        // TODO: update once interpreter supports SBTs
-        std::cout << "WARNING: OpTerminateRayKHR instruction does nothing as the moment!" << std::endl;
-        std::cout << "\tShould stop the ray traversal and invoke the closest hit shader." << std::endl;
-
-        // TODO: temporarily do what OpReturn does
-        // verify that the stack didn't expect a return value
-        if (frame.hasReturn())
-            throw std::runtime_error("Missing value for function return!");
-        inc_pc = pop_frame();  // don't increment PC if we are at the end of program
-
         break;
     }
     case spv::OpRayQueryInitializeKHR: { // 4473

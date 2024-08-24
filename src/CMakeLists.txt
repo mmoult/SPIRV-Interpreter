@@ -40,6 +40,7 @@ target_sources(spv-interp
     spv/inst-read.cpp
     util/trie.cpp
     values/type.cpp
+    values/raytrace/shader-binding-table.cpp
 )
 
 # git rev-parse --short HEAD

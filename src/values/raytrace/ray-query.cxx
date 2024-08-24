@@ -14,7 +14,6 @@ module;
 
 #include "../type.hpp"
 #include "../value.hpp"
-
 export module value.raytrace.rayQuery;
 import value.raytrace.accelManager;
 

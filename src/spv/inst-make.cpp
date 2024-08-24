@@ -31,7 +31,7 @@ import spv.token;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
-import value.raytrace.accelStruct;
+import value.raytrace.accelManager;
 import value.raytrace.rayQuery;
 
 const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
@@ -435,7 +435,8 @@ void element_tern_op(
 bool Instruction::makeResult(
     DataView& data,
     unsigned location,
-    Instruction::DecoQueue* queue
+    Instruction::DecoQueue* queue,
+    void* extra_data
 ) const noexcept(false) {
     if (!hasResult)
         return false; // no result made!
@@ -1359,7 +1360,7 @@ bool Instruction::makeResult(
         throw std::runtime_error("OpConvertUToAccelerationStructureKHR not implemented.");
 
         Type* res_type = getType(0, data);
-        // AccelStructManager res; // TODO: update me; set the acceleration structure
+        // AccelStructManager res; // update me; set the acceleration structure
         // std::vector<const Value*> values {&res};
         // data[result_at].redefine(res_type->construct(values));
 
@@ -1391,22 +1392,23 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpReportIntersectionKHR: { // 5334
-        // TODO: update once interpreter supports SBTs
         const float hit_t = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
         const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
 
-        // TODO: once intersection shader can be invoked by pipeline, use actual rayTMin and rayTMax.
-        // For now, using constants.
-        const float ray_t_min = 0.0;
-        const float ray_t_max = 10000.0;
+        // Get necessary data from the ray tracing pipeline if it exist
+        AccelStructManager* accel_struct = nullptr;
+        if (extra_data != nullptr)
+            accel_struct = static_cast<AccelStructManager*>(extra_data);
 
         bool result = false;
-        const bool ignore_hit_shader = (hit_t < ray_t_min) || (hit_t > ray_t_max);
-        if (!ignore_hit_shader) {
-            // TODO: Invoke any-hit shader.
-            // If ignored by any-hit, return false.
-            // If any-hit rejects it, return false.
-            result = true;
+        if (accel_struct == nullptr) {
+            // Execute this if testing a single intersection shader
+            // Assume t-min is 0.0 and t-max goes to infinity
+            result = hit_t > 0.0f;
+        } else {
+            // Execute if running a ray tracing pipeline
+            const bool in_ray_interval = accel_struct->isIntersectionValid(hit_t);
+            result = in_ray_interval ? accel_struct->invokeAnyHitShader(hit_t, hit_kind) : false;
         }
 
         Type* res_type = getType(0, data);
@@ -1819,6 +1821,47 @@ bool Instruction::makeResultGlsl(
         E_TERN_OP(FLOAT, fx);
         break;
     }
+    case GLSLstd450Distance: { // 67
+        Value* vec_1_val = getValue(4, data);
+        Value* vec_2_val = getValue(5, data);
+        assert(vec_1_val->getType() == vec_2_val->getType());
+
+        Type* res_type = getType(0, data);
+
+        const Type& vec_type = vec_1_val->getType();
+        if (vec_type.getBase() != DataType::ARRAY) {
+            assert(vec_type.getBase() == DataType::FLOAT);
+            const float one = static_cast<Primitive*>(vec_1_val)->data.fp32;
+            const float two = static_cast<Primitive*>(vec_2_val)->data.fp32;
+            Primitive prim_single(std::sqrt((one - two) * (one - two)));
+            std::vector<const Value*> pfloats {&prim_single};
+            Value* res = res_type->construct(pfloats);
+            data[result_at].redefine(res);
+            break;
+        }
+
+        if (vec_type.getElement().getBase() != DataType::FLOAT)
+            throw std::runtime_error("Vector (in distance calculation) element must have float type!");
+
+        const Array& vec_1 = *static_cast<Array*>(vec_1_val);
+        const Array& vec_2 = *static_cast<Array*>(vec_2_val);
+        assert(vec_1.getSize() == vec_2.getSize());
+
+        float sum = 0.0f;
+        for (unsigned i = 0; i < vec_1.getSize(); ++i) {
+            const float vec_1_i = static_cast<const Primitive*>(vec_1[i])->data.fp32;
+            const float vec_2_i = static_cast<const Primitive*>(vec_2[i])->data.fp32;
+            const float diff = vec_1_i - vec_2_i;
+            sum += (diff * diff);
+        }
+        const float result = std::sqrt(sum);
+
+        Primitive prim_single(result);
+        std::vector<const Value*> pfloats {&prim_single};
+        Value* res = res_type->construct(pfloats);
+        data[result_at].redefine(res);
+        break;
+    }
     case GLSLstd450Normalize: { // 69
         Value* vec_val = getValue(4, data);
         const Type& vec_type = vec_val->getType();
@@ -1863,6 +1906,71 @@ bool Instruction::makeResultGlsl(
 
         Value* res = res_type->construct(pfloats);
         data[result_at].redefine(res);
+        break;
+    }
+    case GLSLstd450Reflect: { // 71
+        Value* incident_val = getValue(4, data);
+        Value* normal_val = getValue(5, data);
+        assert(incident_val->getType() == normal_val->getType());
+
+        Type* res_type = getType(0, data);
+
+        const Type& vec_type = incident_val->getType();
+        if (vec_type.getBase() != DataType::ARRAY) {
+            assert(vec_type.getBase() == DataType::FLOAT);
+            const float incident = static_cast<Primitive*>(incident_val)->data.fp32;
+            const float normal = static_cast<Primitive*>(normal_val)->data.fp32;
+            Primitive prim_single(incident - 2 * (normal * incident) * normal);
+            std::vector<const Value*> pfloats {&prim_single};
+            Value* res = res_type->construct(pfloats);
+            data[result_at].redefine(res);
+            break;
+        }
+
+        if (vec_type.getElement().getBase() != DataType::FLOAT)
+            throw std::runtime_error("Vector (in reflect calculation) element must have float type!");
+
+        // Calculate: I - 2 * dot(N, I) * N
+        const Array& incident = *static_cast<Array*>(incident_val);
+        const Array& normal = *static_cast<Array*>(normal_val);
+        assert(incident.getSize() == normal.getSize());
+
+        // dot(N, I)
+        float dot_product = 0.0;
+        for (unsigned i = 0; i < incident.getSize(); ++i) {
+            const float normal_elem = static_cast<const Primitive*>(normal[i])->data.fp32;
+            const float incident_elem = static_cast<const Primitive*>(incident[i])->data.fp32;
+            dot_product += normal_elem * incident_elem;
+        }
+
+        // 2 * dot(N, I) * N
+        std::vector<float> second_term;
+        const float scaled_dot_product = 2.0f * dot_product;
+        for (unsigned i = 0; i < normal.getSize(); ++i) {
+            const float normal_elem = static_cast<const Primitive*>(normal[i])->data.fp32;
+            second_term.push_back(scaled_dot_product * normal_elem);
+        }
+
+        // I - 2 * dot(N, I) * N
+        std::vector<float> result;
+        for (unsigned i = 0; i < incident.getSize(); ++i) {
+            const float incident_elem = static_cast<const Primitive*>(incident[i])->data.fp32;
+            result.push_back(incident_elem - second_term[i]);
+        }
+
+        // Finished calculations; now store them
+        assert(result.size() == incident.getSize());
+        std::vector<const Value*> pfloats;
+        for (unsigned i = 0; i < result.size(); ++i) {
+            pfloats.push_back(new Primitive(result[i]));
+        }
+        Value* res = res_type->construct(pfloats);
+        data[result_at].redefine(res);
+
+        // Clean up
+        for (const auto& val : pfloats)
+            delete val;
+
         break;
     }
     }

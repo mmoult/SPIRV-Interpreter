@@ -22,6 +22,7 @@ module;
 #include "../../external/spirv.hpp"
 #include "../type.hpp"
 #include "../value.hpp"
+#include "shader-binding-table.hpp"
 
 export module value.raytrace.accelManager;
 import util.string;
@@ -32,6 +33,7 @@ import value.raytrace.accelStruct;
 export class AccelStructManager : public Value {
 private:
     std::shared_ptr<AccelerationStructure> root;
+    std::shared_ptr<ShaderBindingTable> shaderBindingTable;
     std::unique_ptr<Struct> structureInfo;
 
 public:
@@ -49,11 +51,10 @@ private:
     /// @param new_val "Value" to copy the type from.
     void copyType(const Value& new_val) {
         assert(
-            new_val.getType().getBase() == DataType::ACCEL_STRUCT ||
-            new_val.getType().getBase() == DataType::STRUCT
+            new_val.getType().getBase() == DataType::ACCEL_STRUCT || new_val.getType().getBase() == DataType::STRUCT
         );
 
-        // "new_val" could be an "Array" or "AccelStructManager" depending on when it is copied
+        // "new_val" could be an "Struct" or "AccelStructManager" depending on when it is copied
         const Struct& other = new_val.getType().getBase() == DataType::ACCEL_STRUCT
                                   ? *((static_cast<const AccelStructManager&>(new_val)).structureInfo)
                                   : static_cast<const Struct&>(new_val);
@@ -83,7 +84,8 @@ private:
                 i,
                 static_cast<const Struct&>(*(accel_structs_info[i])),
                 accel_structs,
-                num_accel_structs
+                num_accel_structs,
+                shaderBindingTable
             ));
         }
 
@@ -92,25 +94,65 @@ private:
         assert(accel_structs[num_accel_structs - 1] == nullptr);
     }
 
+    /// @brief Build the shader binding table.
+    void buildShaderBindingTable() {
+        assert(structureInfo != nullptr);
+        const Struct& structure_info_ref = *structureInfo;
+        const Struct& shader_binding_table = static_cast<const Struct&>(*(structure_info_ref[1]));
+
+        // Get the non-optional groups
+        const Array& ray_gen_group = static_cast<const Array&>(*(shader_binding_table[0]));
+        const Array& miss_group = static_cast<const Array&>(*(shader_binding_table[1]));
+        const Array& hit_group = static_cast<const Array&>(*(shader_binding_table[2]));
+
+        const unsigned ray_gen_group_size = ray_gen_group.getSize();
+        const unsigned miss_group_size = miss_group.getSize();
+        const unsigned hit_group_size = hit_group.getSize();
+
+        // Check if an SBT needs to be used
+        if ((ray_gen_group_size == 0) && (miss_group_size == 0) && (hit_group_size == 0))
+            return;
+
+        // Throw an error if any of the required groups in the SBT is empty
+        if ((ray_gen_group_size == 0) || (miss_group_size == 0) || (hit_group_size == 0)) {
+            std::stringstream err;
+            err << "Cannot build an unusable shader binding table where the number of entries in the required groups "
+                   "(ray generation, miss, hit) are "
+                << ray_gen_group_size << ", " << miss_group_size << ", " << hit_group_size << " respectively!";
+            throw std::runtime_error(err.str());
+        }
+
+        shaderBindingTable = std::make_shared<ShaderBindingTable>(shader_binding_table);
+    }
+
 public:
     AccelStructManager& operator=(const AccelStructManager& other) {
         // Copy the type
         copyType(other);
 
-        // Copy the acceleration structures instead of building them
-        root = std::make_shared<AccelerationStructure>(*(other.root));
+        // Copy the shader binding table (SBT) and make sure all shaders have access to the acceleration structures
+        if (other.shaderBindingTable != nullptr) {
+            shaderBindingTable = std::make_shared<ShaderBindingTable>(*(other.shaderBindingTable));
+            shaderBindingTable->setAccelStructManager(static_cast<void*>(this));
+        }
+
+        // Build the acceleration structures
+        buildAccelerationStructures();
+
         return *this;
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
-        // Copy the type of "other"
-        copyType(new_val);
-
-        // Construct the acceleration structures based on the type of "other"
-        if (new_val.getType().getBase() == DataType::ACCEL_STRUCT)
+        // Construct the acceleration structures and shader binding table based on the type of "other"
+        if (new_val.getType().getBase() == DataType::ACCEL_STRUCT) {
             *this = static_cast<const AccelStructManager&>(new_val);
-        else
+        } else {
+            copyType(new_val);
+            buildShaderBindingTable();
             buildAccelerationStructures();
+            if (shaderBindingTable != nullptr)
+                shaderBindingTable->setAccelStructManager(static_cast<void*>(this));
+        }
     }
 
     /// @brief Initialize the step trace.
@@ -168,35 +210,50 @@ public:
     /// @param stride_sbt shader binding table stride.
     /// @param miss_index shader binding table miss index.
     /// @return whether a geometry was intersected.
-    bool traceRay(
+    void traceRay(
         const unsigned ray_flags,
         const unsigned cull_mask,
         const std::vector<float>& ray_origin,
         const std::vector<float>& ray_direction,
         const float ray_t_min,
         const float ray_t_max,
-        const bool use_sbt,
-        const unsigned offset_sbt = 0,
-        const unsigned stride_sbt = 0,
-        const unsigned miss_index = 0
+        const unsigned offset_sbt,
+        const unsigned stride_sbt,
+        const unsigned miss_index,
+        Value* payload
     ) const {
         glm::vec4 ray_origin_glm = glm::make_vec4(ray_origin.data());
         ray_origin_glm.w = 1.0f;
         glm::vec4 ray_direction_glm = glm::make_vec4(ray_direction.data());
         ray_direction_glm.w = 0.0f;
 
-        return root->traceRay(
+        root->traceRay(
             ray_flags,
             cull_mask,
             ray_origin_glm,
             ray_direction_glm,
             ray_t_min,
             ray_t_max,
-            use_sbt,
             offset_sbt,
             stride_sbt,
-            miss_index
+            miss_index,
+            payload
         );
+    }
+
+    /// @brief Check if some hit t is within the ray's interval.
+    /// @param hit_t distance from the ray to the intersection.
+    /// @return whether hit t is within the ray's interval.
+    bool isIntersectionValid(const float hit_t) {
+        return root->isIntersectionValid(hit_t);
+    }
+
+    /// @brief Invokes the any-hit shader.
+    /// @param hit_t distance from the ray to the intersection.
+    /// @param hit_kind object kind that was intersected.
+    /// @return whether to accept the intersection.
+    bool invokeAnyHitShader(const float hit_t, const unsigned hit_kind) {
+        return root->invokeAnyHitShader(hit_t, hit_kind);
     }
 
     /// @brief Include the current AABB/procedural intersection in determining the closest hit.
@@ -311,56 +368,7 @@ public:
         return root->getIntersectionWorldToObject(get_committed);
     }
 
-    /// @brief (TODO: change "payload_info" to not be a pseudo-return, TODO: change once SBTs are implemented)
-    /// Fills the payload with whether a geometry was intersected.
-    /// @param payload_info payload to modify.
-    /// @param intersected whether a geometry was intersected.
-    void fillPayloadWithBool(Value* payload_info, const bool intersected) const {
-        std::stack<Value*> frontier;
-        frontier.push(payload_info);
-
-        while (!frontier.empty()) {
-            Value* curr = frontier.top();
-            frontier.pop();
-
-            switch (curr->getType().getBase()) {
-            default: {
-                std::stringstream err;
-                err << "Encountered unsupported data type in fill payload: " << curr->getType().getBase();
-                throw std::runtime_error(err.str());
-            }
-            case DataType::FLOAT: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(static_cast<float>(intersected)));
-                break;
-            }
-            case DataType::UINT: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(static_cast<unsigned>(intersected)));
-                break;
-            }
-            case DataType::INT: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(static_cast<int>(intersected)));
-                break;
-            }
-            case DataType::BOOL: {
-                Primitive& val = static_cast<Primitive&>(*curr);
-                val.copyFrom(Primitive(intersected));
-                break;
-            }
-            case DataType::ARRAY:
-            case DataType::STRUCT: {
-                const Aggregate& agg = static_cast<const Aggregate&>(*curr);
-                for (auto it = agg.begin(); it != agg.end(); ++it)
-                    frontier.push(*it);
-                break;
-            }
-            }
-        }
-    }
-
-private:
+private:  // String helper methods
     /// @brief Get "Primitive" as a string.
     /// @param primitive value to get a string representation.
     /// @return string representation of primitive.
@@ -428,10 +436,11 @@ public:
             case DataType::FLOAT:
             case DataType::UINT:
             case DataType::INT:
-            case DataType::BOOL:
-                result << repeatedString(num_tabs, tab_string) <<
-                    name << " = " << getPrimitiveValueAsString(*value) << std::endl;
+            case DataType::BOOL: {
+                result << repeatedString(num_tabs, tab_string) << name << " = "
+                       << getPrimitiveValueAsString(*value) << std::endl;
                 break;
+            }
             case DataType::STRUCT:
             case DataType::ACCEL_STRUCT: {
                 result << repeatedString(num_tabs, tab_string) << name << " {" << std::endl;
@@ -484,6 +493,31 @@ public:
         return result.str();
     }
 
+private:  // Type helper methods
+    static Type* makeShaderRecord(const unsigned num_shaders) {
+        using Names = std::vector<std::string>;  // Field names
+        using Fields = std::vector<const Type*>;  // Fields
+
+        const Type* string_type = new Type(Type::string());
+
+        Names shader_record_names {"inputs", "shaders", "buffer"};
+        Fields shader_record_fields;
+        {
+            // <inputs>
+            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
+
+            // <shaders>
+            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
+
+            // <buffer>
+            shader_record_fields.push_back(new Type(Type::array(0, *string_type)));
+        }
+        Type* shader_record_type = new Type(Type::structure(shader_record_fields, shader_record_names));
+
+        return shader_record_type;
+    }
+
+public:
     /// @brief Get the type for an acceleration structure manager.
     /// @return acceleration structure type.
     static Type getExpectedType() {
@@ -493,6 +527,7 @@ public:
         const Type* float_type = new Type(Type::primitive(DataType::FLOAT));
         const Type* bool_type = new Type(Type::primitive(DataType::BOOL));
         const Type* uint_type = new Type(Type::primitive(DataType::UINT));
+        const Type* void_type = new Type(Type::primitive(DataType::VOID));
 
         // TODO: allow user-defined names (names from input), and if not provided to this method, use default names
         Names names {"acceleration_structures", "shader_binding_table"};
@@ -535,8 +570,6 @@ public:
                 "object_to_world_matrix",
                 "id",
                 "custom_index",
-                "geometry_index",
-                "primitive_index",
                 "mask",
                 "shader_binding_table_record_offset",
                 "acceleration_structure_index"
@@ -554,12 +587,6 @@ public:
                 instance_node_fields.push_back(uint_type);
 
                 // <custom_index>
-                instance_node_fields.push_back(uint_type);
-
-                // <geometry_index>
-                instance_node_fields.push_back(uint_type);
-
-                // <primitive_index>
                 instance_node_fields.push_back(uint_type);
 
                 // <mask>
@@ -624,8 +651,29 @@ public:
         fields.push_back(new Type(Type::array(0, *acceleration_structure_type)));
 
         // <shader_binding_table>
-        // TODO: update when implementing shader binding tables
-        fields.push_back(new Type(Type::array(0, *(new Type(Type::primitive(DataType::UINT))))));
+        Names shader_binding_table_names {
+            "ray_gen_shader_records",
+            "miss_shader_records",
+            "hit_group_shader_records",
+            "callable_shader_records"
+        };
+        Fields shader_binding_table_fields;
+        {
+            // <ray_gen_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(1)))));
+
+            // <miss_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(1)))));
+
+            // <hit_group_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(3)))));
+
+            // <callable_shader_records>
+            shader_binding_table_fields.push_back(new Type(Type::array(0, *(makeShaderRecord(0)))));
+        }
+        Type* shader_binding_table_type =
+            new Type(Type::structure(shader_binding_table_fields, shader_binding_table_names));
+        fields.push_back(shader_binding_table_type);
 
         return Type::accelStruct(fields, names);
     }

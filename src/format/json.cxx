@@ -188,6 +188,7 @@ private:
                 return new Primitive(inf);
             else if (name == "-Infinity")
                 return new Primitive(-inf);
+            return new String(name); // TODO: clean me
             std::stringstream err;
             err << "String in JSON input not supported: \"" << name << "\"!";
             throw std::runtime_error(err.str());

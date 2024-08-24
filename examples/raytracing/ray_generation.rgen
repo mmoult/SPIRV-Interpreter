@@ -1,0 +1,36 @@
+#version 460 core
+#extension GL_EXT_ray_tracing : require
+#extension GL_EXT_ray_flags_primitive_culling : enable
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT accelerationStructure;
+layout(set = 1, binding = 0) uniform RayProperties
+{
+    uint flags;
+    uint cullMask;
+    vec3 origin;
+    vec3 direction;
+    float tMin;
+    float tMax;
+} ray;
+
+layout(location = 0) rayPayloadEXT vec3 payload;
+
+void main()
+{
+    const uint sbt_offset = 0;
+    const uint sbt_stride = 0;
+    const uint miss_index = 0;
+    traceRayEXT(
+        accelerationStructure,
+        ray.flags,
+        ray.cullMask,
+        sbt_offset,
+        sbt_stride,
+        miss_index,
+        ray.origin,
+        ray.tMin,
+        ray.direction,
+        ray.tMax,
+        0
+    );
+}
