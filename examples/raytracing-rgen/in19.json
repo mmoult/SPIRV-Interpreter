@@ -11,11 +11,11 @@
     "rayOrigin" : [ -0.8, 2.2, -2.5 ],
     "rayTMin" : 0.0,
     "rayDirection" : [ -4.0, 0.0, -5.0 ],
-    "rayTMax" : 5.0, 
+    "rayTMax" : 5.0,
 
     "indexSBTCallable" : 727,
     "callableData" : [ 1.234, 4.321 ],
-    
+
     "accelStruct" : {
         "acceleration_structures" : [
             {

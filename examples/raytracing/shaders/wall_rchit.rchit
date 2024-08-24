@@ -26,7 +26,7 @@ void main() {
         {
             object_color = vec3(0.2);
         }
-        else 
+        else
         {
             object_color = vec3(1.0);
         }
@@ -91,16 +91,16 @@ void main() {
     const uint shadow_ray_flags = gl_RayFlagsCullBackFacingTrianglesEXT | gl_RayFlagsSkipClosestHitShaderEXT;
     shadowPayload = true;
     traceRayEXT(
-        accelerationStructure, 
-        shadow_ray_flags, 
-        0xFF, 
-        0, 
-        0, 
-        1, 
-        intersection_point + normal * EPSILON_BIAS, 
-        gl_RayTminEXT, 
-        dir_to_light, 
-        distance(intersection_point, point_light) - 1.0, 
+        accelerationStructure,
+        shadow_ray_flags,
+        0xFF,
+        0,
+        0,
+        1,
+        intersection_point + normal * EPSILON_BIAS,
+        gl_RayTminEXT,
+        dir_to_light,
+        distance(intersection_point, point_light) - 1.0,
         2
     );
     // "shadowPayload" will be false if the shadow miss shader is invoked
@@ -115,16 +115,16 @@ void main() {
         // Shoot a reflection ray
         const uint reflection_ray_flags = gl_RayFlagsCullBackFacingTrianglesEXT;
         traceRayEXT(
-            accelerationStructure, 
-            reflection_ray_flags, 
-            0x2, 
-            0, 
-            0, 
-            0, 
-            intersection_point + normal * EPSILON_BIAS, 
-            gl_RayTminEXT, 
-            reflect_dir, 
-            gl_RayTmaxEXT, 
+            accelerationStructure,
+            reflection_ray_flags,
+            0x2,
+            0,
+            0,
+            0,
+            intersection_point + normal * EPSILON_BIAS,
+            gl_RayTminEXT,
+            reflect_dir,
+            gl_RayTmaxEXT,
             1
         );
         const float reflection_ratio = 0.3;  // Out of 1.0

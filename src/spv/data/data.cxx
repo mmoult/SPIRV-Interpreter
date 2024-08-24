@@ -18,7 +18,7 @@ import value.aggregate;
 import value.primitive;
 import value.string;
 
-export class Variable {
+export class Variable : public Valuable {
     // The variable owns this value. When it is set, another value is copied over and decorations (such as
     // relaxed precision or type conversions) are applied.
     Value* val;
@@ -101,46 +101,30 @@ public:
         return builtIn;
     }
 
-    Value* asValue(std::vector<Type*>& to_delete) const {
-        bool use_name = !name.empty();
+    [[nodiscard]] Value* asValue() const override {
         // Represent this variable with its value, storage class, and if set, name
         // Don't currently display decorations although they could be helpful.
-        std::vector<const Type*> sub_list;
-        if (use_name) {
-            Type* str = new Type(Type::string());
-            sub_list.push_back(str);
-            to_delete.push_back(str);
+        std::vector<Value*> elements;
+        std::vector<std::string>  names;
+
+        if (!name.empty()) {
+            names.push_back("name");
+            elements.push_back(new String(name));
         }
-        // value is obviously already a value, so we can print it without any processing
-        sub_list.push_back(&val->getType());
-        Type* num = new Type(Type::primitive(DataType::INT));  // for storage class
-        sub_list.push_back(num);
-        to_delete.push_back(num);
 
-        Type str_type = Type::structure(sub_list);
-        // Name all used members then create the structure value
-        unsigned count = 0;
-        if (use_name)
-            str_type.nameMember(count++, "name");
-        str_type.nameMember(count++, "value");
-        str_type.nameMember(count++, "storage-class");
-        Struct* str = new Struct(str_type);
+        names.push_back("value");
+        Value* cloned = val->getType().construct();
+        cloned->copyFrom(*val);
+        elements.push_back(cloned);
 
-        // We can safely put stack pointers in the vector because all values are copied into the struct (and not saved!)
-        std::vector<const Value*> es;
-        String vname(name);
-        if (use_name)
-            es.push_back(&vname);
-        es.push_back(val);
-        Primitive storage_class(static_cast<int32_t>(storage));
-        es.push_back(&storage_class);
-        str->addElements(es);
+        names.push_back("storage-class");
+        elements.push_back(new Primitive(static_cast<int32_t>(storage)));
 
-        return str;
+        return new Struct(elements, names);
     }
 };
 
-export class Function {
+export class Function : public Valuable {
     Type* type;
     unsigned location;
     std::string name;
@@ -156,49 +140,26 @@ public:
         return location;
     }
 
-    Value* asValue(std::vector<Type*>& to_delete) const {
-        bool use_name = !name.empty();
-        // Populate the subelement list with the types of the three fields:
+    [[nodiscard]] Value* asValue() const override {
+        std::vector<Value*> elements;
+        std::vector<std::string>  names;
+        // Populate the representative struct with three fields:
         // - name (only use if has been set (ie, is not ""))
         // - type
         // - location
-        std::vector<const Type*> sub_list;
-        if (use_name) {
-            Type* str = new Type(Type::string());
-            sub_list.push_back(str);
-            to_delete.push_back(str);
+
+        if (!name.empty()) {
+            names.push_back("name");
+            elements.push_back(new String(name));
         }
-        Value* type_as_value = type->asValue(to_delete);
-        // must copy the type's type because the type will be deleted before return
-        Type* type_type = new Type(type_as_value->getType());
-        sub_list.push_back(type_type);
-        to_delete.push_back(type_type);
-        Type* num = new Type(Type::primitive(DataType::UINT));
-        to_delete.push_back(num);
-        sub_list.push_back(num);
 
-        Type str_type = Type::structure(sub_list);
-        // Name all used members then create the structure value
-        unsigned count = 0;
-        if (use_name)
-            str_type.nameMember(count++, "name");
-        str_type.nameMember(count++, "type");
-        str_type.nameMember(count++, "location");
-        Struct* str = new Struct(str_type);
+        names.push_back("types");
+        elements.push_back(type->asValue());
 
-        // We can safely put stack pointers in the vector because all values are copied into the struct (and not saved!)
-        std::vector<const Value*> es;
-        String vname(name);
-        if (use_name)
-            es.push_back(&vname);
-        es.push_back(type_as_value);
-        Primitive vlocation(location);
-        es.push_back(&vlocation);
-        str->addElements(es);
+        names.push_back("location");
+        elements.push_back(new Primitive(location));
 
-        // Clean up
-        delete type_as_value;  // can delete since aggregate created copy
-        return str;
+        return new Struct(elements, names);
     }
 };
 

@@ -3,7 +3,7 @@
 
 layout(location = 2) rayPayloadInEXT bool payload;
 
-void main() 
+void main()
 {
     payload = false;
 }

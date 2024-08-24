@@ -21,11 +21,11 @@ const uint HIT_KIND_NONE = 0;
 const uint HIT_KIND_SPHERE = 1;
 
 IntersectionProperties raySphereIntersection(
-    vec3 sphere_center, 
-    float sphere_radius, 
-    vec3 ray_origin, 
-    vec3 ray_direction, 
-    float ray_t_min, 
+    vec3 sphere_center,
+    float sphere_radius,
+    vec3 ray_origin,
+    vec3 ray_direction,
+    float ray_t_min,
     float ray_t_max)
 {
     // Assume the ray will miss
@@ -70,7 +70,11 @@ IntersectionProperties raySphereIntersection(
     return result;
 }
 
+<<<<<<< Updated upstream
 void main() 
+=======
+void main()
+>>>>>>> Stashed changes
 {
     const IntersectionProperties result = raySphereIntersection (
         sphereCenter,

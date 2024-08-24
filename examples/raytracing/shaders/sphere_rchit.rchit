@@ -45,16 +45,16 @@ void main()
     // Shoot a reflection ray
     const uint reflection_ray_flags = gl_RayFlagsCullBackFacingTrianglesEXT;
     traceRayEXT(
-        accelerationStructure, 
-        reflection_ray_flags, 
-        0x1, 
-        0, 
-        0, 
-        0, 
-        intersection_point + normal * EPSILON_BIAS, 
-        gl_RayTminEXT, 
-        reflect_dir, 
-        gl_RayTmaxEXT, 
+        accelerationStructure,
+        reflection_ray_flags,
+        0x1,
+        0,
+        0,
+        0,
+        intersection_point + normal * EPSILON_BIAS,
+        gl_RayTminEXT,
+        reflect_dir,
+        gl_RayTmaxEXT,
         1
     );
     const float reflection_constant = 0.2;

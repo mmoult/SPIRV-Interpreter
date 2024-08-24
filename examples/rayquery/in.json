@@ -54,7 +54,7 @@
                         "mask" : 255,
                         "shader_binding_table_record_offset" : 0,
                         "acceleration_structure_index" : 1
-                    }  
+                    }
                 ],
                 "triangle_nodes" : [],
                 "procedural_nodes" : []

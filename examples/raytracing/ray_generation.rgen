@@ -21,16 +21,16 @@ void main()
     const uint sbt_stride = 0;
     const uint miss_index = 0;
     traceRayEXT(
-        accelerationStructure, 
-        ray.flags, 
-        ray.cullMask, 
-        sbt_offset, 
-        sbt_stride, 
-        miss_index, 
-        ray.origin, 
-        ray.tMin, 
-        ray.direction, 
-        ray.tMax, 
+        accelerationStructure,
+        ray.flags,
+        ray.cullMask,
+        sbt_offset,
+        sbt_stride,
+        miss_index,
+        ray.origin,
+        ray.tMin,
+        ray.direction,
+        ray.tMax,
         0
     );
 }

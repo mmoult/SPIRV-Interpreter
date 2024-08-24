@@ -97,54 +97,6 @@ static void fillPayloadWithBool(Value* payload_info, const bool intersected) {
     }
 }
 
-/// @brief Fills the payload with whether a geometry was intersected.
-/// @param payload_info payload to modify.
-/// @param intersected whether a geometry was intersected.
-static void fillPayloadWithBool(Value* payload_info, const bool intersected) {
-    std::stack<Value*> frontier;
-    frontier.push(payload_info);
-
-    while (!frontier.empty()) {
-        Value* curr = frontier.top();
-        frontier.pop();
-
-        switch (curr->getType().getBase()) {
-        default: {
-            std::stringstream err;
-            err << "Encountered unsupported data type in fill payload: " << curr->getType().getBase();
-            throw std::runtime_error(err.str());
-        }
-        case DataType::FLOAT: {
-            Primitive& val = static_cast<Primitive&>(*curr);
-            val.copyFrom(Primitive(static_cast<float>(intersected)));
-            break;
-        }
-        case DataType::UINT: {
-            Primitive& val = static_cast<Primitive&>(*curr);
-            val.copyFrom(Primitive(static_cast<unsigned>(intersected)));
-            break;
-        }
-        case DataType::INT: {
-            Primitive& val = static_cast<Primitive&>(*curr);
-            val.copyFrom(Primitive(static_cast<int>(intersected)));
-            break;
-        }
-        case DataType::BOOL: {
-            Primitive& val = static_cast<Primitive&>(*curr);
-            val.copyFrom(Primitive(intersected));
-            break;
-        }
-        case DataType::ARRAY:
-        case DataType::STRUCT: {
-            const Aggregate& agg = static_cast<const Aggregate&>(*curr);
-            for (auto it = agg.begin(); it != agg.end(); ++it)
-                frontier.push(*it);
-            break;
-        }
-        }
-    }
-}
-
 // TODO: handle the effects of winding order on intersections; currently, front face is CCW
 export class AccelerationStructure {
 private:

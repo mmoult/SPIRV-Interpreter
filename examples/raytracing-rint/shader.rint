@@ -61,7 +61,7 @@ IntersectionProperties raySphereIntersection(vec3 sphere_center, float sphere_ra
     return result;
 }
 
-void main() 
+void main()
 {
     const vec3 ray_origin = gl_ObjectRayOriginEXT;
     const vec3 ray_direction = gl_ObjectRayDirectionEXT;
@@ -69,9 +69,9 @@ void main()
     const float ray_t_max = 1000.0;
 
     const IntersectionProperties result = raySphereIntersection (
-        sphereCenter, 
-        sphereRadius, 
-        ray_origin, 
+        sphereCenter,
+        sphereRadius,
+        ray_origin,
         ray_direction,
         ray_t_min,
         ray_t_max

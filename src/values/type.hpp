@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "valuable.hpp"
+
 enum class DataType {
     FLOAT,
     UINT,
@@ -57,7 +59,7 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
 // necessary forward reference
 class Value;
 
-class Type {
+class Type : public Valuable {
     DataType base;
     unsigned subSize;
     // memory for subElement and subList elements is NOT managed by the Type
@@ -71,7 +73,7 @@ class Type {
         subSize(sub_size),
         subElement(sub_element) {}
 
-    inline Type(DataType base, std::vector<const Type*> sub_list, std::vector<std::string> name_list):
+    inline Type(DataType base, const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list):
         base(base),
         subSize(0),
         subElement(nullptr),
@@ -113,7 +115,7 @@ public:
     /// @param sub_list a list of non-null types. Each Type must outlive the struct created here. Ownership is not
     ///                 transferred- meaning that the original allocator is expected to deallocate some time after
     ///                 the deallocation of this struct
-    static inline Type structure(std::vector<const Type*> sub_list) {
+    static inline Type structure(const std::vector<const Type*>& sub_list) {
         std::vector<std::string> names(sub_list.size());
         std::fill(names.begin(), names.end(), "");
         return Type(DataType::STRUCT, sub_list, names);
@@ -124,12 +126,12 @@ public:
     ///                 the deallocation of this struct
     /// @param name_list a list of string names, corresponding to the Types at the same indices. Must have the same
     ///                  length as sub_list
-    static inline Type structure(std::vector<const Type*> sub_list, std::vector<std::string> name_list) {
+    static inline Type structure(const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list) {
         assert(sub_list.size() == name_list.size());
         return Type(DataType::STRUCT, sub_list, name_list);
     }
 
-    static inline Type function(const Type* return_, std::vector<Type*>& subList) {
+    static inline Type function(const Type* return_, const std::vector<Type*>& subList) {
         Type t(DataType::FUNCTION, 0, return_);
         t.subList.reserve(subList.size());
         for (const auto& ty : subList)
@@ -145,8 +147,10 @@ public:
         return Type(DataType::STRING, 0, nullptr);
     }
 
-    static inline Type accelStruct(std::vector<const Type*> sub_list = std::vector<const Type*> {},
-            std::vector<std::string> name_list = std::vector<std::string> {}) {
+    static inline Type accelStruct(
+        const std::vector<const Type*>& sub_list = std::vector<const Type*>{},
+        const std::vector<std::string>& name_list = std::vector<std::string>{}
+    ) {
         assert(sub_list.size() == name_list.size());
         return Type(DataType::ACCEL_STRUCT, sub_list, name_list);
     }
@@ -231,6 +235,6 @@ public:
         return base;
     }
 
-    Value* asValue(std::vector<Type*>& to_delete) const;
+    [[nodiscard]] Value* asValue() const override;
 };
 #endif

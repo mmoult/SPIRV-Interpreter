@@ -15,10 +15,10 @@ module;
 #include "../values/value.hpp"
 export module format.json;
 import format.parse;
-import rayTrace.accelStruct;
 import value.aggregate;
 import value.pointer;
 import value.primitive;
+import value.raytrace.accelManager;
 import value.string;
 
 export class Json : public ValueFormat {
@@ -350,10 +350,10 @@ private:
             break;
         }
         case DataType::ACCEL_STRUCT: {
-            const Type accel_struct_type = AccelStructManager::getExpectedType();
-            Struct structure = Struct(Type::structure(accel_struct_type.getFields(), accel_struct_type.getNames()));
-            structure.dummyFill();
-            printValue(out, structure, 1);
+            // Rely on the recursive implementation of printing the accel struct as a regular struct
+            Struct* structure = static_cast<const AccelStructManager&>(value).toStruct();
+            printValue(out, *structure, 1);
+            delete structure;
             break;
         }
         default: // VOID, FUNCTION, RAY_QUERY

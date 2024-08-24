@@ -43,8 +43,7 @@
                         "mask" : 255,
                         "shader_binding_table_record_offset" : 0,
                         "acceleration_structure_index" : 1
-                    }
-                    ,
+                    },
                     { // Red wall
                         "object_to_world_matrix" : [
                             [ 0.0, 0.0, 1.0, -10.0 ],

@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "value.hpp"
-import rayTrace.accelStruct;
-import rayTrace.rayQuery;
 import value.aggregate;
 import value.primitive;
+import value.raytrace.accelManager;
+import value.raytrace.rayQuery;
 import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values) const {
@@ -222,7 +222,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
     return t;
 }
 
-Value* Type::asValue(std::vector<Type*>& to_delete) const {
+[[nodiscard]] Value* Type::asValue() const {
     // This could easily balloon to a recursive nightmare. I don't want to do that, however, so let's implement it very
     // simply and we can expand as needed
 #define SIMPLE(TYPE, LOWER) \
