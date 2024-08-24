@@ -740,8 +740,8 @@ private:
 
     /// @brief Initialize the trace; the acceleration structure can now be stepped through.
     void initTrace() {
-        committedIntersection = CommittedIntersection {};
-        candidateIntersection = CandidateIntersection {};
+        committedIntersection = CommittedIntersection{};
+        candidateIntersection = CandidateIntersection{};
         nodesToEval.push(&root);
         activeTrace = true;
     }
@@ -963,7 +963,6 @@ public:
                 glm::vec3 object_ray_direction = instance_node->worldToObject * rayDirection;
 
                 // TODO: the ray interval might need to be scaled (t-min and t-max) if any problems arise in the future.
-
                 const auto& ref_accel_struct = instance_node->accelStruct;
 
                 // Trace the ray in the respective acceleration structure.

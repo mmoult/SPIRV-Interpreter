@@ -463,7 +463,6 @@ public:
                 result << repeatedString(num_tabs, tab_string) << name;
 
                 const Array& info = static_cast<const Array&>(*value);
-
                 const DataType child_data_type = info.getSize() > 0 ? info[0]->getType().getBase() : DataType::VOID;
 
                 // Add the children to the stack if some kind of structure
@@ -485,10 +484,9 @@ public:
                 }
                 break;
             }
-            case DataType::STRING: {
+            case DataType::STRING:
                 result << repeatedString(num_tabs, tab_string) << name << std::endl;
                 break;
-            }
             }
         }
 
