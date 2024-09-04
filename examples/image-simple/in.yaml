@@ -1,0 +1,12 @@
+gl_FragCoord: [ 0.0, 0.1, 0.2, 0.3 ]
+
+uni_txtr:
+    ref: ""
+    dim: [ 1, 1 ]
+    # Four components where RGBA in that order
+    comps: 1234
+    data:
+    - 1.0  # red- completely red since 1.0
+    - 0.5  # green- half green
+    - 0.0  # blue- no blue-ness
+    - 1.0  # alpha- 1.0 means fully opaque

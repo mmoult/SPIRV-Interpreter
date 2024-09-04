@@ -117,7 +117,7 @@ public:
     }
 
     /// @brief changes the type of the primitive *without* changing the value
-    void cast(Type t) {
+    void cast(const Type& t) {
         type = t;
     }
 

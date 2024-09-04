@@ -29,6 +29,7 @@ import spv.data.data;
 import spv.frame;
 import spv.token;
 import value.aggregate;
+import value.image;
 import value.pointer;
 import value.primitive;
 import value.raytrace.accelManager;
@@ -519,6 +520,86 @@ bool Instruction::makeResult(
                 Type::array(std::get<unsigned>(operands[2].raw), *sub)));
         break;
     }
+    case spv::OpTypeImage: { // 25
+        Type* sampled = getType(1, data);
+
+        assert(operands[7].type == Token::Type::CONST);
+        unsigned comps = 0;
+        switch (static_cast<spv::ImageFormat>(std::get<unsigned>(operands[7].raw))) {
+        case spv::ImageFormatRgba32f:
+        case spv::ImageFormatRgba16f:
+        case spv::ImageFormatRgba8:
+        case spv::ImageFormatRgba8Snorm:
+        case spv::ImageFormatRgba16:
+        case spv::ImageFormatRgb10A2:
+        case spv::ImageFormatRgba16Snorm:
+        case spv::ImageFormatRgba32i:
+        case spv::ImageFormatRgba16i:
+        case spv::ImageFormatRgba8i:
+        case spv::ImageFormatRgba32ui:
+        case spv::ImageFormatRgba16ui:
+        case spv::ImageFormatRgba8ui:
+        case spv::ImageFormatRgb10a2ui:
+            comps = 1234;
+            break;
+        case spv::ImageFormatR32f:
+        case spv::ImageFormatR16f:
+        case spv::ImageFormatR16:
+        case spv::ImageFormatR8:
+        case spv::ImageFormatR16Snorm:
+        case spv::ImageFormatR8Snorm:
+        case spv::ImageFormatR32i:
+        case spv::ImageFormatR16i:
+        case spv::ImageFormatR8i:
+        case spv::ImageFormatR32ui:
+        case spv::ImageFormatR16ui:
+        case spv::ImageFormatR8ui:
+        case spv::ImageFormatR64ui:
+        case spv::ImageFormatR64i:
+            comps = 1000;
+            break;
+        case spv::ImageFormatRg32f:
+        case spv::ImageFormatRg16f:
+        case spv::ImageFormatRg16:
+        case spv::ImageFormatRg8:
+        case spv::ImageFormatRg16Snorm:
+        case spv::ImageFormatRg8Snorm:
+        case spv::ImageFormatRg32i:
+        case spv::ImageFormatRg16i:
+        case spv::ImageFormatRg8i:
+        case spv::ImageFormatRg32ui:
+        case spv::ImageFormatRg16ui:
+        case spv::ImageFormatRg8ui:
+            comps = 1200;
+            break;
+        case spv::ImageFormatR11fG11fB10f:
+            comps = 1230;
+            break;
+        default:
+            throw std::runtime_error("Cannot handle unsupported image format!");
+        }
+
+        assert(operands[2].type == Token::Type::CONST);
+        unsigned dim = 0;
+        switch (static_cast<spv::Dim>(std::get<unsigned>(operands[2].raw))) {
+        case spv::Dim1D:
+        case spv::DimBuffer:
+            dim = 1;
+            break;
+        case spv::Dim2D:
+        case spv::DimRect:
+            dim = 2;
+            break;
+        case spv::Dim3D:
+        case spv::DimCube:
+            dim = 3;
+            break;
+        default:
+            throw std::runtime_error("Cannot handle unsupported dimension!");
+        }
+        data[result_at].redefine(new Type(Type::image(sampled, dim, comps)));
+        break;
+    }
     case spv::OpTypeArray: { // 28
         Type* sub = getType(1, data);
         // Unlike OpTypeVector, the length is stored in an OpConstant
@@ -558,7 +639,7 @@ bool Instruction::makeResult(
                     break;
                 }
                 default:
-                    break; // other decorations should not occur
+                    break;  // other decorations should not occur
                 }
             }
         }
@@ -567,7 +648,7 @@ bool Instruction::makeResult(
     }
     case spv::OpTypePointer: { // 32
         Type* pt_to = getType(2, data);
-        assert(operands[1].type == Token::Type::CONST); // storage class we don't need
+        assert(operands[1].type == Token::Type::CONST);  // storage class we don't need
         data[result_at].redefine(new Type(Type::pointer(*pt_to)));
         break;
     }
@@ -576,9 +657,9 @@ bool Instruction::makeResult(
         Type* ret = getType(1, data);
 
         // Now cycle through all parameters
-        std::vector<Type*> params;
+        std::vector<const Type*> params;
         for (unsigned i = 2; i < operands.size(); ++i) {
-            Type* param = getType(i, data);
+            const Type* param = getType(i, data);
             params.push_back(param);
         }
         data[result_at].redefine(new Type(Type::function(ret, params)));
@@ -791,8 +872,7 @@ bool Instruction::makeResult(
         Value* second = getValue(3, data);
         // both first and second must be arrays
         if (const Type& ft = first->getType();
-            !first->getType().sameBase(second->getType()) ||
-            ft.getBase() != DataType::ARRAY)
+        !first->getType().sameBase(second->getType()) || ft.getBase() != DataType::ARRAY)
             throw std::runtime_error("First two src operands to VectorShuffle must be arrays!");
         Array& fa = *static_cast<Array*>(first);
         Array& sa = *static_cast<Array*>(second);
@@ -874,6 +954,45 @@ bool Instruction::makeResult(
             }
         }
 
+        data[result_at].redefine(to_ret);
+        break;
+    }
+    case spv::OpImageRead: { // 98
+        Type* res_type = getType(0, data);
+        Value* to_ret = res_type->construct();
+        const Value* image_v = getValue(2, data);
+        if (image_v->getType().getBase() != DataType::IMAGE)
+            throw std::runtime_error("The third operand to ImageRead must be an image!");
+        const auto& image = static_cast<const Image&>(*image_v);
+        const Value* coords_v = getValue(3, data);
+        // coords can be a scalar or vector of int or float type
+        const Type* coord_type = &coords_v->getType();
+        bool arrayed = false;
+        if (coord_type->getBase() == DataType::ARRAY) {
+            coord_type = &coord_type->getElement();
+            arrayed = true;
+        }
+        DataType base = coord_type->getBase();
+        if (base == DataType::INT) {
+            int x = 0, y = 0, z = 0;
+            if (!arrayed)
+                x = static_cast<const Primitive*>(coords_v)->data.i32;
+            else {
+                const auto& coords = static_cast<const Array&>(*coords_v);
+                x = static_cast<const Primitive*>(coords[0])->data.i32;
+                if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
+                    y = static_cast<const Primitive*>(coords[1])->data.i32;
+                    if (coords_size == 3)
+                        z = static_cast<const Primitive*>(coords[2])->data.i32;
+                }
+            }
+            const Array* arr = image.read(x, y, z);
+            to_ret->copyFrom(*arr);
+            delete arr;
+        } else if (base == DataType::FLOAT) {
+            // TODO
+            throw std::runtime_error("Float coordinates to image read not supported yet!");
+        }
         data[result_at].redefine(to_ret);
         break;
     }

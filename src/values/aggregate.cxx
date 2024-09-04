@@ -163,6 +163,14 @@ public:
         }
         Aggregate::copyFrom(new_val);
     }
+
+    /// @brief Set the elements directly, giving all memory ownership to the array
+    void setElementsDirectly(std::vector<Value*>& vals) {
+        // Clean up any elements which existed before
+        for (const auto& e : elements)
+            delete e;
+        this->elements = vals;
+    }
 };
 
 export class Struct : public Aggregate {

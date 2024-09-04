@@ -97,6 +97,11 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             args.push_back(var->getVal());
         }
 
+        // If the result has void type, pass in 0 instead of result_at
+        const Type* return_type = getType(0, data);
+        if (return_type != nullptr && return_type->getBase() == DataType::VOID)
+            result_at = 0;
+
         frame_stack.push_back(new Frame(fx->getLocation(), args, result_at, *data.getPrev()));
         inc_pc = false;
         break;

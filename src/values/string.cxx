@@ -27,7 +27,7 @@ public:
         internal = other.internal;
     }
 
-    std::string get() const {
+    const std::string& get() const {
         return internal;
     }
 

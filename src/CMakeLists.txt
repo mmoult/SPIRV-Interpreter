@@ -24,6 +24,7 @@ target_sources(spv-interp
       util/compare.cxx
       util/string.cxx
       values/aggregate.cxx
+      values/image.cxx
       values/pointer.cxx
       values/primitive.cxx
       values/string.cxx

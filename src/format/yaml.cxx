@@ -17,6 +17,7 @@ module;
 export module format.yaml;
 import format.parse;
 import value.aggregate;
+import value.image;
 import value.pointer;
 import value.primitive;
 import value.raytrace.accelManager;
@@ -441,14 +442,22 @@ private:
             break;
         }
         case DataType::STRING: {
+            if (templatize) {
+                out << "<string>";
+                break;
+            }
             const auto& strv = static_cast<const String&>(value);
-            // TODO process special chars
-            out << strv.get();
+            printKey(out, strv.get());
             break;
         }
         case DataType::ACCEL_STRUCT: {
-            // Rely on the recursive implementation of printing the accel struct as a regular struct
             Struct* structure = static_cast<const AccelStructManager&>(value).toStruct();
+            printValue(out, *structure, 1);
+            delete structure;
+            break;
+        }
+        case DataType::IMAGE: {
+            Struct* structure = static_cast<const Image&>(value).toStruct();
             printValue(out, *structure, 1);
             delete structure;
             break;
@@ -519,8 +528,11 @@ private:
             else if (handler.matchId("false"))
                 return {new Primitive(false), false};
 
-            // If it isn't an array, struct, or bool, it must be a number!
-            return {parseNumber(handler), false};
+            // If it isn't an array, struct, or bool, it could be either a string or number
+            // The special float constants could be difficult, but luckily for us, they all begin with dot (.)
+            else if (c == '-' || c == '.' || (c >= '0' && c <= '9'))
+                return {parseNumber(handler), false};
+            return {new String(parseString(handler)), false};
         }
         throw std::runtime_error("Missing value!");
     }

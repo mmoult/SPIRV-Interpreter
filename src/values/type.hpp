@@ -28,6 +28,7 @@ enum class DataType {
     POINTER,
     ACCEL_STRUCT,
     RAY_QUERY,
+    IMAGE,
 };
 
 inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
@@ -51,6 +52,7 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     SWITCH(POINTER)
     SWITCH(ACCEL_STRUCT)
     SWITCH(RAY_QUERY)
+    SWITCH(IMAGE)
     }
 #undef SWITCH
     return os;
@@ -77,8 +79,8 @@ class Type : public Valuable {
         base(base),
         subSize(0),
         subElement(nullptr),
-        subList(sub_list.begin(), sub_list.end()),
-        nameList(name_list.begin(), name_list.end()) {}
+        subList(sub_list),
+        nameList(name_list) {}
 
     /// @brief Creates a value corresponding to this type, with optional inputs
     /// @param values an optional vector of values to use
@@ -131,7 +133,7 @@ public:
         return Type(DataType::STRUCT, sub_list, name_list);
     }
 
-    static inline Type function(const Type* return_, const std::vector<Type*>& subList) {
+    static inline Type function(const Type* return_, const std::vector<const Type*>& subList) {
         Type t(DataType::FUNCTION, 0, return_);
         t.subList.reserve(subList.size());
         for (const auto& ty : subList)
@@ -159,6 +161,21 @@ public:
         return Type(DataType::RAY_QUERY, 0, nullptr);
     }
 
+    /// @brief Creates an image type
+    /// @param sampled the base type of the image. Should be a numeric scalar or void
+    /// @param dim the number of dimensions. Ie a 1D image = 1, 2D = 2, 3D = 3. Max is 3
+    /// @param comps integer defining the use and order of RGBA components. Each digit defines the order, starting
+    ///              from 1 (0 indicates the component is unused). For example,
+    ///              - comps = 1234 means that all channels of RGBA are included and given in order
+    ///              - comps = 1000 means that only red is enabled
+    ///              - comps = 2341 means that all components active in ARGB order
+    /// @return the created image type
+    static inline Type image(const Type* sampled, unsigned dim, unsigned comps) {
+        assert(dim <= 3);      // max of 2 bits
+        assert(comps <= 4321); // max of 13 bits
+        return Type(DataType::IMAGE, (comps << 8) | dim, sampled);
+    }
+
     // Other methods:
 
     /// @brief Creates a value corresponding to this type, filling in values with dummies as necessary
@@ -176,7 +193,7 @@ public:
     }
 
     inline const Type& getElement() const {
-        assert(base == DataType::ARRAY);
+        assert(base == DataType::ARRAY || base == DataType::IMAGE);
         return *subElement;
     }
     inline unsigned getSize() const {
@@ -187,6 +204,16 @@ public:
     inline unsigned getPrecision() const {
         assert(base == DataType::FLOAT || base == DataType::UINT || base == DataType::INT);
         return subSize;
+    }
+
+    inline unsigned getDim() const {
+        assert(base == DataType::IMAGE);
+        return subSize & 0x3;
+    }
+
+    inline unsigned getComps() const {
+        assert(base == DataType::IMAGE);
+        return subSize >> 8;
     }
 
     inline const std::vector<const Type*>& getFields() const {

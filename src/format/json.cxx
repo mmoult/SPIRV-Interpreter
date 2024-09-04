@@ -16,6 +16,7 @@ module;
 export module format.json;
 import format.parse;
 import value.aggregate;
+import value.image;
 import value.pointer;
 import value.primitive;
 import value.raytrace.accelManager;
@@ -74,17 +75,17 @@ private:
         return {};
     }
 
-    /// @brief Parse and return the name found in the next string
+    /// @brief Parse and return the string
     /// The initial " is expected to already have been seen and skipped.
     /// @param handler the handler info to parse from
     /// @return the string parsed
-    std::string parseName(LineHandler& handler) const {
+    std::string parseString(LineHandler& handler) const {
         std::stringstream name;
         bool escape = false;
         while (true) {
             auto cc = handler.next();
             if (!cc.has_value())
-                throw std::runtime_error("Unterminated name string in JSON!");
+                throw std::runtime_error("Unterminated string in JSON!");
             char c = *cc;
 
             if (escape) {
@@ -178,9 +179,8 @@ private:
             handler.skip();
             return constructArrayFrom(values);
         } else if (c0 == '\"') {
-            // No strings supported besides inf or nan
             handler.skip();
-            std::string name = parseName(handler);
+            std::string name = parseString(handler);
             if (name == "NaN")
                 return new Primitive(std::numeric_limits<float>::quiet_NaN());
             float inf = std::numeric_limits<float>::infinity();
@@ -188,10 +188,7 @@ private:
                 return new Primitive(inf);
             else if (name == "-Infinity")
                 return new Primitive(-inf);
-            return new String(name); // TODO: clean me
-            std::stringstream err;
-            err << "String in JSON input not supported: \"" << name << "\"!";
-            throw std::runtime_error(err.str());
+            return new String(name);
         } else if (handler.matchId("true"))
             return new Primitive(true);
         else if (handler.matchId("false"))
@@ -345,13 +342,17 @@ private:
         }
         case DataType::STRING: {
             const auto& strv = static_cast<const String&>(value);
-            // TODO process special chars
-            out << "\"" << strv.get() << "\"";
+            printKey(out, strv.get());
             break;
         }
         case DataType::ACCEL_STRUCT: {
-            // Rely on the recursive implementation of printing the accel struct as a regular struct
             Struct* structure = static_cast<const AccelStructManager&>(value).toStruct();
+            printValue(out, *structure, 1);
+            delete structure;
+            break;
+        }
+        case DataType::IMAGE: {
+            Struct* structure = static_cast<const Image&>(value).toStruct();
             printValue(out, *structure, 1);
             delete structure;
             break;
@@ -418,7 +419,7 @@ protected:
         if (cc0.value_or(0) != '"')
             throw std::runtime_error("Named value in JSON input must begin with '\"'!");
         handler.skip();
-        std::string name = parseName(handler);
+        std::string name = parseString(handler);
         auto cc1 = skipWhitespace(handler);
         if (cc1.value_or(0) != ':')
             throw std::runtime_error("Missing colon after JSON name!");

@@ -27,7 +27,8 @@ The SPIR-V specification does not explicitly define how some image operations sh
 challenges to the interpreter which aims to be a correct reference.
 
 Many vendors use anisotropic filtering, but these algorithms have not been open sourced. The interpreter plans to use
-trilinear interpolation instead- which should be easy to deconstruct and/or extend as needed.
+trilinear interpolation instead- which should be easy to deconstruct and/or extend as needed. Image processing is still
+in development.
 
 ### Ray Tracing
 Similarly to image processing, the SPIR-V specification does not define all characteristics of ray tracing functions and

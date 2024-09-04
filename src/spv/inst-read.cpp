@@ -183,6 +183,14 @@ Instruction* Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
         break;
+    case spv::OpTypeImage: // 25
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::CONST);
+        for (unsigned i = 0; i < 4; ++i)
+            to_load.push_back(Type::UINT);
+        to_load.push_back(Type::CONST);
+        optional.push_back(Type::CONST);
+        break;
     case spv::OpTypeArray: // 28
     case spv::OpIAdd: // 128
     case spv::OpFAdd: // 129
@@ -340,6 +348,13 @@ Instruction* Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
         optional.push_back(Type::UINT);
+        repeating = true;
+        break;
+    case spv::OpImageRead: // 98
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        optional.push_back(Type::CONST);
+        optional.push_back(Type::REF);
         repeating = true;
         break;
     case spv::OpSelect: // 169

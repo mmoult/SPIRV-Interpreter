@@ -11,6 +11,7 @@
 
 #include "value.hpp"
 import value.aggregate;
+import value.image;
 import value.primitive;
 import value.raytrace.accelManager;
 import value.raytrace.rayQuery;
@@ -62,6 +63,8 @@ Value* Type::construct(std::vector<const Value*>* values) const {
         return new AccelStructManager(*this);
     case DataType::RAY_QUERY:
         return new RayQuery(*this);
+    case DataType::IMAGE:
+        return new Image(*this);
     // TODO support other types
     }
 }
@@ -242,6 +245,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
     SIMPLE(POINTER, pointer);
     SIMPLE(ACCEL_STRUCT, accelStruct);
     SIMPLE(RAY_QUERY, rayQuery);
+    SIMPLE(IMAGE, image);
     }
 #undef SIMPLE
 }

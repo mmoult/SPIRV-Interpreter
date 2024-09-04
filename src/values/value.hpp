@@ -24,14 +24,26 @@ public:
     const Type& getType() const { return type; }
 
     /// @brief Copy the value into this
+    ///
     /// The Value implementation of this method does NOT perform the copy, it just throws a failure if the copy cannot
     /// be done. The subclass is responsible for defining an implementation which will handle the copy logic.
+    ///
+    /// Copying from one value into another is necessary for checking outputs (values transferred to dummy constructed
+    /// of type matching the compared to).
     /// @param new_val the value to copy from
     virtual void copyFrom(const Value& new_val) noexcept(false) {
         if (!new_val.getType().sameBase(getType()))
             throw std::runtime_error("Cannot copy from value of different type!");
     }
 
+    /// @brief compares whether the two values (this and val) are equal.
+    ///
+    /// Similarly to `copyFrom`, this implementation will only verify that the types match. Implement a more complete
+    /// comparison in all subclasses.
+    ///
+    /// The method is necessary for all types which may be in the shader output.
+    ///
+    /// @param val the other value to compare against.
     virtual bool equals(const Value& val) const {
         return type == val.type;
     }
