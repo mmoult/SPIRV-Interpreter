@@ -162,22 +162,21 @@ public:
         }
 
         const unsigned len = data.getBound();
-        Variable* var = getVariable(1, data);
+        Variable& var = *getVariable(1, data);
         unsigned id = std::get<unsigned>(operands[1].raw);
-        assert(var != nullptr);  // should have already been created
 
         // Make sure <entry_point> is an actual entry point before identifying the execution model
         const int execution_model =
             (entry_point.opcode == spv::OpEntryPoint) ? std::get<unsigned>(entry_point.operands[0].raw) : -1;
 
         using SC = spv::StorageClass;
-        switch (var->getStorageClass()) {
+        switch (var.getStorageClass()) {
         case SC::StorageClassPushConstant:
-            if (var->isSpecConst()) {
+            if (var.isSpecConst()) {
                 // Try to find this's value in the map. If not present, we keep the original value.
-                std::string name = var->getName();
+                std::string name = var.getName();
                 if (provided.contains(name))
-                    var->setVal(*provided[name]);
+                    var.setVal(*provided[name]);
                 specs.push_back(id);
                 break;
             }
@@ -195,7 +194,8 @@ public:
         case SC::StorageClassRayPayloadKHR:
         case SC::StorageClassIncomingRayPayloadKHR:
             ins.push_back(id);
-            outs.push_back(id);
+            if (var.isWritable())
+                outs.push_back(id);
             break;
         case SC::StorageClassOutput:
             outs.push_back(id);

@@ -234,29 +234,30 @@ public:
         if (DataType ebase = element.getBase();
         ebase != DataType::FLOAT && ebase != DataType::UINT && ebase != DataType::INT)
             throw std::runtime_error("The image field \"data\" must have elements of type: uint, int, or float!");
-        data.resize(data_a.getSize());
-        // TODO actually cannot do this in case the data elements have different type :/
-        for (unsigned i = 0; i < data.size(); i += comps.count) {
-            for (unsigned j = 0; j < comps.count; ++j) {
-                if (comps[j] == 0)
-                    continue;
-                const auto& prim = static_cast<const Primitive&>(*data_a[i + comp_new[j] - 1]);
-                data[i + comps[j] - 1] = prim.data.u32;
-            }
-        }
-
+        unsigned size = data_a.getSize();
         // Verify that the data matches expected from the given dimensions
         unsigned total = xx * comps.count;
         if (yy > 0)
             total *= yy;
         if (zz > 0)
             total *= zz;
-        if (total != data.size()) {
+        if (total != size) {
             std::stringstream err;
             err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
             err << xx << " x " << yy << " x " << zz << ", with " << comps.count << " active channels. This requires ";
-            err << total << " values, however, " << data.size() << " were provided.";
+            err << total << " values, however, " << size << " were provided.";
             throw std::runtime_error(err.str());
+        }
+        // Now copy the data over
+        data.resize(size);
+        // TODO actually cannot do this in case the data elements have different type :/
+        for (unsigned i = 0; i < size; i += comps.count) {
+            for (unsigned j = 0; j < comps.count; ++j) {
+                if (comps[j] == 0)
+                    continue;
+                const auto& prim = static_cast<const Primitive&>(*data_a[i + comp_new[j] - 1]);
+                data[i + comps[j] - 1] = prim.data.u32;
+            }
         }
     }
 

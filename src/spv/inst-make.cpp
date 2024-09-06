@@ -64,6 +64,8 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
                 uint32_t deco_type = std::get<uint32_t>(deco.operands[1].raw);
                 if (deco_type == spv::Decoration::DecorationBuiltIn)
                     var.setBuiltIn(static_cast<spv::BuiltIn>(std::get<uint32_t>(deco.operands[2].raw)));
+                else if (deco_type == spv::Decoration::DecorationNonWritable)
+                    var.forbidWrite();
                 break;
             }
             default:

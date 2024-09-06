@@ -3,7 +3,7 @@ gl_FragCoord: [ 0.0, 0.1, 0.2, 0.3 ]
 uni_txtr:
     ref: ""
     dim: [ 1, 1 ]
-    # Four components where RGBA in that order
+    # Specifies the order (1-4) or inactivity (0) of the four possible channels: R,G,B,A (in that order)
     comps: 1234
     data:
     - 1.0  # red- completely red since 1.0

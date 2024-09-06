@@ -26,10 +26,12 @@ export class Variable : public Valuable {
     spv::StorageClass storage;
     // name of the variable, how this variable can be referenced by in and out toml files
     std::string name;
+    /// Indicates which builtin this variable is, if any
     spv::BuiltIn builtIn = spv::BuiltIn::BuiltInMax;
-
     // Whether this variable is a spec constant, which is treated as a value and a variable
     bool specConst;
+    /// Internal modifier applied if this is decorated with NonWritable
+    bool noWrite = false;
 
     /// @brief Construct a new variable directly (instead of through makeVariable)
     /// @param value saved (not copied) as the variable's value. Must be on the heap!
@@ -99,6 +101,13 @@ public:
     }
     spv::BuiltIn getBuiltIn() const {
         return builtIn;
+    }
+
+    void forbidWrite() {
+        noWrite = true;
+    }
+    bool isWritable() const {
+        return !noWrite;
     }
 
     [[nodiscard]] Value* asValue() const override {
