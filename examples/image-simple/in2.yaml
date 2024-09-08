@@ -1,0 +1,8 @@
+gl_FragCoord: [ 3.0, 6.0, 0.0, 0.0 ]
+
+uni_txtr:
+    ref: "colorful.png"
+    dim: [ 7, 7 ]
+    # Two below fields ("comps" and "data") unused because data is instead provided through the file (path in "ref")
+    comps: 1
+    data: []

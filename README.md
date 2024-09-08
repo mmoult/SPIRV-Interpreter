@@ -9,6 +9,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 ## Features
 - Support for vertex, fragment, compute, hull, ... shaders
 - Specify inputs and print outputs in YAML or JSON
+- Textures may be read from and written to .png files
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
@@ -20,7 +21,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 For the sake of runtime speed and code clarity, the interpreter expects syntactically correct SPIR-V inputs. It is not,
 nor does it intend to be, a SPIR-V validator. If that is what you need, use `spirv-val` in
 [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). If the input SPIR-V file is invalid, the behavior of the
-interpretation is undefined. This should not be a problem since most SPIR-V is auto-generated.
+interpretation is undefined. This is unlikely to be a problem since most SPIR-V is auto-generated.
 
 ### Image Processing
 The SPIR-V specification does not explicitly define how some image operations should be done. This presents some
@@ -32,14 +33,14 @@ in development.
 
 ### Ray Tracing
 Similarly to image processing, the SPIR-V specification does not define all characteristics of ray tracing functions and
-structures. A best guess approximation is used for the interpreter, which should rely on information common to all
+structures. A best guess approximation is used for the interpreter, which relies on information common to all
 implementations. Ray tracing support is still in development.
 
 ## Building
 The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16 or `g++`
 version ≥ 14). The source should be platform independent, but little to no testing has been done on Windows or Mac.
 
-Here are a few commands to run from the repository's root directory:
+Here are a few build commands to run from the repository's root directory:
 
 ```
 git submodule update --init --recursive
@@ -86,6 +87,7 @@ the links may not work until they are initialized) for the complete terms:
 
 - [SPIR-V](src/external/spirv.hpp): Custom Permissive License
 - [GLSL](src/external/GLSL.std.450.h): Custom Permissive License
+- [stb](src/external/stb): dual-licensed public domain or MIT
 - [glm](src/external/glm): MIT License
 - [Catch2](test/Catch2): Boost Software License
 

@@ -9,6 +9,10 @@ module;
 #include <vector>
 
 #include "../external/spirv.hpp"
+#define STB_IMAGE_IMPLEMENTATION
+#include "../external/stb/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "../external/stb/stb_image_write.h"
 #include "type.hpp"
 #include "value.hpp"
 export module value.image;
@@ -115,18 +119,15 @@ export class Image : public Value {
     unsigned zz;
     /// @brief condensed image data, where typically a set of four elements is a single pixel.
     /// The format determines the type of the image data, so we don't need/want to store that info for each component
-    /// of every pixel (which is needlessly wasteful). However, this means that we must convert data back and forth
-    /// upon use.
+    /// of every pixel (which is needlessly wasteful). However, this means that we must reinterpret cast the data for
+    /// every use.
     std::vector<uint32_t> data;
-
-    // Here is what an image looks like in YAML:
-    // img :
-    //   ref : <string>
-    //   dim : uvec3, uvec2, or uint
-    //   comps : <uint>
-    //   data :
-    //   - float, int, or uint, as long as it is consistent
-    //   - <...>
+    // TODO I suspect that there are a couple extra fields which need to be encoded in the type. As far as I can tell,
+    // these only really apply to floats, but we probably need to track them to get correct output
+    // 1) Normalization: whether the range spans 255 or 1
+    // 2) Signedness: whether half the range is negative or all in positive
+    // Of course, the two options are orthogonal. We can have a non-normalized, positively signed range of [0.0, 255.0]
+    // or a normalized negatively signed range of [-0.5, 0.5].
 
 public:
     Image(Type t): Value(t), comps(t.getComps(), false), xx(0), yy(0), zz(0) {};
@@ -173,10 +174,6 @@ public:
                 "The first image field, \"ref\", must be a string path to the image source or empty!"
             );
         reference = static_cast<const String*>(ref)->get();
-        if (!reference.empty()) {
-            // TODO
-            throw std::runtime_error("Extracting image data from a file path is currently unsupported!");
-        }
 
         // dim: uvec1, uvec2, or uvec3
         if (type_names[1] != "dim")
@@ -205,6 +202,53 @@ public:
                 zz = static_cast<const Primitive*>(dim_a[2])->data.u32;
         }
 
+        //const Type& element = this->type.getElement();
+        // Now that we have the expected dimensions, fetch data (if any) from the reference path
+        if (!reference.empty()) {
+            int width, height, channels;
+            unsigned char *img = stbi_load(reference.c_str(), &width, &height, &channels, 0);
+            if (img == nullptr) {
+                std::stringstream err;
+                err << "Could not load image from path \"" << reference << "\"!";
+                throw std::runtime_error(err.str());
+            }
+            // I don't think the width or height should ever be negative
+            assert(height >= 1 && width >= 1);
+
+            unsigned gx = static_cast<unsigned>(width);
+            unsigned gy = static_cast<unsigned>(height);
+            unsigned gc = static_cast<unsigned>(channels);
+            if (gx < xx || gy < yy) {
+                std::stringstream err;
+                err << "The dimensions of the image loaded from file (" << gx << " x " << gy << ") are insufficient";
+                err << " for the image dimensions required: " << xx << " x " << yy << " x " << zz;
+                throw std::runtime_error(err.str());
+            }
+            // TODO: also handle the third dimension. Obviously, images in png files cannot be 3D, so we will have to
+            // think of a reasonable way they can/should be represented
+
+            // Now, transfer the data from img to our "data" field
+            // Data has been loaded in as a sequence of RGBA bytes (values 0-255) from left -> right, top -> bottom.
+            // TODO handle more than just unsigned normalized float element type
+            unsigned size = gx * gy * gc;
+            data.resize(size);
+            // TODO handle if the number of channels gotten != 4
+            for (unsigned i = 0; i < size; i += gc) {
+                unsigned ii = 0;
+                for (unsigned j = 0; j < comps.count; ++j) {
+                    if (comps[j] == 0)
+                        continue;
+                    float norm = img[i + ii] / 255.0;
+                    data[i + comps[j] - 1] = *reinterpret_cast<uint32_t*>(&norm);
+                    ++ii;
+                }
+            }
+
+            // Finally, delete the image loaded
+            stbi_image_free(img);
+            // example write: stbi_write_png("sky.png", width, height, channels, img, width * channels);
+        }
+
         // comps: <uint>
         if (type_names[2] != "comps")
             throw std::runtime_error("\"comps\" must be the third field in the image struct!");
@@ -218,7 +262,8 @@ public:
             );
         unsigned comps_got = static_cast<const Primitive&>(comps_v).data.u32;
         Component comp_new(comps_got, true);
-        comps.assertCompatible(comp_new);
+        if (reference.empty())  // the component field only matters if we aren't specifying data through a file
+            comps.assertCompatible(comp_new);
 
         // data : array<float> or array<uint> or array<int>
         // TODO: differentiate between float [0, 255] and float normal [0.0, 1.0]
@@ -230,33 +275,43 @@ public:
                 "The fourth image field, \"data\", must be an array of uint, int, or float values."
             );
         const Array& data_a = static_cast<const Array&>(data_v);
-        const Type& element = data_a.getType().getElement();
-        if (DataType ebase = element.getBase();
-        ebase != DataType::FLOAT && ebase != DataType::UINT && ebase != DataType::INT)
-            throw std::runtime_error("The image field \"data\" must have elements of type: uint, int, or float!");
-        unsigned size = data_a.getSize();
-        // Verify that the data matches expected from the given dimensions
-        unsigned total = xx * comps.count;
-        if (yy > 0)
-            total *= yy;
-        if (zz > 0)
-            total *= zz;
-        if (total != size) {
-            std::stringstream err;
-            err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
-            err << xx << " x " << yy << " x " << zz << ", with " << comps.count << " active channels. This requires ";
-            err << total << " values, however, " << size << " were provided.";
-            throw std::runtime_error(err.str());
-        }
-        // Now copy the data over
-        data.resize(size);
-        // TODO actually cannot do this in case the data elements have different type :/
-        for (unsigned i = 0; i < size; i += comps.count) {
-            for (unsigned j = 0; j < comps.count; ++j) {
-                if (comps[j] == 0)
-                    continue;
-                const auto& prim = static_cast<const Primitive&>(*data_a[i + comp_new[j] - 1]);
-                data[i + comps[j] - 1] = prim.data.u32;
+        if (!reference.empty()) {
+            // Verify that the data is empty
+            if (data_a.getSize() != 0) {
+                throw std::runtime_error(
+                    "Image exists with both an image reference and literal data. Only one may be provided at a time!"
+                );
+            }
+        } else {
+            const Type& element = data_a.getType().getElement();
+            if (DataType ebase = element.getBase();
+            ebase != DataType::FLOAT && ebase != DataType::UINT && ebase != DataType::INT)
+                throw std::runtime_error("The image field \"data\" must have elements of type: uint, int, or float!");
+            unsigned size = data_a.getSize();
+            // Verify that the data matches expected from the given dimensions
+            unsigned total = xx * comps.count;
+            if (yy > 0)
+                total *= yy;
+            if (zz > 0)
+                total *= zz;
+            if (total != size) {
+                std::stringstream err;
+                err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
+                err << xx << " x " << yy << " x " << zz << ", with " << comps.count << " active channels. This requires ";
+                err << total << " values, however, " << size << " were provided.";
+                throw std::runtime_error(err.str());
+            }
+            // TODO: there can actually be more data entries provided if they are mipmaps... implement
+            // Now copy the data over
+            data.resize(size);
+            // TODO actually cannot do this in case the data elements have different type :/
+            for (unsigned i = 0; i < size; i += comps.count) {
+                for (unsigned j = 0; j < comps.count; ++j) {
+                    if (comps[j] == 0)
+                        continue;
+                    const auto& prim = static_cast<const Primitive&>(*data_a[i + comp_new[j] - 1]);
+                    data[i + comps[j] - 1] = prim.data.u32;
+                }
             }
         }
     }
@@ -290,6 +345,14 @@ public:
         }
     }
 
+    // Here is what an image looks like in YAML:
+    // img :
+    //   ref : <string>
+    //   dim : uvec3, uvec2, or uint
+    //   comps : <uint>
+    //   data :
+    //   - float, int, or uint, as long as it is consistent
+    //   - <...>
     Struct* toStruct() const {
         std::vector<std::string> names{"ref", "dim", "comps", "data"};
         std::vector<Value*> elements;
