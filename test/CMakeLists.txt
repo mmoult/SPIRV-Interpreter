@@ -15,6 +15,7 @@ target_sources(tests
       format/json-test.cpp
       format/yaml-test.cpp
       util/compare-test.cpp
+      util/string-test.cpp
       util/trie-test.cpp
 )
 

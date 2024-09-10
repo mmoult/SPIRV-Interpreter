@@ -437,13 +437,13 @@ public:
             case DataType::UINT:
             case DataType::INT:
             case DataType::BOOL: {
-                result << repeatedString(num_tabs, tab_string) << name << " = "
+                result << repeated_string(num_tabs, tab_string) << name << " = "
                        << getPrimitiveValueAsString(*value) << std::endl;
                 break;
             }
             case DataType::STRUCT:
             case DataType::ACCEL_STRUCT: {
-                result << repeatedString(num_tabs, tab_string) << name << " {" << std::endl;
+                result << repeated_string(num_tabs, tab_string) << name << " {" << std::endl;
                 frontier.push({" }", &custom_string, num_tabs});
 
                 const Struct& info = static_cast<const Struct&>(*value);
@@ -460,7 +460,7 @@ public:
                 break;
             }
             case DataType::ARRAY: {
-                result << repeatedString(num_tabs, tab_string) << name;
+                result << repeated_string(num_tabs, tab_string) << name;
 
                 const Array& info = static_cast<const Array&>(*value);
                 const DataType child_data_type = info.getSize() > 0 ? info[0]->getType().getBase() : DataType::VOID;
@@ -485,7 +485,7 @@ public:
                 break;
             }
             case DataType::STRING:
-                result << repeatedString(num_tabs, tab_string) << name << std::endl;
+                result << repeated_string(num_tabs, tab_string) << name << std::endl;
                 break;
             }
         }

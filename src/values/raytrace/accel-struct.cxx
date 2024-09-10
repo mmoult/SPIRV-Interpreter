@@ -145,13 +145,13 @@ private:
         std::string toString(const unsigned indent = 0, const std::string& indent_str = "") const {
             std::stringstream result;
 
-            result << repeatedString(indent, indent_str) << "box_node" << std::endl;
-            result << repeatedString(indent + 1, indent_str) <<
+            result << repeated_string(indent, indent_str) << "box_node" << std::endl;
+            result << repeated_string(indent + 1, indent_str) <<
                 "min_bounds = " << glmVec3ToString(minBounds) << std::endl;
-            result << repeatedString(indent + 1, indent_str) <<
+            result << repeated_string(indent + 1, indent_str) <<
                 "max_bounds = " << glmVec3ToString(maxBounds) << std::endl;
 
-            result << repeatedString(indent + 1, indent_str) << "num_children = " << children.size() << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "num_children = " << children.size() << std::endl;
 
             return result.str();
         }
@@ -213,14 +213,14 @@ private:
         std::string toString(const unsigned indent = 0, const std::string& indent_str = "") const {
             std::stringstream result;
 
-            result << repeatedString(indent, indent_str) << "instance_node" << std::endl;
+            result << repeated_string(indent, indent_str) << "instance_node" << std::endl;
 
             // Object-to-world
-            result << repeatedString(indent + 1, indent_str) << "object_to_world_matrix = [" << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "object_to_world_matrix = [" << std::endl;
             unsigned num_cols = objectToWorld.length();
             unsigned num_rows = objectToWorld[0].length();
             for (unsigned row = 0; row < num_rows; ++row) {
-                result << repeatedString(indent + 2, indent_str) << "[ ";
+                result << repeated_string(indent + 2, indent_str) << "[ ";
                 bool first = true;
                 for (unsigned col = 0; col < num_cols; ++col) {
                     if (first)
@@ -231,36 +231,36 @@ private:
                 }
                 result << " ]" << std::endl;
             }
-            result << repeatedString(indent + 1, indent_str) << "]" << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "]" << std::endl;
 
             // World-to-object
-            result << repeatedString(indent + 1, indent_str) << "world_to_object_matrix = [" << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "world_to_object_matrix = [" << std::endl;
             num_cols = worldToObject.length();
             num_rows = worldToObject[0].length();
             for (unsigned row = 0; row < num_rows; ++row) {
-                result << repeatedString(indent + 2, indent_str) << "[ ";
+                result << repeated_string(indent + 2, indent_str) << "[ ";
                 for (unsigned col = 0; col < num_cols - 1; ++col) {
                     result << worldToObject[col][row] << ", ";
                 }
                 result << worldToObject[num_cols - 1][row] << " ]" << std::endl;
             }
-            result << repeatedString(indent + 1, indent_str) << "]" << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "]" << std::endl;
 
             // Id
-            result << repeatedString(indent + 1, indent_str) << "id = " << id << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "id = " << id << std::endl;
 
             // Custom index
-            result << repeatedString(indent + 1, indent_str) << "custom_index = " << customIndex << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "custom_index = " << customIndex << std::endl;
 
             // Mask
-            result << repeatedString(indent + 1, indent_str) << "mask = " << mask << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "mask = " << mask << std::endl;
 
             // Shader binding table record offset
-            result << repeatedString(indent + 1, indent_str)
+            result << repeated_string(indent + 1, indent_str)
                    << "shader_binding_table_record_offset = " << sbtRecordOffset << std::endl;
 
             // Acceleration structure pointer
-            result << repeatedString(indent + 1, indent_str)
+            result << repeated_string(indent + 1, indent_str)
                    << "points_to_acceleration_structure_id = " << accelStruct->id << std::endl;
 
             return result.str();
@@ -304,32 +304,32 @@ private:
         std::string toString(const unsigned indent = 0, const std::string& indent_str = "") const {
             std::stringstream result;
 
-            result << repeatedString(indent, indent_str) << "triangle_node" << std::endl;
+            result << repeated_string(indent, indent_str) << "triangle_node" << std::endl;
 
             // Geometry index
-            result << repeatedString(indent + 1, indent_str) << "geometry_index = " << geometryIndex
+            result << repeated_string(indent + 1, indent_str) << "geometry_index = " << geometryIndex
                    << std::endl;
 
             // Primitive index
-            result << repeatedString(indent + 1, indent_str) << "primitive_index = " << primitiveIndex
+            result << repeated_string(indent + 1, indent_str) << "primitive_index = " << primitiveIndex
                    << std::endl;
 
             // Opaque
-            result << repeatedString(indent + 1, indent_str) << "opaque = " << (opaque ? "true" : "false")
+            result << repeated_string(indent + 1, indent_str) << "opaque = " << (opaque ? "true" : "false")
                    << std::endl;
 
             // Vertices
-            result << repeatedString(indent + 1, indent_str) << "vertices = [" << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "vertices = [" << std::endl;
             for (unsigned i = 0; i < vertices.size() - 1; ++i) {
-                result << repeatedString(indent + 2, indent_str) << glmVec3ToString(vertices[i]) << ","
+                result << repeated_string(indent + 2, indent_str) << glmVec3ToString(vertices[i]) << ","
                        << std::endl;
             }
-            result << repeatedString(indent + 2, indent_str)
+            result << repeated_string(indent + 2, indent_str)
                    << glmVec3ToString(vertices[vertices.size() - 1]) << std::endl;
-            result << repeatedString(indent + 1, indent_str) << "]" << std::endl;
+            result << repeated_string(indent + 1, indent_str) << "]" << std::endl;
 
             // Indices
-            result << repeatedString(indent + 1, indent_str) << "indices = [ ";
+            result << repeated_string(indent + 1, indent_str) << "indices = [ ";
             for (unsigned i = 0; i < indices.size() - 1; ++i) {
                 result << indices[i] << ", ";
             }
@@ -376,26 +376,26 @@ private:
         std::string toString(const unsigned indent = 0, const std::string& indent_str = "") const {
             std::stringstream result;
 
-            result << repeatedString(indent, indent_str) << "procedural_node" << std::endl;
+            result << repeated_string(indent, indent_str) << "procedural_node" << std::endl;
 
             // Geometry index
-            result << repeatedString(indent + 1, indent_str) << "geometry_index = " << geometryIndex
+            result << repeated_string(indent + 1, indent_str) << "geometry_index = " << geometryIndex
                    << std::endl;
 
             // Primitive index
-            result << repeatedString(indent + 1, indent_str) << "primitive_index = " << primitiveIndex
+            result << repeated_string(indent + 1, indent_str) << "primitive_index = " << primitiveIndex
                    << std::endl;
 
             // Opaque
-            result << repeatedString(indent + 1, indent_str) << "opaque = " << (opaque ? "true" : "false")
+            result << repeated_string(indent + 1, indent_str) << "opaque = " << (opaque ? "true" : "false")
                    << std::endl;
 
             // Min bounds
-            result << repeatedString(indent + 1, indent_str)
+            result << repeated_string(indent + 1, indent_str)
                    << "min_bounds = " << glmVec3ToString(minBounds) << std::endl;
 
             // Max bounds
-            result << repeatedString(indent + 1, indent_str)
+            result << repeated_string(indent + 1, indent_str)
                    << "max_bounds = " << glmVec3ToString(maxBounds) << std::endl;
 
             return result.str();
@@ -1760,8 +1760,8 @@ public:
         std::stringstream result;
         const std::string tab_string("|\t");
 
-        result << repeatedString(tab_level, tab_string) << "acceleration_structure_id = " << id << std::endl;
-        result << repeatedString(tab_level + 1, tab_string) << "is_tlas = " << (isTLAS ? "true" : "false")
+        result << repeated_string(tab_level, tab_string) << "acceleration_structure_id = " << id << std::endl;
+        result << repeated_string(tab_level + 1, tab_string) << "is_tlas = " << (isTLAS ? "true" : "false")
                << std::endl;
 
         using NodeRefAndNumTabs = std::tuple<ConstNodeRef, unsigned>;

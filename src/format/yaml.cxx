@@ -16,6 +16,7 @@ module;
 #include "../values/value.hpp"
 export module format.yaml;
 import format.parse;
+import util.string;
 import value.aggregate;
 import value.image;
 import value.pointer;
@@ -305,14 +306,10 @@ private:
                     out << ".inf";
                 else
                     out << "-.inf";
-            } else if (std::isnan(fp)) {
+            } else if (std::isnan(fp))
                 out << ".NAN";
-            } else {
-                out << fp;
-                // Print extra decimal in case the number would have printed without
-                if (std::modf(fp, &fp) == 0)
-                    out << ".0";
-            }
+            else
+                print_float(out, fp);
             break;
         }
         case DataType::UINT:

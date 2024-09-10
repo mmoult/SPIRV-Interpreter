@@ -11,14 +11,14 @@ module;
 #include <tuple>
 
 export module util.compare;
+import util.string;
 
 std::string to_signed_string(float x) {
     std::stringstream f;
-    f << std::fixed;
-    if (x >= 0.0)
+    if (!std::signbit(x))
         f << '+';
     // The opposite (-) will be added automatically
-    f << x;
+    print_float(f, x);
     return f.str();
 }
 

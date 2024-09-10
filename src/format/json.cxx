@@ -15,6 +15,7 @@ module;
 #include "../values/value.hpp"
 export module format.json;
 import format.parse;
+import util.string;
 import value.aggregate;
 import value.image;
 import value.pointer;
@@ -234,15 +235,10 @@ private:
                     out << "\"Infinity\"";
                 else
                     out << "-\"Infinity\"";
-            } else if (std::isnan(fp)) {
+            } else if (std::isnan(fp))
                 out << "\"NaN\"";
-            } else {
-                // If the number if exact, we want to enforce at least one decimal
-                out << fp;
-                // We want to compare with exact zero here because anything else should show in the print
-                if (std::modf(fp, &fp) == 0)
-                    out << ".0";
-            }
+            else
+                print_float(out, fp);
             break;
         }
         case DataType::UINT:

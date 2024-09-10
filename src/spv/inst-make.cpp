@@ -1927,6 +1927,14 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.u32, b->data.u32));
     case GLSLstd450SMax: // 42
         TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.i32, b->data.i32));
+    case GLSLstd450FClamp: { // 43
+        TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
+            assert(minVal->data.fp32 <= maxVal->data.fp32);
+            return std::clamp(x->data.fp32, minVal->data.fp32, maxVal->data.fp32);
+        };
+        E_TERN_OP(FLOAT, fx);
+        break;
+    }
     case GLSLstd450FMix: { // 46
         TernOp fx = [](const Primitive* x, const Primitive* y, const Primitive* a) {
             return x->data.fp32 * (1.0f - a->data.fp32) + y->data.fp32 * a->data.fp32;

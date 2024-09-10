@@ -6,6 +6,7 @@
 module;
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 #include <set>
 #include <stdexcept>
 #include <vector>
@@ -311,8 +312,12 @@ public:
                         dummy->copyFrom(*val);
                         bool compare = dummy->equals(*var_val);
                         delete dummy;
-                        if (!compare)
+                        if (!compare) {
+                            std::stringstream err;
+                            std::cerr << "Output variable \"" << name;
+                            std::cerr << "\" did not match the expected value!" << std::endl;
                             return std::tuple(false, total_tests);
+                        }
                     } catch(const std::exception& e) {
                         if (dummy != nullptr)
                             delete dummy;
