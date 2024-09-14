@@ -282,14 +282,17 @@ private:
 
     void printKeyValue(std::stringstream& out, const std::string& key, const Value& value, unsigned indents) const {
         printKey(out, key);
-        out << ": ";
+        out << ':';
         printValue(out, value, indents);
     }
 
     void printArrayIndent(std::stringstream& out) const {
         out << '-';
-        if (indentSize > 1)
-            out << std::string(indentSize - 1, ' ');
+        // Subtract two from the ident size since:
+        // - each element must prefix its value with a space (to avoid trailing)
+        // - the "-" character itself takes a space
+        if (indentSize > 2)
+            out << std::string(indentSize - 2, ' ');
     }
 
     void printValue(std::stringstream& out, const Value& value, unsigned indents = 0) const {
@@ -297,44 +300,46 @@ private:
         switch (type_base) {
         case DataType::FLOAT: {
             if (templatize) {
-                out << "<float>";
+                out << " <float>";
                 break;
             }
             float fp = static_cast<const Primitive&>(value).data.fp32;
             if (std::isinf(fp)) {
                 if (fp >= 0)
-                    out << ".inf";
+                    out << " .inf";
                 else
-                    out << "-.inf";
+                    out << " -.inf";
             } else if (std::isnan(fp))
-                out << ".NAN";
-            else
+                out << " .NAN";
+            else {
+                out << ' ';
                 print_float(out, fp);
+            }
             break;
         }
         case DataType::UINT:
             if (templatize) {
-                out << "<uint>";
+                out << " <uint>";
                 break;
             }
-            out << static_cast<const Primitive&>(value).data.u32;
+            out << ' ' << static_cast<const Primitive&>(value).data.u32;
             break;
         case DataType::INT:
             if (templatize) {
-                out << "<int>";
+                out << " <int>";
                 break;
             }
-            out << static_cast<const Primitive&>(value).data.i32;
+            out << ' ' << static_cast<const Primitive&>(value).data.i32;
             break;
         case DataType::BOOL:
             if (templatize) {
-                out << "<bool>";
+                out << " <bool>";
                 break;
             }
             if (static_cast<const Primitive&>(value).data.b32)
-                out << "true";
+                out << " true";
             else
-                out << "false";
+                out << " false";
             break;
         case DataType::STRUCT:
         case DataType::ARRAY: {
@@ -380,7 +385,7 @@ private:
                     delete dummy;
                     newline(out, true, e_indents);
                     printArrayIndent(out);
-                    out << "<...>";
+                    out << " <...>";
                 }
 
                 for (unsigned i = 0; i < agg.getSize(); ++i) {
@@ -397,23 +402,26 @@ private:
             } else {
                 // Inline print
                 bool compress = agg_size > inline_max;
+                out << ' ';
                 if (!compress)
-                    out << open << " ";
+                    out << open;
                 else {
                     out << open;
-                    ++e_indents;
                     newline(out, true, e_indents);
+                    out << std::string(indentSize - 1, ' ');
                 }
-                bool first = true;
                 for (unsigned i = 0; i < agg_size; ++i) {
                     const auto& element = *agg[i];
-                    if (first)
-                        first = false;
-                    else if (i % inline_max == 0) {
-                        out << ",";
-                        newline(out, true, e_indents);
-                    } else
-                        out << ", ";
+                    if (i > 0) {
+                        if (i % inline_max == 0) {
+                            out << ",";
+                            // Since each value prefixes itself with a space, we must do one indent fewer than expected
+                            // and make up the difference between the one space and however large the indent size is
+                            newline(out, true, e_indents);
+                            out << std::string(indentSize - 1, ' ');
+                        } else
+                            out << ",";
+                    }
 
                     if (is_struct)
                         printKeyValue(out, (*names)[i], element, indents);
@@ -423,7 +431,6 @@ private:
                 if (!compress)
                     out << " " << close;
                 else {
-                    --e_indents;
                     newline(out, true, e_indents);
                     out << close;
                 }
@@ -432,7 +439,7 @@ private:
         }
         case DataType::POINTER: {
             const auto& pointer = static_cast<const Pointer&>(value);
-            out << "[" << pointer.getHead();
+            out << " [" << pointer.getHead();
             for (unsigned idx : pointer.getIndices())
                 out << ", " << idx;
             out << "]";
@@ -440,7 +447,7 @@ private:
         }
         case DataType::STRING: {
             if (templatize) {
-                out << "<string>";
+                out << " <string>";
                 break;
             }
             const auto& strv = static_cast<const String&>(value);
@@ -449,13 +456,13 @@ private:
         }
         case DataType::ACCEL_STRUCT: {
             Struct* structure = static_cast<const AccelStructManager&>(value).toStruct();
-            printValue(out, *structure, 1);
+            printValue(out, *structure, indents);
             delete structure;
             break;
         }
         case DataType::IMAGE: {
             Struct* structure = static_cast<const Image&>(value).toStruct();
-            printValue(out, *structure, 1);
+            printValue(out, *structure, indents);
             delete structure;
             break;
         }

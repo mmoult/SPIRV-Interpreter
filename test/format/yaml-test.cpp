@@ -53,7 +53,7 @@ TEST_CASE("output", "[yaml]") {
 
         format.printFile(out, vars);
         REQUIRE(out.str() ==
-            "foo: \n"
+            "foo:\n"
             "- [ 0.0, 1.0, 2.0, 3.0 ]\n"
             "- [ 1.0, 2.0, 3.0, 4.0 ]\n"
             "- [ 2.0, 3.0, 4.0, 5.0 ]\n"
