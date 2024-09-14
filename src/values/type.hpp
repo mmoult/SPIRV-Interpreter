@@ -230,6 +230,7 @@ public:
         return *subElement;
     }
 
+    // TODO: deprecate or make private. The nearest valid use is operator==
     inline bool sameBase(const Type& rhs) const {
         // STRUCT and ACCEL_STRUCT are considered the same
         bool is_struct_and_accel_struct =

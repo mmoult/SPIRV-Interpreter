@@ -239,4 +239,13 @@ public:
         glm::mat4x3 world_to_object = tlas.getIntersectionWorldToObject(static_cast<bool>(intersection));
         return glmMat4x3ToVector(world_to_object);
     }
+
+    void copyFrom(const Value& new_value) noexcept(false) override {
+        throw std::runtime_error("Unimplemented copy from ray query!");
+    }
+
+    void copyReinterp(const Value& other) noexcept(false) override {
+        if (!tryCopyFrom(other))
+            throw std::runtime_error("Could not copy reinterp to ray query!");
+    }
 };

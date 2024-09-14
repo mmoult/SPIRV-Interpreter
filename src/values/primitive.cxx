@@ -21,9 +21,22 @@ export struct Primitive : public Value {
         uint32_t u32;
         int32_t i32;
         bool b32;
+        uint32_t all;
     } data;
 
     using enum DataType;
+
+    static bool isPrimitive(DataType base) {
+        switch (base) {
+        case FLOAT:
+        case UINT:
+        case INT:
+        case BOOL:
+            return true;
+        default:
+            return false;
+        }
+    }
 
 public:
     Primitive(float fp32, unsigned size = 32): Value(Type::primitive(FLOAT, size)) {
@@ -47,15 +60,8 @@ public:
         // Verify that the other is a primitive type
         // (Don't use the super check since we don't require the same base)
         const auto from_base = new_val.getType().getBase();
-        switch (from_base) {
-        case FLOAT:
-        case UINT:
-        case INT:
-        case BOOL:
-            break;
-        default:
+        if (!isPrimitive(from_base))
             throw std::runtime_error("Cannot copy from non-primitive to a primitive type!");
-        }
         const Primitive& other = static_cast<const Primitive&>(new_val);
 
         // TODO precision handling
@@ -114,6 +120,15 @@ public:
         default:
             assert(false);
         }
+    }
+
+    void copyReinterp(const Value& other) noexcept(false) override {
+        // We can reinterpret from any other primitive
+        const auto from_base = other.getType().getBase();
+        if (!isPrimitive(from_base))
+            throw std::runtime_error("Cannot copy reinterp from other non-primitive value!");
+        data.all = static_cast<const Primitive&>(other).data.all;
+        // TODO apply precision modification
     }
 
     /// @brief changes the type of the primitive *without* changing the value

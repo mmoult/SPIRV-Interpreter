@@ -269,6 +269,7 @@ Instruction* Instruction::readOp(
     case spv::OpConvertFToS: // 110
     case spv::OpConvertSToF: // 111
     case spv::OpConvertUToF: // 112
+    case spv::OpBitcast: // 124
     case spv::OpFNegate: // 127
     case spv::OpAny: // 154
     case spv::OpAll: // 155
@@ -351,6 +352,14 @@ Instruction* Instruction::readOp(
         repeating = true;
         break;
     case spv::OpImageRead: // 98
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        optional.push_back(Type::CONST);
+        optional.push_back(Type::REF);
+        repeating = true;
+        break;
+    case spv::OpImageWrite: // 99
+        to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         optional.push_back(Type::CONST);

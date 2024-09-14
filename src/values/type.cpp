@@ -79,7 +79,7 @@ Type Type::unionOf(std::vector<const Value*> elements) {
 }
 
 bool Type::operator==(const Type& rhs) const {
-    if (!sameBase(rhs))
+    if (base != rhs.getBase())
         return false;
 
     switch (base) {

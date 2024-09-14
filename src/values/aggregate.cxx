@@ -104,6 +104,11 @@ public:
             elements[i]->copyFrom(*other.elements[i]);
     }
 
+    virtual void copyReinterp(const Value& other) noexcept(false) override {
+        if (!tryCopyFrom(other))
+            throw std::runtime_error("Could not copy reinterp to aggregate!");
+    }
+
     bool equals(const Value& val) const override {
         if (!Value::equals(val)) // guarantees matching types
             return false;
@@ -162,6 +167,18 @@ public:
             }
         }
         Aggregate::copyFrom(new_val);
+    }
+
+    void copyReinterp(const Value& other) noexcept(false) override {
+        // We can only reinterpret from other arrays currently
+        if (other.getType().getBase() != DataType::ARRAY)
+            throw std::runtime_error("Could not copy reinterp non-array to array!");
+        const auto& array_o = static_cast<const Array&>(other);
+        unsigned size = getSize();
+        if (size != array_o.getSize())
+            throw std::runtime_error("Cannot copy reinterp from array of a different size!");
+        for (unsigned i = 0; i < size; ++i)
+            elements[i]->copyReinterp(*array_o[i]);
     }
 
     /// @brief Set the elements directly, giving all memory ownership to the array

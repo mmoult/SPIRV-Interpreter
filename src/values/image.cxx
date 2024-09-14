@@ -8,7 +8,6 @@ module;
 #include <cstdint>
 #include <vector>
 
-#include "../external/spirv.hpp"
 #define STB_IMAGE_IMPLEMENTATION
 #include "../external/stb/stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -195,11 +194,11 @@ public:
             throw std::runtime_error(
                 "Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive."
             );
-        xx = static_cast<const Primitive*>(dim_a[0])->data.u32;
+        xx = static_cast<const Primitive*>(dim_a[0])->data.all;
         if (dim_size > 1) {
-            yy = static_cast<const Primitive*>(dim_a[1])->data.u32;
+            yy = static_cast<const Primitive*>(dim_a[1])->data.all;
             if (dim_size > 2)
-                zz = static_cast<const Primitive*>(dim_a[2])->data.u32;
+                zz = static_cast<const Primitive*>(dim_a[2])->data.all;
         }
 
         //const Type& element = this->type.getElement();
@@ -260,7 +259,7 @@ public:
                 "channels are present in their default order; \"0010\" indicates only blue is present; \"2341\" means "
                 "that all four channels are present in the order ARGB."
             );
-        unsigned comps_got = static_cast<const Primitive&>(comps_v).data.u32;
+        unsigned comps_got = static_cast<const Primitive&>(comps_v).data.all;
         Component comp_new(comps_got, true);
         if (reference.empty())  // the component field only matters if we aren't specifying data through a file
             comps.assertCompatible(comp_new);
@@ -310,7 +309,7 @@ public:
                     if (comps[j] == 0)
                         continue;
                     const auto& prim = static_cast<const Primitive&>(*data_a[i + comp_new[j] - 1]);
-                    data[i + comps[j] - 1] = prim.data.u32;
+                    data[i + comps[j] - 1] = prim.data.all;
                 }
             }
         }
@@ -343,6 +342,11 @@ public:
                 data[i + comps[j] - 1] = other.data[i + other.comps[j] - 1];
             }
         }
+    }
+
+    void copyReinterp(const Value& other) noexcept(false) override {
+        if (!tryCopyFrom(other))
+            throw std::runtime_error("Could not copy reinterp to image!");
     }
 
     // Here is what an image looks like in YAML:
@@ -413,17 +417,54 @@ public:
             unsigned base = (xu * comps.count) + (yu * yyy) + (zu * zzz);
             assert(base < data.size());  // should be checked in copying that dimensions match data count actually given
 
-            unsigned next = 0;
-            for (unsigned i = 0; i < 4; ++i) {
-                unsigned ch = comps[i];
-                if (ch == 0)
-                    continue;
-                auto prim = new Primitive(data[base + ch - 1]);
+            // Output the channels in the same order defined by the comps
+            unsigned chan = 0;
+            for (unsigned chan = 0; chan < comps.count; ++chan) {
+                auto prim = new Primitive(data[base + chan]);
                 prim->cast(el);
-                vals[next++] = prim;
+                vals[chan] = prim;
             }
         }
 
         return new Array(vals);
+    }
+
+    bool write(int x, int y, int z, const Array& texel) {
+        // Verify that the texel to write to is in bounds
+        bool oob = false;
+        if (x < 0 || y < 0 || z < 0)
+            oob = true;
+        unsigned xu = static_cast<unsigned>(x);
+        unsigned yu = static_cast<unsigned>(y);
+        unsigned zu = static_cast<unsigned>(z);
+        // If the coordinate specified matches or exceeds the maximum (exclusive), then we are out of bounds.
+        // However, there is some special behavior for 0, since coordinate matching is appropriate there.
+        if ((xu > 0 && xu >= xx) || (yu > 0 && yu >= yy) || (zu > 0 && zu >= zz))
+            oob = true;
+        if (oob)
+            return false;
+
+        unsigned yyy = xx * comps.count;
+        unsigned zzz = yy * yyy;
+        unsigned base = (xu * comps.count) + (yu * yyy) + (zu * zzz);
+        assert(base < data.size());  // should be checked in copying that dimensions match data count actually given
+
+        // fetch the values out of the texel presented
+        const Type& el = type.getElement();
+        std::vector<const Value*> values(1, nullptr);
+        values.resize(1);
+        unsigned tex_size = texel.getSize();
+        assert(base + tex_size <= data.size());
+        if (tex_size > 4)
+            throw std::runtime_error("Texel array to write to image has too many channels (> 4)!");
+        for (unsigned i = 0; i < tex_size; ++i) {
+            values[0] = texel[i];
+            const Value* gen = el.construct(values);
+            // Note: gen (and thus el) MUST be a primitive for this to work!
+            uint32_t got = static_cast<const Primitive*>(gen)->data.all;
+            data[base + i] = got;
+        }
+
+        return true;
     }
 };

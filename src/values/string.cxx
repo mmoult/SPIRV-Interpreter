@@ -27,6 +27,11 @@ public:
         internal = other.internal;
     }
 
+    void copyReinterp(const Value& other) noexcept(false) override {
+        if (!tryCopyFrom(other))
+            throw std::runtime_error("Could not copy reinterp to string!");
+    }
+
     const std::string& get() const {
         return internal;
     }

@@ -30,6 +30,11 @@ public:
         throw std::runtime_error("Unimplemented function!");
     }
 
+    void copyReinterp(const Value& other) noexcept(false) override {
+        if (!tryCopyFrom(other))
+            throw std::runtime_error("Could not copy reinterp to pointer!");
+    }
+
     unsigned getHead() const {
         return head;
     }

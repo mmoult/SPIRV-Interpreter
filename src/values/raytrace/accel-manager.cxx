@@ -29,6 +29,7 @@ import util.string;
 import value.aggregate;
 import value.primitive;
 import value.raytrace.accelStruct;
+import value.string;
 
 export class AccelStructManager : public Value {
 private:
@@ -153,6 +154,11 @@ public:
             if (shaderBindingTable != nullptr)
                 shaderBindingTable->setAccelStructManager(static_cast<void*>(this));
         }
+    }
+
+    void copyReinterp(const Value& other) noexcept(false) override {
+        if (!tryCopyFrom(other))
+            throw std::runtime_error("Could not copy reinterp to accel struct manager!");
     }
 
     /// @brief Initialize the step trace.
@@ -414,7 +420,7 @@ public:
         using NameAndValue = std::tuple<const std::string, const Value*, const unsigned>;
 
         std::stack<NameAndValue> frontier;
-        const Value custom_string = Value(Type::string());
+        const String custom_string("");
         frontier.push({std::string("Structure for acceleration structures"), structureInfo.get(), 0});
 
         while (!frontier.empty()) {
@@ -527,7 +533,6 @@ public:
         const Type* float_type = new Type(Type::primitive(DataType::FLOAT));
         const Type* bool_type = new Type(Type::primitive(DataType::BOOL));
         const Type* uint_type = new Type(Type::primitive(DataType::UINT));
-        const Type* void_type = new Type(Type::primitive(DataType::VOID));
 
         // TODO: allow user-defined names (names from input), and if not provided to this method, use default names
         Names names {"acceleration_structures", "shader_binding_table"};
