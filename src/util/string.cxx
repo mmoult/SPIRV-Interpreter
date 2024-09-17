@@ -38,7 +38,7 @@ export void print_float(std::stringstream& out, float fp) {
         digit = 1.0;
         // Multiply digit by 10 until it is at least the current float divided by 10
         while (true) {
-            if (digit >= fp / 10.0)
+            if (digit > fp / 10.0)
                 break;
             digit *= 10.0;
         }

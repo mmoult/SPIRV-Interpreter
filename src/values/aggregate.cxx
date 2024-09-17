@@ -138,6 +138,7 @@ public:
     ///
     /// Be careful, since no checking is done to verify that all elements match type. This should only be used
     /// internally, never through some user-generated parsing logic
+    /// Also, this may never be used with an empty array.
     /// @param elements a pointer of value elements to pull types from in constructing this's type. When this
     /// constructor is used, the struct takes ownership of all elements given (and will delete them on destruction).
     Array(std::vector<Value*>& elements)

@@ -166,7 +166,8 @@ int main(int argc, char* argv[]) {
         parser.printHelp(24, help_intro);
         return ReturnCode::INFO;
     }
-        if (version.enabled) {
+
+    if (version.enabled) {
         std::cout << "SPIRV-Interpreter version " << VERSION << std::endl;
         std::cout << "https://github.com/mmoult/SPIRV-Interpreter" << std::endl;
 #define STRINGIZE(x) #x

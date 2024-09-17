@@ -423,9 +423,10 @@ private:
                             out << ",";
                     }
 
-                    if (is_struct)
+                    if (is_struct) {
+                        out << ' ';
                         printKeyValue(out, (*names)[i], element, indents);
-                    else
+                    } else
                         printValue(out, element, indents);
                 }
                 if (!compress)

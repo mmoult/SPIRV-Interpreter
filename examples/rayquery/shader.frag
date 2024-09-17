@@ -25,7 +25,6 @@ const vec3 LIGHT_COLOR = vec3(0.52, 0.81, 0.92);
 const vec3 LIGHT_DIRECTION = vec3(0.0, -1.0, -1.0);
 
 const int PROCEDURAL_SPHERE_0_CUSTOM_INDEX = 0;
-
 const int PROCEDURAL_SPHERE_1_CUSTOM_INDEX = 2;
 
 const int FLOOR_CUSTOM_INDEX = 1;

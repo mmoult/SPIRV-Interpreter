@@ -24,4 +24,6 @@ TEST_CASE("print_float", "[string]") {
     CHECK_F(-22346490.0);
     CHECK_F(0.000123345);
     CHECK_F(-4.2829E-7);
+    CHECK_F(1000.0);
+    CHECK_F(0.01);
 }

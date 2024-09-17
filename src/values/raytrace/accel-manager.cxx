@@ -37,17 +37,6 @@ private:
     std::shared_ptr<ShaderBindingTable> shaderBindingTable;
     std::unique_ptr<Struct> structureInfo;
 
-public:
-    AccelStructManager(Type t): Value(t) {}
-
-    [[nodiscard]] Struct* toStruct() const {
-        const Type accel_struct_type = AccelStructManager::getExpectedType();
-        Struct* structure = new Struct(Type::structure(accel_struct_type.getFields(), accel_struct_type.getNames()));
-        structure->dummyFill();  // TODO don't do a dummy fill- fill with the actual values of the manager
-        return structure;
-    }
-
-private:
     /// @brief Copy the type from "new_val".
     /// @param new_val "Value" to copy the type from.
     void copyType(const Value& new_val) {
@@ -126,7 +115,65 @@ private:
         shaderBindingTable = std::make_shared<ShaderBindingTable>(shader_binding_table);
     }
 
+    /// @brief Get "Primitive" as a string.
+    /// @param primitive value to get a string representation.
+    /// @return string representation of primitive.
+    std::string getPrimitiveValueAsString(const Value& primitive) const {
+        std::stringstream result;
+        const DataType& data_type = primitive.getType().getBase();
+
+        switch (data_type) {
+        default: {
+            std::stringstream err;
+            err << "Unsupported data type; cannot convert to primitive string: " << data_type;
+            throw std::runtime_error(err.str());
+        }
+        case DataType::FLOAT:
+            result << static_cast<const Primitive&>(primitive).data.fp32;
+            break;
+        case DataType::UINT:
+            result << static_cast<const Primitive&>(primitive).data.u32;
+            break;
+        case DataType::INT:
+            result << static_cast<const Primitive&>(primitive).data.i32;
+            break;
+        case DataType::BOOL:
+            result << (static_cast<const Primitive&>(primitive).data.b32 ? "true" : "false");
+            break;
+        case DataType::STRING:
+            result << "\"" << static_cast<const String&>(primitive).get() << "\"";
+            break;
+        }
+
+        return result.str();
+    }
+
+    static Type* makeShaderRecord(const unsigned num_shaders) {
+        using Names = std::vector<std::string>;  // Field names
+        using Fields = std::vector<const Type*>;  // Fields
+
+        const Type* string_type = new Type(Type::string());
+
+        Names shader_record_names {"inputs", "shaders", "buffer"};
+        Fields shader_record_fields;
+        {
+            // <inputs>
+            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
+
+            // <shaders>
+            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
+
+            // <buffer>
+            shader_record_fields.push_back(new Type(Type::array(0, *string_type)));
+        }
+        Type* shader_record_type = new Type(Type::structure(shader_record_fields, shader_record_names));
+
+        return shader_record_type;
+    }
+
 public:
+    AccelStructManager(Type t): Value(t) {}
+
     AccelStructManager& operator=(const AccelStructManager& other) {
         // Copy the type
         copyType(other);
@@ -374,42 +421,6 @@ public:
         return root->getIntersectionWorldToObject(get_committed);
     }
 
-private:  // String helper methods
-    /// @brief Get "Primitive" as a string.
-    /// @param primitive value to get a string representation.
-    /// @return string representation of primitive.
-    std::string getPrimitiveValueAsString(const Value& primitive) const {
-        std::stringstream result;
-        const DataType& data_type = primitive.getType().getBase();
-
-        switch (data_type) {
-        default: {
-            std::stringstream err;
-            err << "Unsupported data type; cannot convert to primitive string: " << data_type;
-            throw std::runtime_error(err.str());
-        }
-        case DataType::FLOAT: {
-            result << static_cast<const Primitive&>(primitive).data.fp32;
-            break;
-        }
-        case DataType::UINT: {
-            result << static_cast<const Primitive&>(primitive).data.u32;
-            break;
-        }
-        case DataType::INT: {
-            result << static_cast<const Primitive&>(primitive).data.i32;
-            break;
-        }
-        case DataType::BOOL: {
-            result << (static_cast<const Primitive&>(primitive).data.b32 ? "true" : "false");
-            break;
-        }
-        }
-
-        return result.str();
-    }
-
-public:
     /// @brief Get the string representation of the acceleration structures input that was provided.
     /// @return string representation of acceleration structures input.
     std::string toString() const {
@@ -499,31 +510,13 @@ public:
         return result.str();
     }
 
-private:  // Type helper methods
-    static Type* makeShaderRecord(const unsigned num_shaders) {
-        using Names = std::vector<std::string>;  // Field names
-        using Fields = std::vector<const Type*>;  // Fields
-
-        const Type* string_type = new Type(Type::string());
-
-        Names shader_record_names {"inputs", "shaders", "buffer"};
-        Fields shader_record_fields;
-        {
-            // <inputs>
-            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
-
-            // <shaders>
-            shader_record_fields.push_back(new Type(Type::array(num_shaders, *string_type)));
-
-            // <buffer>
-            shader_record_fields.push_back(new Type(Type::array(0, *string_type)));
-        }
-        Type* shader_record_type = new Type(Type::structure(shader_record_fields, shader_record_names));
-
-        return shader_record_type;
+    [[nodiscard]] Struct* toStruct() const {
+        const Type accel_struct_type = AccelStructManager::getExpectedType();
+        Struct* structure = new Struct(Type::structure(accel_struct_type.getFields(), accel_struct_type.getNames()));
+        structure->dummyFill();  // TODO don't do a dummy fill- fill with the actual values of the manager
+        return structure;
     }
 
-public:
     /// @brief Get the type for an acceleration structure manager.
     /// @return acceleration structure type.
     static Type getExpectedType() {
