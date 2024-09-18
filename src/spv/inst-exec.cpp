@@ -24,6 +24,7 @@ import spv.data.data;
 import spv.frame;
 import spv.token;
 import value.aggregate;
+import value.image;
 import value.primitive;
 import value.raytrace.accelManager;
 import value.raytrace.rayQuery;
@@ -128,6 +129,39 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         Value* val = getValue(1, data);
         Value* store_to = getFromPointer(0, data);
         store_to->copyFrom(*val);
+        break;
+    }
+    case spv::OpImageWrite: { // 99
+        Value* image_v = getValue(0, data);
+        if (image_v->getType().getBase() != DataType::IMAGE)
+            throw std::runtime_error("The third operand to ImageRead must be an image!");
+        auto& image = static_cast<Image&>(*image_v);
+        const Value* coords_v = getValue(1, data);
+        // coords can be a scalar or vector of int or float type
+        const Type* coord_type = &coords_v->getType();
+        bool arrayed = false;
+        if (coord_type->getBase() == DataType::ARRAY) {
+            coord_type = &coord_type->getElement();
+            arrayed = true;
+        }
+        const Value* texel = getValue(2, data);
+        // If the texel is a single value, we need to compose it in a temporary array
+        const Array* composed;
+        if (texel->getType().getBase() == DataType::ARRAY)
+            composed = static_cast<const Array*>(texel);
+        else {
+            // TODO HERE
+            throw std::runtime_error("Unimplemented ImageWrite variant!");
+        }
+
+        DataType base = coord_type->getBase();
+        if (base == DataType::INT) {
+            auto [x, y, z] = Image::extractIntCoords(arrayed, coords_v);
+            image.write(x, y, z, *composed);
+        } else { // if (base == DataType::FLOAT) {
+            // TODO
+            throw std::runtime_error("Float coordinates to image read not supported yet!");
+        }
         break;
     }
     case spv::OpControlBarrier: { // 224

@@ -142,22 +142,6 @@ Value* composite_extract(Value* composite, unsigned index_start, const std::vect
     return composite;
 }
 
-std::tuple<int, int, int> extract_int_coords(bool arrayed, const Value* coords_v) {
-    int x = 0, y = 0, z = 0;
-    if (!arrayed)
-        x = static_cast<const Primitive*>(coords_v)->data.i32;
-    else {
-        const auto& coords = static_cast<const Array&>(*coords_v);
-        x = static_cast<const Primitive*>(coords[0])->data.i32;
-        if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
-            y = static_cast<const Primitive*>(coords[1])->data.i32;
-            if (coords_size == 3)
-                z = static_cast<const Primitive*>(coords[2])->data.i32;
-        }
-    }
-    return {x, y, z};
-}
-
 struct OpDst {
     unsigned type;
     unsigned at;
@@ -992,7 +976,7 @@ bool Instruction::makeResult(
         }
         DataType base = coord_type->getBase();
         if (base == DataType::INT) {
-            auto [x, y, z] = extract_int_coords(arrayed, coords_v);
+            auto [x, y, z] = Image::extractIntCoords(arrayed, coords_v);
             const Array* arr = image.read(x, y, z);
             // TODO May need to decompose the result if the image has only one channel
             to_ret->copyFrom(*arr);
@@ -1002,39 +986,6 @@ bool Instruction::makeResult(
             throw std::runtime_error("Float coordinates to image read not supported yet!");
         }
         data[result_at].redefine(to_ret);
-        break;
-    }
-    case spv::OpImageWrite: { // 99
-        Value* image_v = getValue(0, data);
-        if (image_v->getType().getBase() != DataType::IMAGE)
-            throw std::runtime_error("The third operand to ImageRead must be an image!");
-        auto& image = static_cast<Image&>(*image_v);
-        const Value* coords_v = getValue(1, data);
-        // coords can be a scalar or vector of int or float type
-        const Type* coord_type = &coords_v->getType();
-        bool arrayed = false;
-        if (coord_type->getBase() == DataType::ARRAY) {
-            coord_type = &coord_type->getElement();
-            arrayed = true;
-        }
-        const Value* texel = getValue(2, data);
-        // If the texel is a single value, we need to compose it in a temporary array
-        const Array* composed;
-        if (texel->getType().getBase() == DataType::ARRAY)
-            composed = static_cast<const Array*>(composed);
-        else {
-            // TODO HERE
-            throw std::runtime_error("Unimplemented ImageWrite variant!");
-        }
-
-        DataType base = coord_type->getBase();
-        if (base == DataType::INT) {
-            auto [x, y, z] = extract_int_coords(arrayed, coords_v);
-            image.write(x, y, z, *composed);
-        } else { // if (base == DataType::FLOAT) {
-            // TODO
-            throw std::runtime_error("Float coordinates to image read not supported yet!");
-        }
         break;
     }
     case spv::OpConvertFToU: // 109

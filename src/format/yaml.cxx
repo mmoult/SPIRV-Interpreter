@@ -452,6 +452,7 @@ private:
                 break;
             }
             const auto& strv = static_cast<const String&>(value);
+            out << " ";
             printKey(out, strv.get());
             break;
         }

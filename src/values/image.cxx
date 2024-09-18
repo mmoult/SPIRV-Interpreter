@@ -388,6 +388,22 @@ public:
         return new Struct(elements, names);
     }
 
+    static std::tuple<int, int, int> extractIntCoords(bool arrayed, const Value* coords_v) {
+        int x = 0, y = 0, z = 0;
+        if (!arrayed)
+            x = static_cast<const Primitive*>(coords_v)->data.i32;
+        else {
+            const auto& coords = static_cast<const Array&>(*coords_v);
+            x = static_cast<const Primitive*>(coords[0])->data.i32;
+            if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
+                y = static_cast<const Primitive*>(coords[1])->data.i32;
+                if (coords_size == 3)
+                    z = static_cast<const Primitive*>(coords[2])->data.i32;
+            }
+        }
+        return {x, y, z};
+    }
+
     [[nodiscard]] Array* read(int x, int y, int z) const {
         std::vector<Value*> vals(comps.count, nullptr);
         // The size of the array returned is the number of components in each texel
