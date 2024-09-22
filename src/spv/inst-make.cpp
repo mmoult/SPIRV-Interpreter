@@ -32,8 +32,8 @@ import value.aggregate;
 import value.image;
 import value.pointer;
 import value.primitive;
-import value.raytrace.accelManager;
-import value.raytrace.rayQuery;
+import value.raytrace.accelStruct;
+//import value.raytrace.rayQuery;
 
 const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
     if (queue != nullptr) {
@@ -494,7 +494,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpTypeVoid: // 19
-        data[result_at].redefine(new Type(Type::primitive(DataType::VOID)));
+        data[result_at].redefine(new Type());
         break;
     case spv::OpTypeBool: // 20
         data[result_at].redefine(new Type(Type::primitive(DataType::BOOL)));
@@ -1479,12 +1479,13 @@ bool Instruction::makeResult(
         throw std::runtime_error("OpConvertUToAccelerationStructureKHR not implemented.");
 
         Type* res_type = getType(0, data);
-        // AccelStructManager res; // update me; set the acceleration structure
+        // AccelStruct res; // update me; set the acceleration structure
         // std::vector<const Value*> values {&res};
         // data[result_at].redefine(res_type->construct(values));
 
         break;
     }
+    /*
     case spv::OpTypeRayQueryKHR: { // 4472
         data[result_at].redefine(new Type(Type::rayQuery()));
         break;
@@ -1510,14 +1511,15 @@ bool Instruction::makeResult(
 
         break;
     }
+    */
     case spv::OpReportIntersectionKHR: { // 5334
         const float hit_t = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
         const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
 
         // Get necessary data from the ray tracing pipeline if it exist
-        AccelStructManager* accel_struct = nullptr;
+        AccelStruct* accel_struct = nullptr;
         if (extra_data != nullptr)
-            accel_struct = static_cast<AccelStructManager*>(extra_data);
+            accel_struct = static_cast<AccelStruct*>(extra_data);
 
         bool result = false;
         if (accel_struct == nullptr) {
@@ -1541,6 +1543,7 @@ bool Instruction::makeResult(
         data[result_at].redefine(new Type(Type::accelStruct()));
         break;
     }
+    /*
     case spv::OpRayQueryGetRayTMinKHR: { // 6016
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
 
@@ -1548,7 +1551,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getRayTMin());
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetRayFlagsKHR: { // 6017
@@ -1558,7 +1560,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getRayFlags());
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionTKHR: { // 6018
@@ -1569,7 +1570,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionT(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: { // 6019
@@ -1580,7 +1580,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionInstanceCustomIndex(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionInstanceIdKHR: { // 6020
@@ -1591,7 +1590,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionInstanceId(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: { // 6021
@@ -1602,7 +1600,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionInstanceShaderBindingTableRecordOffset(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionGeometryIndexKHR: { // 6022
@@ -1613,7 +1610,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionGeometryIndex(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: { // 6023
@@ -1624,7 +1620,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionPrimitiveIndex(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionBarycentricsKHR: { // 6024
@@ -1642,7 +1637,6 @@ bool Instruction::makeResult(
             Primitive source = Primitive(barycentrics[i]);
             destination.copyFrom(source);
         }
-
         break;
     }
     case spv::OpRayQueryGetIntersectionFrontFaceKHR: { // 6025
@@ -1653,7 +1647,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionFrontFace(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: { // 6026
@@ -1663,7 +1656,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionCandidateAABBOpaque());
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionObjectRayDirectionKHR: { // 6027
@@ -1681,7 +1673,6 @@ bool Instruction::makeResult(
             Primitive source = Primitive(direction[i]);
             destination.copyFrom(source);
         }
-
         break;
     }
     case spv::OpRayQueryGetIntersectionObjectRayOriginKHR: { // 6028
@@ -1699,7 +1690,6 @@ bool Instruction::makeResult(
             Primitive source = Primitive(origin[i]);
             destination.copyFrom(source);
         }
-
         break;
     }
     case spv::OpRayQueryGetWorldRayDirectionKHR: { // 6029
@@ -1716,7 +1706,6 @@ bool Instruction::makeResult(
             Primitive source = Primitive(direction[i]);
             destination.copyFrom(source);
         }
-
         break;
     }
     case spv::OpRayQueryGetWorldRayOriginKHR: { // 6030
@@ -1733,7 +1722,6 @@ bool Instruction::makeResult(
             Primitive source = Primitive(origin[i]);
             destination.copyFrom(source);
         }
-
         break;
     }
     case spv::OpRayQueryGetIntersectionObjectToWorldKHR: { // 6031
@@ -1754,7 +1742,6 @@ bool Instruction::makeResult(
                 destination.copyFrom(source);
             }
         }
-
         break;
     }
     case spv::OpRayQueryGetIntersectionWorldToObjectKHR: { // 6032
@@ -1775,9 +1762,9 @@ bool Instruction::makeResult(
                 destination.copyFrom(source);
             }
         }
-
         break;
     }
+    */
     }
 
     return true;

@@ -15,13 +15,13 @@ module;
 #include "../type.hpp"
 #include "../value.hpp"
 export module value.raytrace.rayQuery;
-import value.raytrace.accelManager;
+import value.raytrace.accelStruct;
 
 export class RayQuery : public Value {
 private:
     bool active;  // Whether the ray query can be traced (stepped through)
 
-    AccelStructManager tlas;
+    AccelStruct tlas;
     unsigned rayFlags;
     unsigned cullMask;
     glm::vec4 rayOrigin;  // World-space
@@ -49,7 +49,7 @@ public:
     /// @param t_min ray interval lower-bound.
     /// @param t_max ray interval upper-bound.
     void initialize(
-        const AccelStructManager& as,
+        const AccelStruct& as,
         const unsigned ray_flags,
         const unsigned cull_mask,
         const std::vector<float>& origin,

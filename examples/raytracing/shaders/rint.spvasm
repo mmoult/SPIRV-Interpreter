@@ -1,0 +1,257 @@
+; SPIR-V
+; Version: 1.6
+; Generator: Google Shaderc over Glslang; 11
+; Bound: 168
+; Schema: 0
+               OpCapability RayTracingKHR
+               OpExtension "SPV_KHR_ray_tracing"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint IntersectionNV %main "main" %_ %gl_WorldRayOriginEXT %gl_WorldRayDirectionEXT %gl_RayTminEXT %gl_RayTmaxEXT %normal
+               OpSource GLSL 460
+               OpSourceExtension "GL_EXT_ray_tracing"
+               OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
+               OpSourceExtension "GL_GOOGLE_include_directive"
+               OpName %main "main"
+               OpName %IntersectionProperties "IntersectionProperties"
+               OpMemberName %IntersectionProperties 0 "normal"
+               OpMemberName %IntersectionProperties 1 "hit_t"
+               OpMemberName %IntersectionProperties 2 "intersected"
+               OpName %raySphereIntersection_vf3_f1_vf3_vf3_f1_f1_ "raySphereIntersection(vf3;f1;vf3;vf3;f1;f1;"
+               OpName %sphere_center "sphere_center"
+               OpName %sphere_radius "sphere_radius"
+               OpName %ray_origin "ray_origin"
+               OpName %ray_direction "ray_direction"
+               OpName %ray_t_min "ray_t_min"
+               OpName %ray_t_max "ray_t_max"
+               OpName %result "result"
+               OpName %dist_o_c "dist_o_c"
+               OpName %a "a"
+               OpName %b "b"
+               OpName %c "c"
+               OpName %discriminant "discriminant"
+               OpName %hit_t "hit_t"
+               OpName %result_0 "result"
+               OpName %sphereInfo "sphereInfo"
+               OpMemberName %sphereInfo 0 "sphereCenter"
+               OpMemberName %sphereInfo 1 "sphereRadius"
+               OpName %_ ""
+               OpName %gl_WorldRayOriginEXT "gl_WorldRayOriginEXT"
+               OpName %gl_WorldRayDirectionEXT "gl_WorldRayDirectionEXT"
+               OpName %gl_RayTminEXT "gl_RayTminEXT"
+               OpName %gl_RayTmaxEXT "gl_RayTmaxEXT"
+               OpName %param "param"
+               OpName %param_0 "param"
+               OpName %param_1 "param"
+               OpName %param_2 "param"
+               OpName %param_3 "param"
+               OpName %param_4 "param"
+               OpName %hit_kind "hit_kind"
+               OpName %normal "normal"
+               OpMemberDecorate %sphereInfo 0 Offset 0
+               OpMemberDecorate %sphereInfo 1 Offset 12
+               OpDecorate %sphereInfo Block
+               OpDecorate %gl_WorldRayOriginEXT BuiltIn WorldRayOriginNV
+               OpDecorate %gl_WorldRayDirectionEXT BuiltIn WorldRayDirectionNV
+               OpDecorate %gl_RayTminEXT BuiltIn RayTminNV
+               OpDecorate %gl_RayTmaxEXT BuiltIn RayTmaxNV
+               OpDecorate %gl_RayTmaxEXT Volatile
+               OpDecorate %gl_RayTmaxEXT Coherent
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v3float = OpTypeVector %float 3
+%_ptr_Function_v3float = OpTypePointer Function %v3float
+%_ptr_Function_float = OpTypePointer Function %float
+       %bool = OpTypeBool
+%IntersectionProperties = OpTypeStruct %v3float %float %bool
+         %12 = OpTypeFunction %IntersectionProperties %_ptr_Function_v3float %_ptr_Function_float %_ptr_Function_v3float %_ptr_Function_v3float %_ptr_Function_float %_ptr_Function_float
+%_ptr_Function_IntersectionProperties = OpTypePointer Function %IntersectionProperties
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+    %float_0 = OpConstant %float 0
+         %26 = OpConstantComposite %v3float %float_0 %float_0 %float_0
+      %int_1 = OpConstant %int 1
+%float_9_99999987e_14 = OpConstant %float 9.99999987e+14
+      %int_2 = OpConstant %int 2
+      %false = OpConstantFalse %bool
+%_ptr_Function_bool = OpTypePointer Function %bool
+    %float_2 = OpConstant %float 2
+    %float_4 = OpConstant %float 4
+       %true = OpConstantTrue %bool
+ %sphereInfo = OpTypeStruct %v3float %float
+%_ptr_ShaderRecordBufferNV_sphereInfo = OpTypePointer ShaderRecordBufferNV %sphereInfo
+          %_ = OpVariable %_ptr_ShaderRecordBufferNV_sphereInfo ShaderRecordBufferNV
+%_ptr_Input_v3float = OpTypePointer Input %v3float
+%gl_WorldRayOriginEXT = OpVariable %_ptr_Input_v3float Input
+%gl_WorldRayDirectionEXT = OpVariable %_ptr_Input_v3float Input
+%_ptr_Input_float = OpTypePointer Input %float
+%gl_RayTminEXT = OpVariable %_ptr_Input_float Input
+%gl_RayTmaxEXT = OpVariable %_ptr_Input_float Input
+%_ptr_ShaderRecordBufferNV_v3float = OpTypePointer ShaderRecordBufferNV %v3float
+%_ptr_ShaderRecordBufferNV_float = OpTypePointer ShaderRecordBufferNV %float
+       %uint = OpTypeInt 32 0
+%_ptr_Function_uint = OpTypePointer Function %uint
+     %uint_1 = OpConstant %uint 1
+     %uint_0 = OpConstant %uint 0
+%_ptr_HitAttributeNV_v3float = OpTypePointer HitAttributeNV %v3float
+     %normal = OpVariable %_ptr_HitAttributeNV_v3float HitAttributeNV
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+   %result_0 = OpVariable %_ptr_Function_IntersectionProperties Function
+      %param = OpVariable %_ptr_Function_v3float Function
+    %param_0 = OpVariable %_ptr_Function_float Function
+    %param_1 = OpVariable %_ptr_Function_v3float Function
+    %param_2 = OpVariable %_ptr_Function_v3float Function
+    %param_3 = OpVariable %_ptr_Function_float Function
+    %param_4 = OpVariable %_ptr_Function_float Function
+   %hit_kind = OpVariable %_ptr_Function_uint Function
+        %137 = OpAccessChain %_ptr_ShaderRecordBufferNV_v3float %_ %int_0
+        %138 = OpLoad %v3float %137
+               OpStore %param %138
+        %141 = OpAccessChain %_ptr_ShaderRecordBufferNV_float %_ %int_1
+        %142 = OpLoad %float %141
+               OpStore %param_0 %142
+        %144 = OpLoad %v3float %gl_WorldRayOriginEXT
+               OpStore %param_1 %144
+        %146 = OpLoad %v3float %gl_WorldRayDirectionEXT
+               OpStore %param_2 %146
+        %148 = OpLoad %float %gl_RayTminEXT
+               OpStore %param_3 %148
+        %150 = OpLoad %float %gl_RayTmaxEXT
+               OpStore %param_4 %150
+        %151 = OpFunctionCall %IntersectionProperties %raySphereIntersection_vf3_f1_vf3_vf3_f1_f1_ %param %param_0 %param_1 %param_2 %param_3 %param_4
+               OpStore %result_0 %151
+        %155 = OpAccessChain %_ptr_Function_bool %result_0 %int_2
+        %156 = OpLoad %bool %155
+        %159 = OpSelect %uint %156 %uint_1 %uint_0
+               OpStore %hit_kind %159
+        %162 = OpAccessChain %_ptr_Function_v3float %result_0 %int_0
+        %163 = OpLoad %v3float %162
+               OpStore %normal %163
+        %164 = OpAccessChain %_ptr_Function_float %result_0 %int_1
+        %165 = OpLoad %float %164
+        %166 = OpLoad %uint %hit_kind
+        %167 = OpReportIntersectionKHR %bool %165 %166
+               OpReturn
+               OpFunctionEnd
+%raySphereIntersection_vf3_f1_vf3_vf3_f1_f1_ = OpFunction %IntersectionProperties None %12
+%sphere_center = OpFunctionParameter %_ptr_Function_v3float
+%sphere_radius = OpFunctionParameter %_ptr_Function_float
+ %ray_origin = OpFunctionParameter %_ptr_Function_v3float
+%ray_direction = OpFunctionParameter %_ptr_Function_v3float
+  %ray_t_min = OpFunctionParameter %_ptr_Function_float
+  %ray_t_max = OpFunctionParameter %_ptr_Function_float
+         %20 = OpLabel
+     %result = OpVariable %_ptr_Function_IntersectionProperties Function
+   %dist_o_c = OpVariable %_ptr_Function_v3float Function
+          %a = OpVariable %_ptr_Function_float Function
+          %b = OpVariable %_ptr_Function_float Function
+          %c = OpVariable %_ptr_Function_float Function
+%discriminant = OpVariable %_ptr_Function_float Function
+      %hit_t = OpVariable %_ptr_Function_float Function
+         %27 = OpAccessChain %_ptr_Function_v3float %result %int_0
+               OpStore %27 %26
+         %30 = OpAccessChain %_ptr_Function_float %result %int_1
+               OpStore %30 %float_9_99999987e_14
+         %34 = OpAccessChain %_ptr_Function_bool %result %int_2
+               OpStore %34 %false
+         %36 = OpLoad %v3float %ray_origin
+         %37 = OpLoad %v3float %sphere_center
+         %38 = OpFSub %v3float %36 %37
+               OpStore %dist_o_c %38
+         %40 = OpLoad %v3float %ray_direction
+         %41 = OpLoad %v3float %ray_direction
+         %42 = OpDot %float %40 %41
+               OpStore %a %42
+         %45 = OpLoad %v3float %ray_direction
+         %46 = OpLoad %v3float %dist_o_c
+         %47 = OpDot %float %45 %46
+         %48 = OpFMul %float %float_2 %47
+               OpStore %b %48
+         %50 = OpLoad %v3float %dist_o_c
+         %51 = OpLoad %v3float %dist_o_c
+         %52 = OpDot %float %50 %51
+         %53 = OpLoad %float %sphere_radius
+         %54 = OpLoad %float %sphere_radius
+         %55 = OpFMul %float %53 %54
+         %56 = OpFSub %float %52 %55
+               OpStore %c %56
+         %58 = OpLoad %float %b
+         %59 = OpLoad %float %b
+         %60 = OpFMul %float %58 %59
+         %62 = OpLoad %float %a
+         %63 = OpFMul %float %float_4 %62
+         %64 = OpLoad %float %c
+         %65 = OpFMul %float %63 %64
+         %66 = OpFSub %float %60 %65
+               OpStore %discriminant %66
+         %67 = OpLoad %float %discriminant
+         %68 = OpFOrdGreaterThanEqual %bool %67 %float_0
+               OpSelectionMerge %70 None
+               OpBranchConditional %68 %69 %70
+         %69 = OpLabel
+         %72 = OpLoad %float %b
+         %73 = OpFNegate %float %72
+         %74 = OpLoad %float %discriminant
+         %75 = OpExtInst %float %1 Sqrt %74
+         %76 = OpFSub %float %73 %75
+         %77 = OpLoad %float %a
+         %78 = OpFMul %float %float_2 %77
+         %79 = OpFDiv %float %76 %78
+               OpStore %hit_t %79
+         %80 = OpLoad %float %hit_t
+         %81 = OpLoad %float %ray_t_min
+         %82 = OpFOrdLessThan %bool %80 %81
+         %83 = OpLoad %float %hit_t
+         %84 = OpLoad %float %ray_t_max
+         %85 = OpFOrdGreaterThan %bool %83 %84
+         %86 = OpLogicalOr %bool %82 %85
+               OpSelectionMerge %88 None
+               OpBranchConditional %86 %87 %88
+         %87 = OpLabel
+         %89 = OpLoad %float %b
+         %90 = OpFNegate %float %89
+         %91 = OpLoad %float %discriminant
+         %92 = OpExtInst %float %1 Sqrt %91
+         %93 = OpFSub %float %90 %92
+         %94 = OpLoad %float %a
+         %95 = OpFMul %float %float_2 %94
+         %96 = OpFDiv %float %93 %95
+               OpStore %hit_t %96
+               OpBranch %88
+         %88 = OpLabel
+         %97 = OpLoad %float %hit_t
+         %98 = OpLoad %float %ray_t_min
+         %99 = OpFOrdLessThan %bool %97 %98
+        %100 = OpLoad %float %hit_t
+        %101 = OpLoad %float %ray_t_max
+        %102 = OpFOrdGreaterThan %bool %100 %101
+        %103 = OpLogicalOr %bool %99 %102
+               OpSelectionMerge %105 None
+               OpBranchConditional %103 %104 %105
+        %104 = OpLabel
+        %106 = OpLoad %IntersectionProperties %result
+               OpReturnValue %106
+        %105 = OpLabel
+        %109 = OpAccessChain %_ptr_Function_bool %result %int_2
+               OpStore %109 %true
+        %110 = OpLoad %float %hit_t
+        %111 = OpAccessChain %_ptr_Function_float %result %int_1
+               OpStore %111 %110
+        %112 = OpLoad %v3float %ray_origin
+        %113 = OpLoad %v3float %ray_direction
+        %114 = OpAccessChain %_ptr_Function_float %result %int_1
+        %115 = OpLoad %float %114
+        %116 = OpVectorTimesScalar %v3float %113 %115
+        %117 = OpFAdd %v3float %112 %116
+        %118 = OpLoad %v3float %sphere_center
+        %119 = OpFSub %v3float %117 %118
+        %120 = OpExtInst %v3float %1 Normalize %119
+        %121 = OpAccessChain %_ptr_Function_v3float %result %int_0
+               OpStore %121 %120
+               OpBranch %70
+         %70 = OpLabel
+        %122 = OpLoad %IntersectionProperties %result
+               OpReturnValue %122
+               OpFunctionEnd

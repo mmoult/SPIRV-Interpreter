@@ -17,6 +17,7 @@ module;
 export module value.image;
 import value.aggregate;
 import value.primitive;
+import value.statics;
 import value.string;
 
 export class Image : public Value {
@@ -128,6 +129,8 @@ export class Image : public Value {
     // Of course, the two options are orthogonal. We can have a non-normalized, positively signed range of [0.0, 255.0]
     // or a normalized negatively signed range of [-0.5, 0.5].
 
+    inline static const std::vector<std::string> names {"ref", "dim", "comps", "data"};
+
 public:
     Image(Type t): Value(t), comps(t.getComps(), false), xx(0), yy(0), zz(0) {};
 
@@ -157,16 +160,11 @@ public:
 
     /// @brief Copy the image's fields from the other struct, if possible
     /// @param other the struct to copy from
-    void copyFrom(const Struct& other) noexcept(false) {
-        if (other.getSize() > 4)
-            throw std::runtime_error(
-                "Unrecognized field in image struct! Only \"ref\", \"dim\", \"comps\", and \"data\" are allowed."
-            );
+    void copyFrom(const Struct& str) noexcept(false) {
+        const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "image", names);
         const std::vector<std::string>& type_names = other.getType().getNames();
 
         // ref: <string>
-        if (type_names[0] != "ref")
-            throw std::runtime_error("\"ref\" must be the first field in the image struct!");
         const Value* ref = other[0];
         if (ref->getType().getBase() != DataType::STRING)
             throw std::runtime_error(
@@ -175,30 +173,17 @@ public:
         reference = static_cast<const String*>(ref)->get();
 
         // dim: uvec1, uvec2, or uvec3
-        if (type_names[1] != "dim")
-            throw std::runtime_error("\"dim\" must be the second field in the image struct!");
-        const Value& dim = *other[1];
-        if (const Type& dim_type = dim.getType();
-        dim_type.getBase() != DataType::ARRAY || dim_type.getElement().getBase() != DataType::UINT)
-            throw std::runtime_error("The second image field, \"dim\", must be an array of uint dimensions!");
-        const Array& dim_a = static_cast<const Array&>(dim);
-        // The number of dimensions must match what this's type expects
-        unsigned dim_size = dim_a.getSize();
-        if (unsigned exp_size = this->type.getDim(); dim_size != exp_size) {
-            std::stringstream err;
-            err << "Could not copy image from struct because its field \"dim\" had " << dim_size << " dimensions, but ";
-            err << exp_size << " dimensions were expected!";
-            throw std::runtime_error(err.str());
-        }
+        unsigned dim_size = this->type.getDim();
         if (dim_size < 1 || dim_size > 3)
             throw std::runtime_error(
                 "Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive."
             );
-        xx = static_cast<const Primitive*>(dim_a[0])->data.all;
+        std::vector<unsigned> dims = Statics::extractUvec(other[1], "dim", dim_size);
+        xx = dims[0];
         if (dim_size > 1) {
-            yy = static_cast<const Primitive*>(dim_a[1])->data.all;
+            yy = dims[1];
             if (dim_size > 2)
-                zz = static_cast<const Primitive*>(dim_a[2])->data.all;
+                zz = dims[2];
         }
 
         //const Type& element = this->type.getElement();
@@ -249,8 +234,6 @@ public:
         }
 
         // comps: <uint>
-        if (type_names[2] != "comps")
-            throw std::runtime_error("\"comps\" must be the third field in the image struct!");
         const Value& comps_v = *other[2];
         if (comps_v.getType().getBase() != DataType::UINT)
             throw std::runtime_error(
@@ -266,8 +249,6 @@ public:
 
         // data : array<float> or array<uint> or array<int>
         // TODO: differentiate between float [0, 255] and float normal [0.0, 1.0]
-        if (type_names[3] != "data")
-            throw std::runtime_error("\"data\" must be the fourth field in the image struct!");
         const Value& data_v = *other[3];
         if (data_v.getType().getBase() != DataType::ARRAY)
             throw std::runtime_error(
@@ -358,7 +339,6 @@ public:
     //   - float, int, or uint, as long as it is consistent
     //   - <...>
     Struct* toStruct() const {
-        std::vector<std::string> names{"ref", "dim", "comps", "data"};
         std::vector<Value*> elements;
         elements.reserve(4);
         elements.push_back(new String(reference));

@@ -15,16 +15,7 @@ layout(location = 7) in vec3 rayDirection;
 layout(location = 8) in float rayTMax;
 layout(location = 9) rayPayloadEXT vec3 payload;
 
-layout(location = 10) in uint indexSBTCallable;
-layout(location = 11) callableDataEXT dvec2 callableData;
-
 void main()
 {
-    // Built-ins
-    gl_LaunchIDEXT;
-    gl_LaunchSizeEXT;
-
-    // Instructions
     traceRayEXT(accelStruct, rayFlags, cullMask, offsetSBT, strideSBT, missIndex, rayOrigin, rayTMin, rayDirection, rayTMax, 9);
-    executeCallableEXT(indexSBTCallable, 11);
 }

@@ -21,7 +21,7 @@ import value.aggregate;
 import value.image;
 import value.pointer;
 import value.primitive;
-import value.raytrace.accelManager;
+import value.raytrace.accelStruct;
 import value.string;
 
 export class Yaml : public ValueFormat {
@@ -457,7 +457,7 @@ private:
             break;
         }
         case DataType::ACCEL_STRUCT: {
-            Struct* structure = static_cast<const AccelStructManager&>(value).toStruct();
+            Struct* structure = static_cast<const AccelStruct&>(value).toStruct();
             printValue(out, *structure, indents);
             delete structure;
             break;

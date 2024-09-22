@@ -155,32 +155,29 @@
         "shader_binding_table" : {
             "ray_gen_shader_records" : [
                 {
-                    "inputs" : [ "./in.json" ],
-                    "shaders" : [ "./ray_generation.spv" ],
-                    "buffer" : []
+                    "shader": "./ray_generation.spv",
+                    "input": "./in.json"
                 }
             ],
             "miss_shader_records" : [
                 {
-                    "inputs" : [ "./inputs/miss_sky-in.json" ],
-                    "shaders" : [ "./shaders/miss_sky.spv" ],
-                    "buffer" : []
+                    "shader" : "./shaders/miss_sky.spv",
+                    "input": ""
                 },
                 {
-                    "inputs" : [ "./inputs/miss_shadow-in.json" ],
-                    "shaders" : [ "./shaders/miss_shadow.spv" ],
-                    "buffer" : []
+                    "shader" : "./shaders/miss_shadow.spv",
+                    "input": ""
                 }
             ],
             "hit_group_shader_records" : [
                 {
                     "inputs" : [ "./inputs/wall_rchit-in.json", "./inputs/wall_rahit-in.json", "" ],
-                    "shaders" : [ "./shaders/wall_rchit.spv", "./shaders/wall_rahit.spv", "" ],
+                    "shader" : [ "./shaders/wall_rchit.spv", "./shaders/wall_rahit.spv", "" ],
                     "buffer" : []
                 },
                 {
                     "inputs" : [ "./inputs/sphere_rchit-in.json", "./inputs/sphere_rahit-in.json", "./inputs/sphere_intersection-in.json" ],
-                    "shaders" : [ "./shaders/sphere_rchit.spv", "./shaders/sphere_rahit.spv", "./shaders/sphere_intersection.spv" ],
+                    "shader" : [ "./shaders/sphere_rchit.spv", "./shaders/sphere_rahit.spv", "./shaders/sphere_intersection.spv" ],
                     "buffer" : [ "./sbt-inputs/sphere_info-in.json" ]
                 }
             ],

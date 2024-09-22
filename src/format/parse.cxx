@@ -217,7 +217,7 @@ protected:
 
     Value* constructArrayFrom(std::vector<const Value*>& elements) {
         try {
-            Type union_type = elements.empty() ? Type(Type::primitive(DataType::VOID)) : Type::unionOf(elements);
+            Type union_type = elements.empty() ? Type() : Type::unionOf(elements);
             Type* ut = new Type(union_type);
             Array* arr = new Array(*ut, elements.size());
             arr->addElements(elements);

@@ -27,10 +27,14 @@ target_sources(spv-interp
       values/image.cxx
       values/pointer.cxx
       values/primitive.cxx
+      values/statics.cxx
       values/string.cxx
+      #values/raytrace/accel-struct.cxx
       values/raytrace/accel-struct.cxx
-      values/raytrace/accel-manager.cxx
-      values/raytrace/ray-query.cxx
+      values/raytrace/node.cxx
+      values/raytrace/ray-flags.cxx
+      #values/raytrace/ray-query.cxx
+      values/raytrace/shader-binding-table.cxx
 )
 # Add other source files
 target_sources(spv-interp
@@ -41,7 +45,7 @@ target_sources(spv-interp
     spv/inst-read.cpp
     util/trie.cpp
     values/type.cpp
-    values/raytrace/shader-binding-table.cpp
+    #values/raytrace/shader-binding-table.cpp
 )
 
 # git rev-parse --short HEAD

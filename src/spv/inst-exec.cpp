@@ -26,8 +26,9 @@ import spv.token;
 import value.aggregate;
 import value.image;
 import value.primitive;
-import value.raytrace.accelManager;
-import value.raytrace.rayQuery;
+import value.raytrace.accelStruct;
+import value.statics;
+//import value.raytrace.rayQuery;
 
 bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, void* extra_data) const {
     bool inc_pc = true;
@@ -247,33 +248,20 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         break;
     }
     case spv::OpTraceRayKHR: { // 4445
-        AccelStructManager& as = static_cast<AccelStructManager&>(*getValue(0, data));
-
+        AccelStruct& as = static_cast<AccelStruct&>(*getValue(0, data));
         const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
         const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
         const unsigned offset_sbt = static_cast<Primitive&>(*getValue(3, data)).data.u32;
         const unsigned stride_sbt = static_cast<Primitive&>(*getValue(4, data)).data.u32;
         const unsigned miss_index = static_cast<Primitive&>(*getValue(5, data)).data.u32;
 
-        Array& ray_origin_info = static_cast<Array&>(*getValue(6, data));
-        std::vector<float> ray_origin;
-        for (unsigned i = 0; i < ray_origin_info.getSize(); ++i)
-            ray_origin.push_back(static_cast<Primitive&>(*(ray_origin_info[i])).data.fp32);
+        std::vector<float> ray_origin = Statics::extractVec(getValue(6, data), "ray_origin", 3);
+        std::vector<float> ray_direction = Statics::extractVec(getValue(8, data), "ray_direction", 3);
 
         const float ray_t_min = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
-
-        Array& ray_direction_info = static_cast<Array&>(*getValue(8, data));
-        std::vector<float> rayDirection;
-        for (unsigned i = 0; i < ray_direction_info.getSize(); ++i)
-            rayDirection.push_back(static_cast<Primitive&>(*(ray_direction_info[i])).data.fp32);
-
-        assert(ray_origin.size() == rayDirection.size());
-
         const float ray_t_max = static_cast<Primitive&>(*getValue(9, data)).data.fp32;
-
         auto payload_pointer = getFromPointer(10, data);
 
-        // --- Execute instruction
         // Run it through our implementation of a ray tracing pipeline
         // Only the 8 least-significant bits of Cull Mask are used in this instruction
         // Only the 4 least-significant bits of SBT Offset are used in this instruction
@@ -283,7 +271,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             ray_flags,
             cull_mask & 0xFF,
             ray_origin,
-            rayDirection,
+            ray_direction,
             ray_t_min,
             ray_t_max,
             offset_sbt & 0xF,
@@ -306,10 +294,10 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                   << shader_args->getType().getBase() << ")" << std::endl;
         break;
     }
+    /*
     case spv::OpRayQueryInitializeKHR: { // 4473
-        // --- Get the arguments
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
-        AccelStructManager& as = static_cast<AccelStructManager&>(*getValue(1, data));
+        AccelStruct& as = static_cast<AccelStruct&>(*getValue(1, data));
         const unsigned ray_flags = static_cast<Primitive&>(*getValue(2, data)).data.u32;
         const unsigned cull_mask = static_cast<Primitive&>(*getValue(3, data)).data.u32;
 
@@ -329,10 +317,8 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
         const float rayTMax = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
 
-        // --- Initialize the ray query
         // Only 8-least significant bits of cull mask are used.
         ray_query.initialize(as, ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, rayTMax);
-
         break;
     }
     case spv::OpRayQueryTerminateKHR: { // 4474
@@ -351,6 +337,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         ray_query.confirmIntersection();
         break;
     }
+    */
     }
 
     if (dst_val != nullptr) {

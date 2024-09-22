@@ -13,8 +13,8 @@
 import value.aggregate;
 import value.image;
 import value.primitive;
-import value.raytrace.accelManager;
-import value.raytrace.rayQuery;
+import value.raytrace.accelStruct;
+//import value.raytrace.rayQuery;
 import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values) const {
@@ -60,9 +60,9 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     case DataType::STRING:
         return new String("");
     case DataType::ACCEL_STRUCT:
-        return new AccelStructManager(*this);
-    case DataType::RAY_QUERY:
-        return new RayQuery(*this);
+        return new AccelStruct();
+    //case DataType::RAY_QUERY:
+    //    return new RayQuery(*this);
     case DataType::IMAGE:
         return new Image(*this);
     // TODO support other types
