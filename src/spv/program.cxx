@@ -40,8 +40,8 @@ export class Program {
     unsigned globalInvocId = 0;
     unsigned workGroupSize = 0;
 
-    /// @brief For parsing the program from the binary words. Should identify whether the whole program is valid before
-    ///        any instructions are executed.
+    /// @brief Parses instructions from the binary words.
+    /// Should identify whether the whole program is valid before any instructions are executed.
     class ProgramLoader {
         uint8_t* buffer;
         int length;
@@ -128,7 +128,7 @@ if (!(COND)) \
                     words.push_back(word);
                 }
 
-                Instruction& inst = *(Instruction::readOp(insts, opcode, words));
+                Instruction::readOp(insts, opcode, words);
             }
 
 #undef REQUIRE
@@ -213,6 +213,10 @@ public:
             throw std::runtime_error("Program is missing entry function!");
     }
 
+    /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
+    /// @param provided map of names to values
+    /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
+    ///               default values.
     void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
         DataView& global = data.getGlobal();
         // First, create a list of variables needed as inputs
@@ -223,7 +227,7 @@ public:
 
         // Spec constants are not mandatory in the input file!
         // Although they had their values assigned earlier (and therefore, must not be assigned again), we check them
-        // here since their name-value pspecConstsairs may appear in the input, we must recognize them as valid.
+        // here since their name-value pairs may appear in the input, we must recognize them as valid.
         std::vector<Variable*> specConsts;
         for (const auto spec : specs)
             specConsts.push_back(global[spec].getVariable());
@@ -237,6 +241,10 @@ public:
                 if (var->getName() == name) {
                     found = true;
                     var->setVal(*val);
+
+                    // Special case for acceleration structures since their shader binding table may have extra shaders
+                    // to parse and resolve.
+
                     // Remove the interface from the check list
                     inputs.erase(inputs.begin() + i);
                     --i;
@@ -259,7 +267,7 @@ public:
             }
         }
 
-        // At this point, all in interfaces should be removed. If not, there are more vars needed not provided
+        // At this point, all "in" interfaces should be removed. If not, there are more vars needed not provided
         if (!(inputs.empty() || unused)) {
             std::stringstream error;
             error << "Missing ";
@@ -372,7 +380,6 @@ public:
         Variable* local_invoc_id  = nullptr;
         Variable* global_invoc_id = nullptr;
         const Type tUint = Type::primitive(DataType::UINT);
-        const Type tUvec3 = Type::array(3, tUint);
         if (localInvocIdx != 0)
             local_invoc_idx = global[localInvocIdx].getVariable();
         if (localInvocId != 0)

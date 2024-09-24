@@ -20,6 +20,7 @@ target_sources(spv-interp
       spv/frame.cxx
       spv/instruction.cxx
       spv/program.cxx
+      spv/ray-flags.cxx
       spv/token.cxx
       util/compare.cxx
       util/string.cxx
@@ -29,12 +30,10 @@ target_sources(spv-interp
       values/primitive.cxx
       values/statics.cxx
       values/string.cxx
-      #values/raytrace/accel-struct.cxx
       values/raytrace/accel-struct.cxx
-      values/raytrace/node.cxx
-      values/raytrace/ray-flags.cxx
       #values/raytrace/ray-query.cxx
       values/raytrace/shader-binding-table.cxx
+      values/raytrace/trace.cxx
 )
 # Add other source files
 target_sources(spv-interp
@@ -46,6 +45,7 @@ target_sources(spv-interp
     util/trie.cpp
     values/type.cpp
     #values/raytrace/shader-binding-table.cpp
+    values/raytrace/node.cpp
 )
 
 # git rev-parse --short HEAD
@@ -73,5 +73,6 @@ target_link_libraries(spv-interp glm::glm)
 add_executable(spv-run main.cpp)
 set_target_properties(spv-run PROPERTIES OUTPUT_NAME "spirv-run")
 target_compile_options(spv-run PUBLIC "-DHASH=${HASH}")
+target_compile_options(spv-run PUBLIC "$<$<CONFIG:DEBUG>:-Wall>")
 target_link_libraries(spv-run spv-interp)
 install(TARGETS spv-run)

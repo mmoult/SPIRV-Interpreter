@@ -267,6 +267,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // Only the 4 least-significant bits of SBT Offset are used in this instruction
         // Only the 4 least-significant bits of SBT Stride are used in this instruction
         // Only the 16 least-significant bits of Miss Index are used in this instruction
+
         as.traceRay(
             ray_flags,
             cull_mask & 0xFF,

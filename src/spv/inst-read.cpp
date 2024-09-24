@@ -64,7 +64,7 @@ void handle_type(
     }
 }
 
-Instruction* Instruction::readOp(
+void Instruction::readOp(
     std::vector<Instruction>& insts,
     uint16_t opcode,
     std::vector<uint32_t>& words
@@ -461,6 +461,4 @@ Instruction* Instruction::readOp(
         err << "Extra words while parsing instruction " << spv::OpToString(op) << "!";
         throw std::length_error(err.str());
     }
-
-    return &inst;
 }

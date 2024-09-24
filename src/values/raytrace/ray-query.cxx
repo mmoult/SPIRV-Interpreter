@@ -70,15 +70,14 @@ public:
         rayTMax = t_max;
 
         active = true;
-        tlas.initStepTraceRay(rayFlags, cullMask, origin, direction, rayTMin, rayTMax, false);
+        tlas.initTrace(rayFlags, cullMask, origin, direction, rayTMin, rayTMax, false);
     }
 
     /// @brief Take one step in tracing the ray where each step reaches the next geometry.
     /// @return true if there is more to trace, otherwise false.
     bool proceed() {
-        if (active) {
-            active = tlas.stepTraceRay();
-        }
+        if (active)
+            active = tlas.stepTrace();
         return active;
     }
 

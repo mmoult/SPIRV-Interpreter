@@ -127,9 +127,7 @@ public:
     /// @param insts the vector of insts to place the instruction in
     /// @param opcode the opcode of the instruction to create
     /// @param words a vector of words which holds the necesary arguments for the instruction
-    /// @return a pointer to the instruction created. This is a convenience, where the pointer returned is the
-    ///         last instruction in the insts vector.
-    static Instruction* readOp(
+    static void readOp(
         std::vector<Instruction>& insts,
         uint16_t opcode,
         std::vector<uint32_t>& words

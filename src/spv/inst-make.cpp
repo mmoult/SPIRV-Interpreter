@@ -227,7 +227,6 @@ void element_shift_op(
 
     // Operate on two primitive arrays or two primitive scalars
     const Type& tbase = src1->getType();
-    const Type& tshift = src2->getType();
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
 
@@ -458,8 +457,7 @@ bool Instruction::makeResult(
         throw std::runtime_error(err.str());
     }
     case spv::OpString: // 7
-        // In the future, we will need to support a string value type. However, at the moment, the only use of strings
-        // is for nonsemantic debug info which can safely be discarded.
+        // At the moment, this is only for nonsemantic debug info which can safely be discarded.
         break;
     case spv::OpExtInstImport: { // 11
         // Determine which extension the string represents
@@ -1482,7 +1480,6 @@ bool Instruction::makeResult(
         // AccelStruct res; // update me; set the acceleration structure
         // std::vector<const Value*> values {&res};
         // data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     /*
@@ -1497,7 +1494,6 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.proceed());
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     case spv::OpRayQueryGetIntersectionTypeKHR: { // 4479
@@ -1508,12 +1504,11 @@ bool Instruction::makeResult(
         Primitive res = Primitive(ray_query.getIntersectionType(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
-
         break;
     }
     */
     case spv::OpReportIntersectionKHR: { // 5334
-        const float hit_t = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
+        const float t_hit = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
         const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
 
         // Get necessary data from the ray tracing pipeline if it exist
@@ -1523,20 +1518,19 @@ bool Instruction::makeResult(
 
         bool result = false;
         if (accel_struct == nullptr) {
-            // Execute this if testing a single intersection shader
-            // Assume t-min is 0.0 and t-max goes to infinity
-            result = hit_t > 0.0f;
+            // Execute this if testing a single intersection shader: Assume range is [0.0, infinity)
+            result = t_hit > 0.0f;
         } else {
             // Execute if running a ray tracing pipeline
-            const bool in_ray_interval = accel_struct->isIntersectionValid(hit_t);
-            result = in_ray_interval ? accel_struct->invokeAnyHitShader(hit_t, hit_kind) : false;
+            result = accel_struct->isIntersectionValid(t_hit);
+            if (result)
+                result = accel_struct->invokeAnyHitShader(t_hit, hit_kind);
         }
 
-        Type* res_type = getType(0, data);
-        Primitive res = Primitive(result);
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
-
+        Value* res = getType(0, data)->construct();
+        Primitive prim(result);
+        res->copyFrom(prim);
+        data[result_at].redefine(res);
         break;
     }
     case spv::OpTypeAccelerationStructureKHR: { // 5341
@@ -2015,7 +2009,7 @@ bool Instruction::makeResultGlsl(
             if (vsize != 0)
                 component /= vsize;
             Primitive& created = floats.emplace_back(static_cast<float>(component));
-            pfloats.push_back(&floats[i]);
+            pfloats.push_back(&created);
         }
 
         Value* res = res_type->construct(pfloats);

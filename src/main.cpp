@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
         return ReturnCode::INFO;
     }
 
-    // Verify that the inputs loaded match what the program expects
+    // Process the given inputs into the program
     try {
         program.checkInputs(inputs, unused.enabled);
     } catch (const std::exception& e) {
@@ -318,7 +318,7 @@ int main(int argc, char* argv[]) {
         if (!ok) {
             std::cerr << "Output did NOT match!" << std::endl;
             return ReturnCode::BAD_COMPARE;
-        } else
+        } else {
             // Print the number of variables checked to know whether it was a trivial pass
             std::cout << total_tests;
             if (total_tests == 1)
@@ -326,6 +326,7 @@ int main(int argc, char* argv[]) {
             else
                 std::cout << " outputs match!";
             std::cout << std::endl;
+        }
 
         for (const auto& [_, val] : check_map)
             delete val;

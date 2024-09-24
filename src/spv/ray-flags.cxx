@@ -4,9 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <cassert>
 
 #include "../../external/spirv.hpp"
-export module value.raytrace.rayFlags;
+export module spv.rayFlags;
 
 export class RayFlags {
     unsigned rayFlags;
