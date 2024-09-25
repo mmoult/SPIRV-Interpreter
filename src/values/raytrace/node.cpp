@@ -13,10 +13,15 @@
 #include <glm/ext.hpp>
 
 #include "../value.hpp"
+#include "trace.hpp"
+import util.intersection;
 import value.aggregate;
 import value.primitive;
-import value.raytrace.trace;
 import value.statics;
+
+// These also are an unwanted Vulkan/SPIR-V dependency.
+static constexpr unsigned HIT_KIND_FRONT_FACING_TRIANGLE_KHR = 0xFE;
+static constexpr unsigned HIT_KIND_BACK_FACING_TRIANGLE_KHR = 0xFF;
 
 const Type& BoxNode::getType() {
     if (type.getBase() != DataType::VOID)
@@ -29,8 +34,26 @@ const Type& BoxNode::getType() {
     return type;
 }
 
-bool BoxNode::step(Trace& trace) const {
-
+bool BoxNode::step(Trace* trace_p) const {
+    Trace& trace = *trace_p;
+    Intersection& candidate = trace.getCandidate();
+    const bool result = ray_AABB_intersect(
+        candidate.rayOrigin,
+        candidate.rayDirection,
+        trace.rayTMin,
+        trace.rayTMax,
+        minBounds,
+        maxBounds
+    );
+    // If the ray intersects the bounding box, then add its children to be evaluated.
+    if (result) {
+        for (const auto& child_ref : children) {
+            // Have to refetch the candidate each iteration since expanding the candidates list may have invalidated
+            // the previous reference.
+            Intersection& cand = trace.candidates.emplace_back(trace.getCandidate());
+            cand.search = child_ref.ptr;
+        }
+    }
     return false;
 }
 
@@ -51,11 +74,11 @@ bool BoxNode::step(Trace& trace) const {
 [[nodiscard]] Struct* BoxNode::toStruct() const {
     std::vector<Value*> fields(3, nullptr);
     std::vector<Value*> min_v{
-        new Primitive(min_bounds[0]), new Primitive(min_bounds[1]), new Primitive(min_bounds[2])
+        new Primitive(minBounds.x), new Primitive(minBounds.y), new Primitive(minBounds.z)
     };
     fields[0] = new Array(min_v);
     std::vector<Value*> max_v{
-        new Primitive(max_bounds[0]), new Primitive(max_bounds[1]), new Primitive(max_bounds[2])
+        new Primitive(maxBounds.x), new Primitive(maxBounds.y), new Primitive(maxBounds.z)
     };
     fields[1] = new Array(max_v);
     if (children.empty()) {
@@ -88,7 +111,24 @@ const Type& InstanceNode::getType() {
     return type;
 }
 
-bool InstanceNode::step(Trace& trace) const {
+bool InstanceNode::step(Trace* trace_p) const {
+    Trace& trace = *trace_p;
+
+    // Do not process this instance if it's invisible to the ray.
+    if ((this->mask & trace.cullMask) == 0)
+        return false;
+
+    // Transform the ray to match the instance's object-space.
+    const Intersection& before = trace.getCandidate();
+    glm::vec3 origin = this->transformation * before.rayOrigin;
+    glm::vec3 direction = this->transformation * before.rayDirection;
+    // TODO: determine whether the ray interval (t-min and t-max) also needs to be scaled.
+
+    Intersection& cand = trace.candidates.emplace_back(before);
+    cand.search = child.ptr;
+    cand.rayOrigin = glm::vec4(origin.x, origin.y, origin.z, 1.0);
+    cand.rayDirection = glm::vec4(direction.x, direction.y, direction.z, 0.0);
+    cand.instance = this;
 
     return false;
 }
@@ -149,9 +189,52 @@ const Type& TriangleNode::getType() {
     return type;
 }
 
-bool TriangleNode::step(Trace& trace) const {
+bool TriangleNode::step(Trace* trace_p) const {
+    Trace& trace = *trace_p;
+    // Check skip triangle ray flag.
+    if (trace.rayFlags.skipTriangles())
+        return false;
 
-    return false;
+    // Check opaque related ray flags.
+    bool is_opaque = this->opaque;
+    if (trace.rayFlags.opaque())
+        is_opaque = true;
+    else if (trace.rayFlags.noOpaque())
+        is_opaque = false;
+
+    if ((trace.rayFlags.cullOpaque() && is_opaque) || (trace.rayFlags.cullNoOpaque() && !is_opaque))
+        return false;
+
+    Intersection& candidate = trace.getCandidate();
+
+    // Check if the ray intersects the triangle
+    // t: Distance to intersection
+    // u: Barycentric coordinate u
+    // v: Barycentric coordinate v
+    // entered_front: whether an intersection came from the front face
+    auto [found, t, u, v, entered_front] = ray_triangle_intersect(
+        candidate.rayOrigin,
+        candidate.rayDirection,
+        trace.rayTMin,
+        trace.rayTMax,
+        this->vertices,
+        trace.rayFlags.cullBackFacingTriangles(),
+        trace.rayFlags.cullFrontFacingTriangles()
+    );
+
+    if (!found)
+        return false;
+
+    // Update candidate
+    candidate.hitT = t;
+    candidate.barycentrics = glm::vec2(u, v);
+    candidate.isOpaque = this->opaque;
+    candidate.enteredTriangleFrontFace = entered_front;
+    candidate.geometryIndex = this->geomIndex;
+    candidate.primitiveIndex = this->primIndex;
+    candidate.hitKind = entered_front ? HIT_KIND_FRONT_FACING_TRIANGLE_KHR : HIT_KIND_BACK_FACING_TRIANGLE_KHR;
+    candidate.type = Intersection::Type::Triangle;
+    return found;
 }
 
 [[nodiscard]] TriangleNode* TriangleNode::fromVal(const Value* val) {
@@ -168,7 +251,8 @@ bool TriangleNode::step(Trace& trace) const {
     const Array& vertices_a = Statics::extractArray(str[3], names[3]);
     if (vertices_a.getSize() != 3)
         throw std::runtime_error("TriangleNode field \"vertices\" must be three vec3!");
-    glm::mat3 verts;
+    std::vector<glm::vec3> verts;
+    verts.resize(3);
     for (unsigned i = 0; i < 3; ++i) {
         std::vector<float> row = Statics::extractVec(vertices_a[i], "vertices", 3);
         for (unsigned j = 0; j < 3; ++j)
@@ -207,9 +291,101 @@ const Type& ProceduralNode::getType() {
     return type;
 }
 
-bool ProceduralNode::step(Trace& trace) const {
+bool ProceduralNode::step(Trace* trace_p) const {
+    Trace& trace = *trace_p;
 
-    return false;
+    // Check skip AABBs (procedurals) flag
+    if (trace.rayFlags.skipAABBs())
+        return false;
+
+    // Check opaque related ray flags.
+    bool is_opaque = this->opaque;
+    if (trace.rayFlags.opaque())
+        is_opaque = true;
+    else if (trace.rayFlags.noOpaque())
+        is_opaque = false;
+
+    if ((trace.rayFlags.cullOpaque() && is_opaque) || (trace.rayFlags.cullNoOpaque() && !is_opaque))
+        return false;
+
+    Intersection& candidate = trace.getCandidate();
+    bool found = ray_AABB_intersect(
+        candidate.rayOrigin,
+        candidate.rayDirection,
+        trace.rayTMin,
+        trace.rayTMax,
+        this->minBounds,
+        this->maxBounds
+    );
+
+    if (!found)
+        return false;
+
+    // Here is the fun part: we passed the bounding box, now we want to call the intersection shader to determine
+    // whether there is an actual intersection.
+    // TODO
+
+    /*//////////////////////////////////
+    candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*curr_node_ref);
+
+    // Run the intersection shader if the intersection was with a procedural node.
+    // Running the shader here because we need the instance SBT offset for calculating the index.
+    if (useSBT && (candidateIntersection.type == CandidateIntersectionType::AABB)) {
+        intersectedProcedural = true;
+        const int geometry_index = getIntersectionGeometryIndex(false);
+        const unsigned instance_sbt_offset =
+            getIntersectionInstanceShaderBindingTableRecordOffset(false);
+        //
+        const Program* shader = shaderBindingTable.getHitShader(
+            offsetSBT,
+            strideSBT,
+            geometry_index,
+            instance_sbt_offset,
+            HitGroupType::Intersection
+        );
+        if (shader != nullptr) {
+            ValueMap inputs = getNewShaderInputs(*shader, true, nullptr);
+            SBTShaderOutput outputs = shaderBindingTable.executeHit(
+                inputs,
+                offsetSBT,
+                strideSBT,
+                geometry_index,
+                instance_sbt_offset,
+                HitGroupType::Intersection
+            );
+
+            // If it fails the intersection, then cancel it.
+            // Note: variable <intersectedProcedural> will be modified when invoking intersection and
+            // any-hit shaders.
+            const bool missed = !intersectedProcedural;
+            if (missed) {
+                found_primitive = false;
+                candidateIntersection.update(false, IntersectionProperties {});
+                break;
+            }
+
+            // Otherwise, store the hit attribute for later use.
+            for (const auto& [name, info] : outputs) {
+                const auto value = get<0>(info);
+                const auto storage_class = get<1>(info);
+                if (storage_class == spv::StorageClass::StorageClassHitAttributeKHR) {
+                    Value* hit_attribute = value->getType().construct();
+                    hit_attribute->copyFrom(*value);
+                    candidateIntersection.properties.hitAttribute = hit_attribute;
+                }
+            }
+        }
+    }
+    *////////////////////////////
+
+    if (found) {
+        candidate.isOpaque = this->opaque;
+        candidate.geometryIndex = this->geomIndex;
+        candidate.primitiveIndex = this->primIndex;
+        candidate.type = Intersection::Type::AABB;
+    }
+
+    return found;
 }
 
 [[nodiscard]] ProceduralNode* ProceduralNode::fromVal(const Value* val) {
@@ -230,11 +406,11 @@ bool ProceduralNode::step(Trace& trace) const {
 
 [[nodiscard]] Struct* ProceduralNode::toStruct() const {
     std::vector<Value*> min_v{
-        new Primitive(min_bounds[0]), new Primitive(min_bounds[1]), new Primitive(min_bounds[2])
+        new Primitive(minBounds.x), new Primitive(minBounds.y), new Primitive(minBounds.z)
     };
     auto* mins = new Array(min_v);
     std::vector<Value*> max_v{
-        new Primitive(max_bounds[0]), new Primitive(max_bounds[1]), new Primitive(max_bounds[2])
+        new Primitive(maxBounds.x), new Primitive(maxBounds.y), new Primitive(maxBounds.z)
     };
     auto* maxs = new Array(max_v);
     std::vector<Value*> fields{

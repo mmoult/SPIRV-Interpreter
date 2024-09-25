@@ -3,27 +3,27 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-module;
+#ifndef VALUES_RAYTRACE_TRACE_HPP
+#define VALUES_RAYTRACE_TRACE_HPP
+
 #include <limits>
 
 #include <glm/ext.hpp>
 
 #include "../value.hpp"
-export module value.raytrace.trace;
+#include "node.hpp"
 import spv.rayFlags;
 
-// Forward declaration of from node.hpp to make the build system happy.
-class InstanceNode;
-
-export struct Intersection {
+struct Intersection {
     enum class Type { None, Triangle, Generated, AABB };
-    Type intersectionType = Type::None;
+    Type type = Type::None;
+    const Node* search;
 
     // Probably put ray properties which get transformed by InstanceNodes here
     glm::vec4 rayOrigin {0.0f, 0.0f, 0.0f, 0.0f};
     glm::vec4 rayDirection {0.0f, 0.0f, 0.0f, 0.0f};
 
-    InstanceNode* instance = nullptr;  // Instance the intersection occured in
+    const InstanceNode* instance = nullptr;  // Instance the intersection occured in
     int geometryIndex = -1;
     int primitiveIndex = -1;
     float hitT = std::numeric_limits<float>::max();
@@ -34,7 +34,7 @@ export struct Intersection {
     const Value* hitAttribute = nullptr;
 };
 
-export struct Trace {
+struct Trace {
     bool active = false;
     std::vector<Intersection> candidates;
     unsigned candidate;  // the next candidate to consider
@@ -51,4 +51,20 @@ export struct Trace {
     unsigned offsetSBT;
     unsigned strideSBT;
     unsigned missIndex;
+
+    inline Intersection& getCandidate() {
+        return candidates[candidate];
+    }
+    inline const Intersection& getCandidate() const {
+        return candidates[candidate];
+    }
+
+    inline Intersection& getCommitted() {
+        return candidates[committed];
+    }
+    inline const Intersection& getCommitted() const {
+        return candidates[committed];
+    }
 };
+
+#endif

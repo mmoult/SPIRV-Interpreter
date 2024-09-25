@@ -30,7 +30,7 @@ export bool ray_AABB_intersect(
     const float ray_t_max,
     const glm::vec3& min_bounds,
     const glm::vec3& max_bounds
-) const {
+) {
     // Check if the ray if inside of the AABB; it is considered inside if right at the surface.
     bool inside_aabb = ray_origin.x >= min_bounds.x && ray_origin.y >= min_bounds.y &&
                         ray_origin.z >= min_bounds.z && ray_origin.x <= max_bounds.x &&
@@ -116,7 +116,7 @@ export std::tuple<bool, float, float, float, bool> ray_triangle_intersect(
     const std::vector<glm::vec3>& vertices,
     const bool cull_back_face,
     const bool cull_front_face
-) const {
+) {
     // Immediately return if culling both faces
     if (cull_back_face && cull_front_face)
         return {false, 0.0f, 0.0f, 0.0f, false};

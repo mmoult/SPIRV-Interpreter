@@ -27,13 +27,13 @@ module;
 #include "../type.hpp"
 #include "../value.hpp"
 #include "node.hpp"
+#include "trace.hpp"
 export module value.raytrace.accelStruct;
 import spv.rayFlags;
 import util.string;
 import value.aggregate;
 import value.primitive;
 import value.raytrace.shaderBindingTable;
-import value.raytrace.trace;
 import value.statics;
 import value.string;
 
@@ -57,109 +57,6 @@ private:
 
 private:
     // TODO: handle the effects of winding order on intersections; currently, front face is CCW
-
-    /*
-    enum class NodeType { Box, Instance, Triangle, Procedural };
-
-    struct Node {
-        virtual std::shared_ptr<Node> clone() const = 0;
-        virtual NodeType type() const = 0;
-    };
-
-    struct BoxNode : public Node {
-        const glm::vec4 minBounds;
-        const glm::vec4 maxBounds;
-        const std::vector<std::shared_ptr<Node>> children;
-
-        NodeType type() const {
-            return NodeType::Box;
-        }
-    };
-
-    struct InstanceNode : public Node {
-        const glm::mat4x3 objectToWorld;  // Column-major order
-        const glm::mat4x3 worldToObject;  // Column-major order
-        const unsigned id;  // Id relative to other instance nodes in the same acceleration structure
-        const unsigned customIndex;  // For shading
-        const unsigned mask;  // Mask that can make the ray ignore this instance
-        const unsigned sbtRecordOffset;  // Shader binding table record offset (a.k.a. hit group id)
-        const std::shared_ptr<AccelerationStructure> accelStruct;
-
-        NodeType type() const {
-            return NodeType::Instance;
-        }
-    };
-
-    struct TriangleNode : public Node {
-        const unsigned geometryIndex;  // Geometry this node is a part of
-        const unsigned primitiveIndex;  // Index of node in geometry
-        const bool opaque;  // Whether this triangle is opaque
-        const std::vector<glm::vec3> vertices;
-
-        NodeType type() const {
-            return NodeType::Triangle;
-        }
-    };
-
-    struct ProceduralNode : public Node {
-        const unsigned geometryIndex;  // Geometry this node is a part of
-        const unsigned primitiveIndex;  // Index of node in geometry
-        const bool opaque;  // Whether this procedural is opaque
-        const glm::vec4 minBounds;
-        const glm::vec4 maxBounds;
-
-        NodeType type() const {
-            return NodeType::Procedural;
-        }
-    };
-    */
-
-    /*
-    // Intersection related
-    struct IntersectionProperties {
-        std::shared_ptr<InstanceNode> instance = nullptr;  // Instance the intersection occured in
-        int geometryIndex = -1;
-        int primitiveIndex = -1;
-        float hitT = std::numeric_limits<float>::max();
-        glm::vec2 barycentrics = glm::vec2(0.0f, 0.0f);
-        bool isOpaque = true;
-        bool enteredTriangleFrontFace = false;
-        unsigned hitKind = std::numeric_limits<unsigned>::max();
-        const Value* hitAttribute = nullptr;
-    };
-
-    struct CandidateIntersection {
-        CandidateIntersectionType type = CandidateIntersectionType::Triangle;
-        IntersectionProperties properties {};
-
-        /// @brief Update the candidate to the most recent intersection.
-        /// @param is_triangle whether this is a triangle intersection.
-        /// @param new_properties new candidate's properties.
-        void update(const bool is_triangle, const IntersectionProperties& new_properties) {
-            type = is_triangle ? CandidateIntersectionType::Triangle : CandidateIntersectionType::AABB;
-            properties = new_properties;
-        }
-    };
-    struct CommittedIntersection {
-        CommittedIntersectionType type = CommittedIntersectionType::None;
-
-        /// @brief Update the committed to match the given candidate.
-        /// @param is_triangle whether this is a triangle intersection.
-        /// @param candidate_intersection candidate to commit.
-        void update(const bool is_triangle, const CandidateIntersection& candidate_intersection) {
-            type = is_triangle ? CommittedIntersectionType::Triangle : CommittedIntersectionType::Generated;
-            properties = candidate_intersection.properties;
-        }
-    };
-
-    CommittedIntersection committedIntersection;  // Current committed intersection from stepping the ray
-    CandidateIntersection candidateIntersection;  // Current candidate intersection from stepping the ray
-    */
-
-    /*
-    bool didPopNodePreviously = true;  // Used in the stepTrace() method
-    bool intersectedProcedural = false;  // Used in the stepTrace() method
-    */
 
     /*
     /// @brief Get populated shader inputs for the next shader in the ray tracing pipeline.
@@ -311,273 +208,39 @@ public:
         trace.strideSBT = stride_sbt;
         trace.missIndex = miss_index;
 
-        trace.candidate = 0;
         trace.committed = std::numeric_limits<unsigned>::max();
         trace.active = true;
+        trace.candidates.resize(1);
+        trace.candidate = 1; // start at the end of the list because stepTrace is pre-increment
 
         // Start the candidates fresh with the root node in the bvh
-        trace.candidates.resize(1);
-        auto candidate = trace.candidates[0];
+        auto curr = trace.candidates[0];
         assert(ray_origin.size() == 3 && ray_direction.size() == 3);
-        candidate.rayOrigin = glm::vec4(ray_origin[0], ray_origin[1], ray_origin[2], 1.0);
-        candidate.rayDirection = glm::vec4(ray_direction[0], ray_direction[1], ray_direction[2], 0.0);
+        curr.rayOrigin = glm::vec4(ray_origin[0], ray_origin[1], ray_origin[2], 1.0);
+        curr.rayDirection = glm::vec4(ray_direction[0], ray_direction[1], ray_direction[2], 0.0);
     }
 
     /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.
     /// @return if a triangle or procedural was intersected; implies if there is more to trace.
     bool stepTrace() {
-        // Do not trace if the trace is inactive.
         if (!trace.active)
             return false;
 
+        // Start with the next index (the previous is kept after step so the found candidate can be used)
+        if (trace.candidate == trace.candidates.size())
+            trace.candidate = 0;
+        else
+            ++trace.candidate;
+
         // Traverse the acceleration structure until it reaches the next non-instance primitive.
         bool found_primitive = false;
-        for (; trace.candidate < trace.candidates.size(); ++trace.candidate) {
+        // Note: the node may make the trace inactive, so check that each iteration
+        for (; trace.active && trace.candidate < trace.candidates.size() && !found_primitive; ++trace.candidate)
+            found_primitive = trace.getCandidate().search->step(&trace);
 
-        }
-        /*
-        while (!found_primitive && (nodesToEval.size() > 0)) {
-
-            const auto* curr_node_ref = nodesToEval.top();
-            Node* curr_node = curr_node_ref->get();
-            nodesToEval.pop();
-
-            switch (curr_node->type()) {
-            default: {
-                std::stringstream err;
-                err << "Found unknown node type (" << static_cast<int>(curr_node->type())
-                    << ") in \"traceRay()\" method of class "
-                       "\"AccelerationStructure\" in \"acceleration-structure.cxx\"";
-                throw std::runtime_error(err.str());
-            }
-            case NodeType::Box: {
-                BoxNode* box_node = static_cast<BoxNode*>(curr_node);
-                const bool result = rayAABBIntersect(
-                    rayOrigin,
-                    rayDirection,
-                    rayTMin,
-                    rayTMax,
-                    box_node->minBounds,
-                    box_node->maxBounds
-                );
-                // If the ray intersects the bounding box, then add its children to be evaluated.
-                if (result)
-                    for (const auto& child : box_node->children)
-                        nodesToEval.push(&child);
-                break;
-            }
-            case NodeType::Instance: {
-                InstanceNode* instance_node = static_cast<InstanceNode*>(curr_node);
-
-                // Do not process this instance if it's invisible to the ray.
-                if ((instance_node->mask & cullMask) == 0)
-                    break;
-
-                // Transform the ray to match the instance's object-space.
-                glm::vec3 object_ray_origin = instance_node->worldToObject * rayOrigin;
-                glm::vec3 object_ray_direction = instance_node->worldToObject * rayDirection;
-
-                // TODO: the ray interval might need to be scaled (t-min and t-max) if any problems arise in the future.
-                const auto& ref_accel_struct = instance_node->accelStruct;
-
-                // Trace the ray in the respective acceleration structure.
-                // Do not pop the node if we can still step through the instance node's acceleration structure.
-                if (didPopNodePreviously) {
-                    // If we did pop the previous node, then this is the first time we are stepping through the instance
-                    // node's acceleration structure.
-                    std::vector<float> ray_origin {object_ray_origin[0], object_ray_origin[1], object_ray_origin[2]};
-                    std::vector<float> ray_direction {
-                        object_ray_direction[0], object_ray_direction[1], object_ray_direction[2]
-                    };
-                    ref_accel_struct->initTrace(
-                        rayFlags,
-                        cullMask,
-                        ray_origin,
-                        ray_direction,
-                        rayTMin,
-                        rayTMax,
-                        useSBT,
-                        offsetSBT,
-                        strideSBT,
-                        missIndex
-                    );
-                }
-                found_primitive = ref_accel_struct->stepTrace();
-                didPopNodePreviously = !found_primitive;
-
-                // Handle the result of tracing the ray in the instance.
-                if (found_primitive) {
-                    // Can try the instance's acceleration structure again
-                    nodesToEval.push(curr_node_ref);
-
-                    // Update candidate
-                    candidateIntersection = ref_accel_struct->candidateIntersection;
-                    candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*curr_node_ref);
-
-                    // Run the intersection shader if the intersection was with a procedural node.
-                    // Running the shader here because we need the instance SBT offset for calculating the index.
-                    if (useSBT && (candidateIntersection.type == CandidateIntersectionType::AABB)) {
-                        intersectedProcedural = true;
-                        const int geometry_index = getIntersectionGeometryIndex(false);
-                        const unsigned instance_sbt_offset =
-                            getIntersectionInstanceShaderBindingTableRecordOffset(false);
-                        //
-                        const Program* shader = shaderBindingTable.getHitShader(
-                            offsetSBT,
-                            strideSBT,
-                            geometry_index,
-                            instance_sbt_offset,
-                            HitGroupType::Intersection
-                        );
-                        if (shader != nullptr) {
-                            ValueMap inputs = getNewShaderInputs(*shader, true, nullptr);
-                            SBTShaderOutput outputs = shaderBindingTable.executeHit(
-                                inputs,
-                                offsetSBT,
-                                strideSBT,
-                                geometry_index,
-                                instance_sbt_offset,
-                                HitGroupType::Intersection
-                            );
-
-                            // If it fails the intersection, then cancel it.
-                            // Note: variable <intersectedProcedural> will be modified when invoking intersection and
-                            // any-hit shaders.
-                            const bool missed = !intersectedProcedural;
-                            if (missed) {
-                                found_primitive = false;
-                                candidateIntersection.update(false, IntersectionProperties {});
-                                break;
-                            }
-
-                            // Otherwise, store the hit attribute for later use.
-                            for (const auto& [name, info] : outputs) {
-                                const auto value = get<0>(info);
-                                const auto storage_class = get<1>(info);
-                                if (storage_class == spv::StorageClass::StorageClassHitAttributeKHR) {
-                                    Value* hit_attribute = value->getType().construct();
-                                    hit_attribute->copyFrom(*value);
-                                    candidateIntersection.properties.hitAttribute = hit_attribute;
-                                }
-                            }
-                        }
-                        //
-                    }
-
-                    // Terminate on the first hit if the flag was risen
-                    if (rayFlags.terminateOnFirstHit()) {
-                        trace.active = false;
-                        return true;
-                    }
-                }
-
-                break;
-            }
-            case NodeType::Triangle: {
-                // Check skip triangle ray flag.
-                if (rayFlags.skipTriangles())
-                    break;
-
-                TriangleNode* triangle_node = static_cast<TriangleNode*>(curr_node);
-
-                // Check opaque related ray flags.
-                bool is_opaque = triangle_node->opaque;
-                if (rayFlags.opaque())
-                    is_opaque = true;
-                else if (rayFlags.noOpaque())
-                    is_opaque = false;
-
-                if ((rayFlags.cullOpaque() && is_opaque) || (rayFlags.cullNoOpaque() && !is_opaque))
-                    break;
-
-                // Check if the ray intersects the triangle
-                std::tuple<bool, float, float, float, bool> result = rayTriangleIntersect(
-                    rayOrigin,
-                    rayDirection,
-                    rayTMin,
-                    rayTMax,
-                    triangle_node->vertices,
-                    rayFlags.cullBackFacingTriangles(),
-                    rayFlags.cullFrontFacingTriangles()
-                );
-
-                found_primitive = get<0>(result);
-
-                if (found_primitive) {
-                    // Get triangle intersection data
-                    float t = get<1>(result);  // Distance to intersection
-                    float u = get<2>(result);  // Barycentric coordinate u
-                    float v = get<3>(result);  // Barycentric coordinate v
-                    bool entered_front = get<4>(result);  // Interested a triangle from the front
-
-                    // Update candidate
-                    IntersectionProperties properties;
-                    properties.hitT = t;
-                    properties.barycentrics = glm::vec2(u, v);
-                    properties.isOpaque = triangle_node->opaque;
-                    properties.enteredTriangleFrontFace = entered_front;
-                    properties.geometryIndex = triangle_node->geometryIndex;
-                    properties.primitiveIndex = triangle_node->primitiveIndex;
-                    properties.hitKind =
-                        entered_front ? HIT_KIND_FRONT_FACING_TRIANGLE_KHR : HIT_KIND_BACK_FACING_TRIANGLE_KHR;
-                    candidateIntersection.update(true, properties);
-
-                    // Terminate on the first hit if the flag was risen
-                    if (rayFlags.terminateOnFirstHit()) {
-                        trace.active = false;
-                        return true;
-                    }
-                }
-
-                break;
-            }
-            case NodeType::Procedural: {
-                // Check skip AABBs (procedurals) flag
-                if (rayFlags.skipAABBs())
-                    break;
-
-                ProceduralNode* procedural_node = static_cast<ProceduralNode*>(curr_node);
-
-                // Check opaque related ray flags.
-                bool is_opaque = procedural_node->opaque;
-                if (rayFlags.opaque())
-                    is_opaque = true;
-                else if (rayFlags.noOpaque())
-                    is_opaque = false;
-
-                if ((rayFlags.cullOpaque() && is_opaque) || (rayFlags.cullNoOpaque() && !is_opaque))
-                    break;
-
-                found_primitive = rayAABBIntersect(
-                    rayOrigin,
-                    rayDirection,
-                    rayTMin,
-                    rayTMax,
-                    procedural_node->minBounds,
-                    procedural_node->maxBounds
-                );
-
-                if (found_primitive) {
-                    // Update candidate
-                    IntersectionProperties properties;
-                    properties.isOpaque = procedural_node->opaque;
-                    properties.geometryIndex = procedural_node->geometryIndex;
-                    properties.primitiveIndex = procedural_node->primitiveIndex;
-                    candidateIntersection.update(false, properties);
-                    assert(candidateIntersection.type == CandidateIntersectionType::AABB);
-
-                    // Cannot terminate early if ray flag "terminate on first hit" was raised because we do not know if
-                    // the ray actually intersected the primitive.
-                }
-                break;
-            }
-            }
-        }
-        */
-
-        // Make sure to deactivate the trace if there is no more to traverse
-        // TODO should deactivate when end of list reached
-        if (trace.candidates.empty())
+        // Terminate on the first hit if the flag was risen
+        // Or terminate the search if there are no nodes left to look at
+        if ((found_primitive && trace.rayFlags.terminateOnFirstHit()) || (trace.candidate == trace.candidates.size()))
             trace.active = false;
 
         return found_primitive;
@@ -628,7 +291,7 @@ public:
                 intersect_once = true;
 
             if (found_primitive) {
-                if (trace.candidates[trace.candidate].intersectionType == Intersection::Type::Triangle)
+                if (trace.getCandidate().type == Intersection::Type::Triangle)
                     confirmIntersection();
                 else  // ... == Intersection::Type::AABB
                     generateIntersection(getIntersectionT(false));
@@ -640,7 +303,7 @@ public:
         if (trace.useSBT) {
             // Otherwise, invoke either the closest hit or miss shaders
             //SBTShaderOutput outputs;
-            if (trace.candidates[trace.committed].intersectionType != Intersection::Type::None) {
+            if (trace.getCommitted().type != Intersection::Type::None) {
                 // Closest hit
                 if (trace.rayFlags.skipClosestHitShader())
                     return;
@@ -816,6 +479,7 @@ public:
             return;
 
         rayTMax = candidateIntersection.properties.hitT;
+        // TODO set the type of intersection to Generated
         committedIntersection.update(true, candidateIntersection);
 */
     }
@@ -824,23 +488,17 @@ public:
     /// @param get_committed Type of intersection: committed or candidate.
     /// @return distance between the ray and intersection.
     float getIntersectionT(bool get_committed) const {
-        //return get_committed ? committedIntersection.properties.hitT : candidateIntersection.properties.hitT;
-        return 0.0;
+        unsigned index = get_committed? trace.committed : trace.candidate;
+        return trace.candidates[index].hitT;
     }
 
     /// @brief Get the current intersection instance's custom index.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return custom index if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceCustomIndex(bool get_committed) const {
-/*
-        const auto& committed_instance = committedIntersection.properties.instance;
-        const auto& candidate_instance = candidateIntersection.properties.instance;
-
-        if (committed_instance == nullptr && candidate_instance == nullptr)
-            return -1;
-
-        return get_committed ? committed_instance->customIndex : candidate_instance->customIndex;
-*/
+        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        if (intersect.instance != nullptr)
+            return static_cast<int>(intersect.instance->getCustomIndex());
         return -1;
     }
 
@@ -848,15 +506,9 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return id if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceId(bool get_committed) const {
-        /*
-        const auto& committed_instance = committedIntersection.properties.instance;
-        const auto& candidate_instance = candidateIntersection.properties.instance;
-
-        if (committed_instance == nullptr && candidate_instance == nullptr)
-            return -1;
-
-        return get_committed ? committed_instance->id : candidate_instance->id;
-        */
+        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        if (intersect.instance != nullptr)
+            return static_cast<int>(intersect.instance->getId());
         return -1;
     }
 
@@ -879,78 +531,55 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return geometry index.
     int getIntersectionGeometryIndex(bool get_committed) const {
-        /*
-        return get_committed ? committedIntersection.properties.geometryIndex
-                             : candidateIntersection.properties.geometryIndex;
-        */
-        return -1;
+        unsigned index = get_committed? trace.committed : trace.candidate;
+        return trace.candidates[index].geometryIndex;
     }
 
     /// @brief Get the current intersection's primitive index.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return primitive index.
     int getIntersectionPrimitiveIndex(bool get_committed) const {
-        /*
-        return get_committed ? committedIntersection.properties.primitiveIndex
-                             : candidateIntersection.properties.primitiveIndex;
-        */
-        return -1;
+        unsigned index = get_committed? trace.committed : trace.candidate;
+        return trace.candidates[index].primitiveIndex;
     }
 
     /// @brief Get the current intersection's barycentric coordinates.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return barycentrics.
     glm::vec2 getIntersectionBarycentrics(bool get_committed) const {
-        /*
-        return get_committed ? committedIntersection.properties.barycentrics
-                             : candidateIntersection.properties.barycentrics;
-        */
-        return glm::vec2(0.0);
+        unsigned index = get_committed? trace.committed : trace.candidate;
+        return trace.candidates[index].barycentrics;
     }
 
     /// @brief Get whether the ray entered the front face of a triangle.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return whether the intersection was entered from the front face of a triangle.
     bool getIntersectionFrontFace(bool get_committed) const {
-        /*
-        return get_committed ? committedIntersection.type == CommittedIntersectionType::Triangle &&
-                                   committedIntersection.properties.enteredTriangleFrontFace
-                             : candidateIntersection.type == CandidateIntersectionType::Triangle &&
-                                   candidateIntersection.properties.enteredTriangleFrontFace;
-        */
-        return false;
+        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        return intersect.type == Intersection::Type::Triangle && intersect.enteredTriangleFrontFace;
     }
 
     /// @brief Get whether the intersection is an opaque procedural.
     /// @return whether the intersection was an opaque procedural.
     bool getIntersectionCandidateAABBOpaque() const {
-        /*
-        return candidateIntersection.type == CandidateIntersectionType::AABB &&
-               candidateIntersection.properties.isOpaque;
-        */
-        return false;
+        const Intersection& intersect = trace.getCandidate();
+        return intersect.type == Intersection::Type::AABB && intersect.isOpaque;
     }
 
     /// @brief Get the object-space ray direction depending on the instance intersected.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-space ray direction.
     glm::vec3 getIntersectionObjectRayDirection(bool get_committed) const {
-        /*
-        return get_committed ? (committedIntersection.properties.instance->worldToObject * rayDirection)
-                             : (candidateIntersection.properties.instance->worldToObject * rayDirection);
-        */
-        return glm::vec3(0.0);
+        unsigned index = get_committed? trace.committed : trace.candidate;
+        return trace.candidates[index].rayDirection;
     }
 
     /// @brief Get the object-space ray origin depending on the instance intersected.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-space ray origin.
     glm::vec3 getIntersectionObjectRayOrigin(bool get_committed) const {
-        /*
-        return get_committed ? (committedIntersection.properties.instance->worldToObject * rayOrigin)
-                             : (candidateIntersection.properties.instance->worldToObject * rayOrigin);
-        */
-        return glm::vec3(0.0);
+        unsigned index = get_committed? trace.committed : trace.candidate;
+        return trace.candidates[index].rayOrigin;
     }
 
     /// @brief Get the object-to-world matrix of the intersected instance.

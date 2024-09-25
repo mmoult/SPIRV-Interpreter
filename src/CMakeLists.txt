@@ -23,6 +23,7 @@ target_sources(spv-interp
       spv/ray-flags.cxx
       spv/token.cxx
       util/compare.cxx
+      util/intersection.cxx
       util/string.cxx
       values/aggregate.cxx
       values/image.cxx
@@ -33,7 +34,6 @@ target_sources(spv-interp
       values/raytrace/accel-struct.cxx
       #values/raytrace/ray-query.cxx
       values/raytrace/shader-binding-table.cxx
-      values/raytrace/trace.cxx
 )
 # Add other source files
 target_sources(spv-interp
