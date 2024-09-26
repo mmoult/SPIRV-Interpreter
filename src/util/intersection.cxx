@@ -8,7 +8,6 @@ module;
 #include <limits>
 #include <tuple>
 
-//#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext.hpp>
 
 export module util.intersection;
@@ -33,8 +32,8 @@ export bool ray_AABB_intersect(
 ) {
     // Check if the ray if inside of the AABB; it is considered inside if right at the surface.
     bool inside_aabb = ray_origin.x >= min_bounds.x && ray_origin.y >= min_bounds.y &&
-                        ray_origin.z >= min_bounds.z && ray_origin.x <= max_bounds.x &&
-                        ray_origin.y <= max_bounds.y && ray_origin.z <= max_bounds.z;
+                       ray_origin.z >= min_bounds.z && ray_origin.x <= max_bounds.x &&
+                       ray_origin.y <= max_bounds.y && ray_origin.z <= max_bounds.z;
     if (inside_aabb)
         return true;
 

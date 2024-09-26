@@ -263,27 +263,21 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         auto payload_pointer = getFromPointer(10, data);
 
         // Run it through our implementation of a ray tracing pipeline
-        // Only the 8 least-significant bits of Cull Mask are used in this instruction
-        // Only the 4 least-significant bits of SBT Offset are used in this instruction
-        // Only the 4 least-significant bits of SBT Stride are used in this instruction
-        // Only the 16 least-significant bits of Miss Index are used in this instruction
-
         as.traceRay(
             ray_flags,
-            cull_mask & 0xFF,
+            cull_mask & 0xFF,  // Only the 8 least-significant bits of Cull Mask are used
             ray_origin,
             ray_direction,
             ray_t_min,
             ray_t_max,
-            offset_sbt & 0xF,
-            stride_sbt & 0xF,
-            miss_index & 0xFFFF,
+            offset_sbt & 0xF,  // Only the 4 least-significant bits of SBT Offset are used
+            stride_sbt & 0xF,  // Only the 4 least-significant bits of SBT Stride are used
+            miss_index & 0xFFFF,  // Only the 16 least-significant bits of Miss Index are used
             payload_pointer
         );
 
         // Payload will either be filled with whether the trace intersected a geometry (a boolean)
         // or the user-defined payload output.
-
         break;
     }
     case spv::OpExecuteCallableKHR: { // 4446

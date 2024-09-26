@@ -46,6 +46,7 @@ target_sources(spv-interp
     values/type.cpp
     #values/raytrace/shader-binding-table.cpp
     values/raytrace/node.cpp
+    values/raytrace/trace.cpp
 )
 
 # git rev-parse --short HEAD

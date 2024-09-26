@@ -178,7 +178,7 @@
                 {
                     "inputs" : [ "./inputs/sphere_rchit-in.json", "./inputs/sphere_rahit-in.json", "./inputs/sphere_intersection-in.json" ],
                     "shader" : [ "./shaders/sphere_rchit.spv", "./shaders/sphere_rahit.spv", "./shaders/sphere_intersection.spv" ],
-                    "buffer" : [ "./sbt-inputs/sphere_info-in.json" ]
+                    "buffer" : [ "./sphere_info-in.json" ]
                 }
             ],
             "callable_shader_records" : []

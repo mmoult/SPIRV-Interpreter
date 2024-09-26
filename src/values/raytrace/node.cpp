@@ -37,9 +37,12 @@ const Type& BoxNode::getType() {
 bool BoxNode::step(Trace* trace_p) const {
     Trace& trace = *trace_p;
     Intersection& candidate = trace.getCandidate();
+    auto ray_pos = candidate.getRayPos(trace_p);
+    auto ray_dir = candidate.getRayDir(trace_p);
+
     const bool result = ray_AABB_intersect(
-        candidate.rayOrigin,
-        candidate.rayDirection,
+        ray_pos,
+        ray_dir,
         trace.rayTMin,
         trace.rayTMax,
         minBounds,
@@ -120,14 +123,15 @@ bool InstanceNode::step(Trace* trace_p) const {
 
     // Transform the ray to match the instance's object-space.
     const Intersection& before = trace.getCandidate();
-    glm::vec3 origin = this->transformation * before.rayOrigin;
-    glm::vec3 direction = this->transformation * before.rayDirection;
+    // TODO find out the correct direction to multiply in...
+    glm::mat4 objToWorld = before.objToWorld * transformation;
+    glm::mat4 worldToObj = before.worldToObj * inverse;
     // TODO: determine whether the ray interval (t-min and t-max) also needs to be scaled.
 
     Intersection& cand = trace.candidates.emplace_back(before);
     cand.search = child.ptr;
-    cand.rayOrigin = glm::vec4(origin.x, origin.y, origin.z, 1.0);
-    cand.rayDirection = glm::vec4(direction.x, direction.y, direction.z, 0.0);
+    cand.objToWorld = objToWorld;
+    cand.worldToObj = worldToObj;
     cand.instance = this;
 
     return false;
@@ -206,6 +210,8 @@ bool TriangleNode::step(Trace* trace_p) const {
         return false;
 
     Intersection& candidate = trace.getCandidate();
+    auto ray_pos = candidate.getRayPos(trace_p);
+    auto ray_dir = candidate.getRayDir(trace_p);
 
     // Check if the ray intersects the triangle
     // t: Distance to intersection
@@ -213,8 +219,8 @@ bool TriangleNode::step(Trace* trace_p) const {
     // v: Barycentric coordinate v
     // entered_front: whether an intersection came from the front face
     auto [found, t, u, v, entered_front] = ray_triangle_intersect(
-        candidate.rayOrigin,
-        candidate.rayDirection,
+        ray_pos,
+        ray_dir,
         trace.rayTMin,
         trace.rayTMax,
         this->vertices,
@@ -309,9 +315,12 @@ bool ProceduralNode::step(Trace* trace_p) const {
         return false;
 
     Intersection& candidate = trace.getCandidate();
+    auto ray_pos = candidate.getRayPos(trace_p);
+    auto ray_dir = candidate.getRayDir(trace_p);
+
     bool found = ray_AABB_intersect(
-        candidate.rayOrigin,
-        candidate.rayDirection,
+        ray_pos,
+        ray_dir,
         trace.rayTMin,
         trace.rayTMax,
         this->minBounds,

@@ -6,6 +6,7 @@
 #ifndef VALUES_RAYTRACE_NODE_HPP
 #define VALUES_RAYTRACE_NODE_HPP
 
+#include <cassert>
 #include <cstdint>
 #include <tuple>
 #include <sstream>
@@ -49,6 +50,7 @@ struct NodeReference {
     }
 
     inline void resolve(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) {
+        assert(box <= inst && inst <= tri);
         unsigned index;
         switch (major) {
         default: // 0
@@ -64,7 +66,7 @@ struct NodeReference {
             index = tri;
             break;
         }
-        ptr = nodes[index];
+        ptr = nodes[index + minor];
     }
 };
 
@@ -104,11 +106,12 @@ class InstanceNode : public Node {
     };
 
     NodeReference child;
-    glm::mat4x3 transformation;  // column-major order
-    uint32_t id;                 // Id relative to other instance nodes in the same acceleration structure
-    uint32_t customIndex;        // For shading
-    uint32_t mask;               // Mask that can make the ray ignore this instance
-    uint32_t sbtRecordOffs;      // Shader binding table record offset (a.k.a. hit group id)
+    glm::mat4 transformation;  // column-major order
+    glm::mat4 inverse;         // column-major order: inverse of `transformation`
+    uint32_t id;               // Id relative to other instance nodes in the same acceleration structure
+    uint32_t customIndex;      // For shading
+    uint32_t mask;             // Mask that can make the ray ignore this instance
+    uint32_t sbtRecordOffs;    // Shader binding table record offset (a.k.a. hit group id)
 
 public:
     InstanceNode(
@@ -120,12 +123,20 @@ public:
         uint32_t mask,
         uint32_t sbt_record_offset
     ):
-        child(major, minor),
-        transformation(transform),
-        id(id),
-        customIndex(custom_index),
-        mask(mask),
-        sbtRecordOffs(sbt_record_offset) {}
+    child(major, minor),
+    id(id),
+    customIndex(custom_index),
+    mask(mask),
+    sbtRecordOffs(sbt_record_offset) {
+        // Copy from transform into transformation field. Last row should be 0,0,0,1
+        for (unsigned i = 0; i < 4; ++i) {
+            for (unsigned j = 0; j < 3; ++j)
+                transformation[i][j] = transform[i][j];
+            transformation[i][3] = (i == 3)? 1.0 : 0.0;
+        }
+        // ray query instructions may need to the inverse, so calculate it now:
+        this->inverse = glm::inverse(transformation);
+    }
 
     inline void resolveReferences(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) override {
         child.resolve(nodes, box, inst, tri);
@@ -140,6 +151,9 @@ public:
     }
     uint32_t getCustomIndex() const {
         return customIndex;
+    }
+    uint32_t getSbtRecordOffs() const {
+        return sbtRecordOffs;
     }
 
     [[nodiscard]] static InstanceNode* fromVal(const Value* val);

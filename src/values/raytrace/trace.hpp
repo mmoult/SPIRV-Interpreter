@@ -14,16 +14,19 @@
 #include "node.hpp"
 import spv.rayFlags;
 
+struct Trace;
+
 struct Intersection {
     enum class Type { None, Triangle, Generated, AABB };
     Type type = Type::None;
     const Node* search;
 
-    // Probably put ray properties which get transformed by InstanceNodes here
-    glm::vec4 rayOrigin {0.0f, 0.0f, 0.0f, 0.0f};
-    glm::vec4 rayDirection {0.0f, 0.0f, 0.0f, 0.0f};
+    // Ray properties which get transformed by InstanceNodes
+    // Both should start as the identity matrix
+    glm::mat4 worldToObj = glm::mat4(1.0);
+    glm::mat4 objToWorld = glm::mat4(1.0);
 
-    const InstanceNode* instance = nullptr;  // Instance the intersection occured in
+    const InstanceNode* instance = nullptr;  // Most recent instance intersected
     int geometryIndex = -1;
     int primitiveIndex = -1;
     float hitT = std::numeric_limits<float>::max();
@@ -32,6 +35,11 @@ struct Intersection {
     bool enteredTriangleFrontFace = false;
     unsigned hitKind = std::numeric_limits<unsigned>::max();
     const Value* hitAttribute = nullptr;
+
+    glm::vec3 getRayPos(const Trace* trace) const;
+    glm::vec3 getRayDir(const Trace* trace) const;
+
+    Intersection(const Node* search): search(search) {}
 };
 
 struct Trace {
@@ -45,6 +53,8 @@ struct Trace {
     unsigned cullMask;
     float rayTMin = 0.0f;
     float rayTMax = 0.0f;
+    glm::vec3 rayOrigin {0.0f, 0.0f, 0.0f};
+    glm::vec3 rayDirection {0.0f, 0.0f, 0.0f};
 
     // shader binding table info
     bool useSBT;
@@ -57,6 +67,10 @@ struct Trace {
     }
     inline const Intersection& getCandidate() const {
         return candidates[candidate];
+    }
+
+    inline bool hasCommitted() const {
+        return committed < candidates.size();
     }
 
     inline Intersection& getCommitted() {

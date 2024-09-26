@@ -30,6 +30,7 @@ module;
 #include "trace.hpp"
 export module value.raytrace.accelStruct;
 import spv.rayFlags;
+import util.intersection;
 import util.string;
 import value.aggregate;
 import value.primitive;
@@ -172,6 +173,15 @@ private:
     }
     */
 
+    static glm::mat4x3 removeLastRow(glm::mat4 mat) {
+        glm::mat4x3 ret;
+        for (unsigned i = 0; i < 4; ++i) {
+            for (unsigned j = 0; j < 3; ++j)
+                ret[i][j] = mat[i][j];
+        }
+        return ret;
+    }
+
 public:
     AccelStruct(): Value(Type::accelStruct()) {}
 
@@ -202,22 +212,22 @@ public:
         trace.cullMask = cull_mask;
         trace.rayTMin = ray_t_min;
         trace.rayTMax = ray_t_max;
+        assert(ray_origin.size() == 3 && ray_direction.size() == 3);
+        trace.rayOrigin = glm::vec3(ray_origin[0], ray_origin[1], ray_origin[2]);
+        trace.rayDirection = glm::vec3(ray_direction[0], ray_direction[1], ray_direction[2]);
 
         trace.useSBT = use_sbt;
         trace.offsetSBT = offset_sbt;
         trace.strideSBT = stride_sbt;
         trace.missIndex = miss_index;
 
-        trace.committed = std::numeric_limits<unsigned>::max();
+        trace.committed = std::numeric_limits<decltype(trace.committed)>::max();
         trace.active = true;
-        trace.candidates.resize(1);
-        trace.candidate = 1; // start at the end of the list because stepTrace is pre-increment
-
+        trace.candidates.clear();
         // Start the candidates fresh with the root node in the bvh
-        auto curr = trace.candidates[0];
-        assert(ray_origin.size() == 3 && ray_direction.size() == 3);
-        curr.rayOrigin = glm::vec4(ray_origin[0], ray_origin[1], ray_origin[2], 1.0);
-        curr.rayDirection = glm::vec4(ray_direction[0], ray_direction[1], ray_direction[2], 0.0);
+        trace.candidates.emplace_back(tlas.ptr);
+        // start at the end of the list because stepTrace is pre-increment
+        trace.candidate = std::numeric_limits<decltype(trace.candidate)>::max();
     }
 
     /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.
@@ -226,21 +236,23 @@ public:
         if (!trace.active)
             return false;
 
-        // Start with the next index (the previous is kept after step so the found candidate can be used)
-        if (trace.candidate == trace.candidates.size())
-            trace.candidate = 0;
-        else
-            ++trace.candidate;
+        // Pre-increment the candidate index (because after a search, we may need to access the current intersection).
+        // Note: unsigned overflow is *defined* as reduced modulo by the C99 spec (§6.2.5/9)
+        if (trace.candidate >= trace.candidates.size())  // for the first iteration in trace only
+            trace.candidate = std::numeric_limits<decltype(trace.candidate)>::max();
 
         // Traverse the acceleration structure until it reaches the next non-instance primitive.
         bool found_primitive = false;
         // Note: the node may make the trace inactive, so check that each iteration
-        for (; trace.active && trace.candidate < trace.candidates.size() && !found_primitive; ++trace.candidate)
-            found_primitive = trace.getCandidate().search->step(&trace);
+        while (trace.active && !found_primitive && ++trace.candidate < trace.candidates.size()) {
+            const auto& cand = trace.getCandidate();
+            found_primitive = cand.search->step(&trace);
+        }
 
         // Terminate on the first hit if the flag was risen
         // Or terminate the search if there are no nodes left to look at
-        if ((found_primitive && trace.rayFlags.terminateOnFirstHit()) || (trace.candidate == trace.candidates.size()))
+        if ((found_primitive && trace.rayFlags.terminateOnFirstHit()) ||
+        (trace.candidate >= trace.candidates.size() - 1))
             trace.active = false;
 
         return found_primitive;
@@ -303,29 +315,29 @@ public:
         if (trace.useSBT) {
             // Otherwise, invoke either the closest hit or miss shaders
             //SBTShaderOutput outputs;
-            if (trace.getCommitted().type != Intersection::Type::None) {
+            if (trace.hasCommitted()) {
                 // Closest hit
-                if (trace.rayFlags.skipClosestHitShader())
-                    return;
-                const int geometry_index = getIntersectionGeometryIndex(true);
-                const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(true);
-                /*
-                const Program* shader = shaderBindingTable.getHitShader(
-                    sbt_offset, sbt_stride, geometry_index, instance_sbt_offset, HitGroupType::Closest
-                );
-                if (shader != nullptr) {
-                    used_sbt = true;
-                    ValueMap inputs = getNewShaderInputs(*shader, true, payload);
-                    outputs = shaderBindingTable.executeHit(
-                        inputs,
-                        sbt_offset,
-                        sbt_stride,
-                        geometry_index,
-                        instance_sbt_offset,
-                        HitGroupType::Closest
+                if (!trace.rayFlags.skipClosestHitShader()) {
+                    const int geometry_index = getIntersectionGeometryIndex(true);
+                    const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(true);
+                    /*
+                    const Program* shader = shaderBindingTable.getHitShader(
+                        sbt_offset, sbt_stride, geometry_index, instance_sbt_offset, HitGroupType::Closest
                     );
+                    if (shader != nullptr) {
+                        used_sbt = true;
+                        ValueMap inputs = getNewShaderInputs(*shader, true, payload);
+                        outputs = shaderBindingTable.executeHit(
+                            inputs,
+                            sbt_offset,
+                            sbt_stride,
+                            geometry_index,
+                            instance_sbt_offset,
+                            HitGroupType::Closest
+                        );
+                    }
+                    */
                 }
-                */
             } else {
                 // Miss
                 /*
@@ -455,33 +467,31 @@ public:
     /// The candidate intersection must be of type AABB.
     /// @param t_hit distance from the ray to the intersection.
     void generateIntersection(float t_hit) {
-/*
-        assert(candidateIntersection.type == CandidateIntersectionType::AABB);
+        Intersection& cand = trace.getCandidate();
+        assert(cand.type == Intersection::Type::AABB);
 
         // Do not update if candidate distance from intersection is greater than or equal to the closest distance
-        if (t_hit >= committedIntersection.properties.hitT)
+        if (trace.hasCommitted() && t_hit >= trace.getCommitted().hitT)
             return;
 
-        rayTMax = t_hit;
-        candidateIntersection.properties.hitT = t_hit;
-        committedIntersection.update(false, candidateIntersection);
-*/
+        trace.rayTMax = t_hit;
+        cand.hitT = t_hit;
+        trace.committed = trace.candidate;
     }
 
     /// @brief Include the current triangle intersection in determining the closest hit.
     /// The candidate intersection must be of type triangle.
     void confirmIntersection() {
-/*
-        assert(candidateIntersection.type == CandidateIntersectionType::Triangle);
+        Intersection& cand = trace.getCandidate();
+        assert(cand.type == Intersection::Type::Triangle);
 
         // Do not update if candidate distance from intersection is greater than or equal to the closest distance
-        if (candidateIntersection.properties.hitT >= committedIntersection.properties.hitT)
+        if (trace.hasCommitted() && cand.hitT >= trace.getCommitted().hitT)
             return;
 
-        rayTMax = candidateIntersection.properties.hitT;
-        // TODO set the type of intersection to Generated
-        committedIntersection.update(true, candidateIntersection);
-*/
+        trace.rayTMax = cand.hitT;
+        cand.type = Intersection::Type::Generated;
+        trace.committed = trace.candidate;
     }
 
     /// @brief Get the distance from the ray to the current intersection.
@@ -517,14 +527,9 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return SBT record offset
     unsigned getIntersectionInstanceShaderBindingTableRecordOffset(bool get_committed) const {
-        /*
-        const auto& committed_instance = committedIntersection.properties.instance;
-        const auto& candidate_instance = candidateIntersection.properties.instance;
-        assert((committed_instance != nullptr) || (candidate_instance != nullptr));
-
-        return get_committed ? committed_instance->sbtRecordOffset : candidate_instance->sbtRecordOffset;
-        */
-        return 0;
+        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        assert(intersect.instance != nullptr);
+        return intersect.instance->getSbtRecordOffs();
     }
 
     /// @brief Get the current intersection's geometry index.
@@ -571,7 +576,7 @@ public:
     /// @return object-space ray direction.
     glm::vec3 getIntersectionObjectRayDirection(bool get_committed) const {
         unsigned index = get_committed? trace.committed : trace.candidate;
-        return trace.candidates[index].rayDirection;
+        return trace.candidates[index].getRayDir(&trace);
     }
 
     /// @brief Get the object-space ray origin depending on the instance intersected.
@@ -579,46 +584,33 @@ public:
     /// @return object-space ray origin.
     glm::vec3 getIntersectionObjectRayOrigin(bool get_committed) const {
         unsigned index = get_committed? trace.committed : trace.candidate;
-        return trace.candidates[index].rayOrigin;
+        return trace.candidates[index].getRayPos(&trace);
     }
 
     /// @brief Get the object-to-world matrix of the intersected instance.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-to-world matrix.
     glm::mat4x3 getIntersectionObjectToWorld(bool get_committed) const {
-        /*
-        const auto& committed_instance = committedIntersection.properties.instance;
-        const auto& candidate_instance = candidateIntersection.properties.instance;
-        assert((committed_instance != nullptr) || (candidate_instance != nullptr));
-
-        return get_committed ? committed_instance->objectToWorld : candidate_instance->objectToWorld;
-        */
-        return glm::mat4x3(0.0);
+        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        assert(intersect.instance != nullptr);
+        return removeLastRow(intersect.objToWorld);
     }
 
     /// @brief Get the world-to-object matrix of the intersected instance.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return world-to-object matrix.
     glm::mat4x3 getIntersectionWorldToObject(bool get_committed) const {
-        /*
-        const auto& committed_instance = committedIntersection.properties.instance;
-        const auto& candidate_instance = candidateIntersection.properties.instance;
-        assert((committed_instance != nullptr) || (candidate_instance != nullptr));
-
-        return get_committed ? committed_instance->worldToObject : candidate_instance->worldToObject;
-        */
-        return glm::mat4x3(0.0);
+        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        assert(intersect.instance != nullptr);
+        return removeLastRow(intersect.worldToObj);
     }
 
     /// @brief Get the intersection type.
     /// @param get_committed Type of intersection: committed or candidate.
     /// @return intersection type.
-    unsigned getIntersectionType(bool get_committed) const {
-        /*
-        return get_committed ? static_cast<unsigned>(committedIntersection.type)
-                             : static_cast<unsigned>(candidateIntersection.type);
-        */
-        return 0;
+    Intersection::Type getIntersectionType(bool get_committed) const {
+        unsigned index = get_committed? trace.committed : trace.candidate;
+        return trace.candidates[index].type;
     }
 
     [[nodiscard]] Struct* toStruct() const {
