@@ -192,6 +192,7 @@ export class Data {
         ENTRY,
         VALUE,
         TYPE,
+        WEAK
     };
     DType type;
 
@@ -202,6 +203,12 @@ public:
     Data(EntryPoint* entry): raw(entry), type(DType::ENTRY) {};
     Data(Value* val): raw(val), type(DType::VALUE) {};
     Data(Type* type): raw(type), type(DType::TYPE) {};
+
+    static Data weak(Value* val) {
+        Data ret(val);
+        ret.type = DType::WEAK;
+        return ret;
+    }
 
     Data& operator=(Data& other) = delete;
 
@@ -227,7 +234,7 @@ public:
     // Fetching of Values must be able to fetch spec constants, which are saved as program inputs but also need to be
     // usable like regular values.
     Value* getValue() {
-        if (type == DType::VALUE)
+        if (type == DType::VALUE || type == DType::WEAK)
             return static_cast<Value*>(raw);
         if (type == DType::VARIABLE) {
             auto var = static_cast<Variable*>(raw);
@@ -237,7 +244,7 @@ public:
         return nullptr;
     }
     const Value* getValue() const {
-        if (type == DType::VALUE)
+        if (type == DType::VALUE || type == DType::WEAK)
             return static_cast<const Value*>(raw);
         if (type == DType::VARIABLE) {
             auto var = static_cast<Variable*>(raw);
@@ -282,6 +289,8 @@ public:
         case DType::TYPE:
             delete static_cast<Type*>(raw);
             break;
+        case DType::WEAK:
+            break;  // the whole point of weak is to avoid deletion- that is someone else's responsibility
         }
         type = DType::UNDEFINED;
     }

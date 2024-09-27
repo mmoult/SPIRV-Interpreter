@@ -23,7 +23,7 @@ import value.string;
 
 export class RayQuery : public Value {
 private:
-    AccelStruct* accelStruct;
+    AccelStruct accelStruct;
 
     static std::vector<Primitive> fromMat4x3(glm::mat4x3& mat) {
         std::vector<Primitive> ret;
@@ -36,21 +36,21 @@ private:
     }
 
 public:
-    RayQuery(): Value(Type::rayQuery()), accelStruct(nullptr) {}
+    RayQuery(): Value(Type::rayQuery()) {}
 
-    void bind(AccelStruct& as) {
-        accelStruct = &as;
+    void setAccelStruct(AccelStruct& as) {
+        accelStruct = as;
     }
 
     AccelStruct& getAccelStruct() {
-        return *accelStruct;
+        return accelStruct;
     }
 
     /// @brief Get the current intersection's barycentric coordinates.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return barycentrics.
     std::vector<Primitive> getIntersectionBarycentrics(bool get_committed) const {
-        glm::vec2 bary = accelStruct->getIntersectionBarycentrics(get_committed);
+        glm::vec2 bary = accelStruct.getIntersectionBarycentrics(get_committed);
         return std::vector<Primitive> {Primitive(bary.x), Primitive(bary.y)};
     }
 
@@ -58,7 +58,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-space ray direction.
     std::vector<Primitive> getIntersectionObjectRayDirection(bool get_committed) const {
-        glm::vec3 ray_dir = accelStruct->getIntersectionObjectRayDirection(get_committed);
+        glm::vec3 ray_dir = accelStruct.getIntersectionObjectRayDirection(get_committed);
         return std::vector<Primitive> {ray_dir.x, ray_dir.y, ray_dir.z};
     }
 
@@ -66,17 +66,17 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-space ray origin.
     std::vector<Primitive> getIntersectionObjectRayOrigin(bool get_committed) const {
-        glm::vec3 ray_pos = accelStruct->getIntersectionObjectRayOrigin(get_committed);
+        glm::vec3 ray_pos = accelStruct.getIntersectionObjectRayOrigin(get_committed);
         return std::vector<Primitive> {ray_pos.x, ray_pos.y, ray_pos.z};
     }
 
     std::vector<Primitive> getWorldRayDirection() const {
-        const glm::vec3& ray_dir = accelStruct->getTrace().rayDirection;
+        const glm::vec3& ray_dir = accelStruct.getTrace().rayDirection;
         return std::vector<Primitive> {ray_dir.x, ray_dir.y, ray_dir.z};
     }
 
     std::vector<Primitive> getWorldRayOrigin() const {
-        const glm::vec3& ray_pos = accelStruct->getTrace().rayOrigin;
+        const glm::vec3& ray_pos = accelStruct.getTrace().rayOrigin;
         return std::vector<Primitive> {ray_pos.x, ray_pos.y, ray_pos.z};
     }
 
@@ -84,7 +84,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-to-world matrix.
     std::vector<Primitive> getIntersectionObjectToWorld(bool get_committed) const {
-        glm::mat4x3 got = accelStruct->getIntersectionObjectToWorld(get_committed);
+        glm::mat4x3 got = accelStruct.getIntersectionObjectToWorld(get_committed);
         return fromMat4x3(got);
     }
 
@@ -92,17 +92,13 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return world-to-object matrix.
     std::vector<Primitive> getIntersectionWorldToObject(bool get_committed) const {
-        glm::mat4x3 got = accelStruct->getIntersectionWorldToObject(get_committed);
+        glm::mat4x3 got = accelStruct.getIntersectionWorldToObject(get_committed);
         return fromMat4x3(got);
     }
 
     [[nodiscard]] Struct* toStruct() const {
-        std::vector<std::string> names{"accel-struct"};
-        std::vector<Value*> fields(1, nullptr);
-        if (accelStruct == nullptr)
-            fields[0] = new String("none");
-        else
-            fields[0] = accelStruct->toStruct();
+        std::vector<std::string> names {"accel-struct"};
+        std::vector<Value*> fields {accelStruct.toStruct()};
         return new Struct(fields, names);
     }
 

@@ -40,6 +40,7 @@ import value.string;
 
 export class AccelStruct : public Value {
 private:
+    bool ownNodes = false;
     std::vector<Node*> bvh;
     ShaderBindingTable shaderBindingTable;
 
@@ -185,8 +186,40 @@ private:
 public:
     AccelStruct(): Value(Type::accelStruct()) {}
     ~AccelStruct() {
-        for (unsigned i = 0; i < bvh.size(); ++i)
-            delete bvh[i];
+        if (ownNodes) {
+            for (unsigned i = 0; i < bvh.size(); ++i)
+                delete bvh[i];
+        }
+    }
+    // We could clone all nodes and resolve references, but there shouldn't be any need since AccelStructs created from
+    // others have a lifetime equal or less than the AccelStruct created from. AccelStructs copied from a struct are
+    // definitionally top-level, so we can borrow the nodes for all derivative copies.
+    AccelStruct(const AccelStruct& other):
+        Value(other.type),
+        ownNodes(false),
+        bvh(other.bvh),
+        shaderBindingTable(other.shaderBindingTable),
+        tlas(other.tlas),
+        boxIndex(other.boxIndex),
+        instanceIndex(other.instanceIndex),
+        triangleIndex(other.triangleIndex),
+        proceduralIndex(other.proceduralIndex),
+        trace(other.trace) {}
+
+    AccelStruct& operator=(const AccelStruct& other) {
+        if (this == &other)
+            return *this;
+
+        bool ownNodes = false;
+        bvh = other.bvh;
+        shaderBindingTable = other.shaderBindingTable;
+        tlas = other.tlas;
+        boxIndex = other.boxIndex;
+        instanceIndex = other.instanceIndex;
+        triangleIndex = other.triangleIndex;
+        proceduralIndex = other.proceduralIndex;
+        trace = other.trace;
+        return *this;
     }
 
     /// @brief Initialize the trace.
@@ -580,6 +613,8 @@ public:
     /// @return intersection type.
     Intersection::Type getIntersectionType(bool get_committed) const {
         unsigned index = get_committed? trace.committed : trace.candidate;
+        if (index >= trace.candidates.size())
+            return Intersection::Type::None;
         return trace.candidates[index].type;
     }
 
@@ -635,7 +670,10 @@ public:
     void copyFrom(const Value& new_val) noexcept(false) override {
         // Construct the acceleration structures and shader binding table based on the type of "other"
         const Type& from_type = new_val.getType();
-        if (from_type.getBase() != DataType::STRUCT)
+        if (auto base = from_type.getBase(); base == DataType::ACCEL_STRUCT) {
+            *this = static_cast<const AccelStruct&>(new_val);
+            return;
+        } else if (from_type.getBase() != DataType::STRUCT)
             throw std::runtime_error("Cannot copy acceleration structure from non-structure type!");
 
         const Struct& other = Statics::extractStruct(&new_val, "acceleration structure", names);
@@ -645,9 +683,12 @@ public:
         tlas = NodeReference(tlas_got[0], tlas_got[1]);
 
         // Clear any nodes previously held
-        for (unsigned i = 0; i < bvh.size(); ++i)
-            delete bvh[i];
+        if (ownNodes) {
+            for (unsigned i = 0; i < bvh.size(); ++i)
+                delete bvh[i];
+        }
         bvh.clear();
+        ownNodes = true;
 
         // box_nodes
         const Array& box_nodes = Statics::extractArray(other[1], names[1]);

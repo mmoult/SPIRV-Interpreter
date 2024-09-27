@@ -119,16 +119,21 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         break;
     case spv::OpLoad: { // 61
         Type* ret_type = getType(0, data);
+        Value* from_val = getFromPointer(2, data);
 
-        // TODO images and acceleration structures should not actually be copied. Instead, they should have another
-        // reference to themselves loaded. This poses problems during deletion, however, so we need a type of weak data
-        // which will hold the pointer but not delete it on its own deletion.
-
-        // Construct a new value to serve as result, then copy the resultval to it
-        dst_val = ret_type->construct();
-        // Load from a pointer, which may be a variable
-        const Value* from_val = getFromPointer(2, data);
-        dst_val->copyFrom(*from_val);
+        // The SPIR-V spec handles images differently.
+        if (ret_type->getBase() == DataType::IMAGE) {
+            // Unlike aggregates which own their data, images have metadata and a non-owning reference to the texels.
+            // Due to this, each load from a variable will share the same texels. Since the metadata is constant, we can
+            // simulate this by reusing the same image object
+            Data weak = Data::weak(from_val);
+            data[result_at].redefine(weak);
+        } else {
+            // Construct a new value to serve as result, then copy the result val to it
+            dst_val = ret_type->construct();
+            // Load from a pointer, which may be a variable
+            dst_val->copyFrom(*from_val);
+        }
         break;
     }
     case spv::OpStore: { // 62
@@ -305,8 +310,10 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         std::vector<float> ray_direction = Statics::extractVec(getValue(6, data), "ray_direction", 3);
         const float ray_t_max = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
 
-        ray_query.bind(as);
-        as.initTrace(ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, false);
+        ray_query.setAccelStruct(as);
+        ray_query.getAccelStruct().initTrace(
+            ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, false
+        );
         break;
     }
     case spv::OpRayQueryTerminateKHR: { // 4474
