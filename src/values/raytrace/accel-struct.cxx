@@ -184,6 +184,10 @@ private:
 
 public:
     AccelStruct(): Value(Type::accelStruct()) {}
+    ~AccelStruct() {
+        for (unsigned i = 0; i < bvh.size(); ++i)
+            delete bvh[i];
+    }
 
     /// @brief Initialize the trace.
     /// @param ray_flags ray flags.
@@ -231,7 +235,7 @@ public:
     }
 
     /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.
-    /// @return if a triangle or procedural was intersected; implies if there is more to trace.
+    /// @return whether there is more to trace (if so, there must have been an intersection)
     bool stepTrace() {
         if (!trace.active)
             return false;
@@ -259,42 +263,8 @@ public:
     }
 
     /// @brief Completely trace through the acceleration structure.
-    /// @param ray_flags ray flags.
-    /// @param cull_mask cull mask; culls respective instances.
-    /// @param ray_origin ray origin.
-    /// @param ray_direction ray direction.
-    /// @param ray_t_min closest a ray will allow for an intersection.
-    /// @param ray_t_max farthest a ray will allow for an intersection.
-    /// @param use_sbt whether to use the shader binding table when tracing.
-    /// @param offset_sbt shader binding table offset.
-    /// @param stride_sbt shader binding table stride.
-    /// @param miss_index shader binding table miss index.
-    /// @return whether the trace intersected a geometry.
-    void traceRay(
-        const unsigned ray_flags,
-        const unsigned cull_mask,
-        const std::vector<float>& ray_origin,
-        const std::vector<float>& ray_direction,
-        const float ray_t_min,
-        const float ray_t_max,
-        const unsigned sbt_offset,
-        const unsigned sbt_stride,
-        const unsigned miss_index,
-        Value* payload
-    ) {
-        initTrace(
-            ray_flags,
-            cull_mask,
-            ray_origin,
-            ray_direction,
-            ray_t_min,
-            ray_t_max,
-            true,
-            sbt_offset,
-            sbt_stride,
-            miss_index
-        );
-
+    /// @param payload used for shader binding table input
+    void traceRay(Value* payload) {
         bool intersect_once = false;
         bool found_primitive = false;
         do {
@@ -613,6 +583,14 @@ public:
         return trace.candidates[index].type;
     }
 
+    const Trace& getTrace() const {
+        return trace;
+    }
+
+    void terminate() {
+        trace.active = false;
+    }
+
     [[nodiscard]] Struct* toStruct() const {
         std::vector<Value*> fields(6, nullptr);
         fields[0] = tlas.toArray();
@@ -657,11 +635,6 @@ public:
     void copyFrom(const Value& new_val) noexcept(false) override {
         // Construct the acceleration structures and shader binding table based on the type of "other"
         const Type& from_type = new_val.getType();
-        if (from_type.getBase() == DataType::ACCEL_STRUCT) {
-            // TODO this is a difficult case for memory management. Return to this later.
-            *this = static_cast<const AccelStruct&>(new_val);
-            return;
-        }
         if (from_type.getBase() != DataType::STRUCT)
             throw std::runtime_error("Cannot copy acceleration structure from non-structure type!");
 

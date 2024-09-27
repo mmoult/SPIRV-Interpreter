@@ -32,7 +32,7 @@ target_sources(spv-interp
       values/statics.cxx
       values/string.cxx
       values/raytrace/accel-struct.cxx
-      #values/raytrace/ray-query.cxx
+      values/raytrace/ray-query.cxx
       values/raytrace/shader-binding-table.cxx
 )
 # Add other source files

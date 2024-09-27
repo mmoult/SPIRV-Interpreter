@@ -28,7 +28,7 @@ import value.image;
 import value.primitive;
 import value.raytrace.accelStruct;
 import value.statics;
-//import value.raytrace.rayQuery;
+import value.raytrace.rayQuery;
 
 bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, void* extra_data) const {
     bool inc_pc = true;
@@ -119,6 +119,11 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         break;
     case spv::OpLoad: { // 61
         Type* ret_type = getType(0, data);
+
+        // TODO images and acceleration structures should not actually be copied. Instead, they should have another
+        // reference to themselves loaded. This poses problems during deletion, however, so we need a type of weak data
+        // which will hold the pointer but not delete it on its own deletion.
+
         // Construct a new value to serve as result, then copy the resultval to it
         dst_val = ret_type->construct();
         // Load from a pointer, which may be a variable
@@ -263,18 +268,19 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         auto payload_pointer = getFromPointer(10, data);
 
         // Run it through our implementation of a ray tracing pipeline
-        as.traceRay(
+        as.initTrace(
             ray_flags,
             cull_mask & 0xFF,  // Only the 8 least-significant bits of Cull Mask are used
             ray_origin,
             ray_direction,
             ray_t_min,
             ray_t_max,
-            offset_sbt & 0xF,  // Only the 4 least-significant bits of SBT Offset are used
-            stride_sbt & 0xF,  // Only the 4 least-significant bits of SBT Stride are used
-            miss_index & 0xFFFF,  // Only the 16 least-significant bits of Miss Index are used
-            payload_pointer
+            true,
+            offset_sbt & 0xF,    // Only the 4 least-significant bits of SBT Offset are used
+            stride_sbt & 0xF,    // Only the 4 least-significant bits of SBT Stride are used
+            miss_index & 0xFFFF  // Only the 16 least-significant bits of Miss Index are used
         );
+        as.traceRay(payload_pointer);
 
         // Payload will either be filled with whether the trace intersected a geometry (a boolean)
         // or the user-defined payload output.
@@ -289,50 +295,36 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                   << shader_args->getType().getBase() << ")" << std::endl;
         break;
     }
-    /*
     case spv::OpRayQueryInitializeKHR: { // 4473
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(1, data));
         const unsigned ray_flags = static_cast<Primitive&>(*getValue(2, data)).data.u32;
         const unsigned cull_mask = static_cast<Primitive&>(*getValue(3, data)).data.u32;
-
-        Array& ray_origin_info = static_cast<Array&>(*getValue(4, data));
-        std::vector<float> ray_origin;
-        for (unsigned i = 0; i < ray_origin_info.getSize(); ++i)
-            ray_origin.push_back(static_cast<Primitive&>(*(ray_origin_info[i])).data.fp32);
-
+        std::vector<float> ray_origin = Statics::extractVec(getValue(4, data), "ray_origin", 3);
         const float ray_t_min = static_cast<Primitive&>(*getValue(5, data)).data.fp32;
+        std::vector<float> ray_direction = Statics::extractVec(getValue(6, data), "ray_direction", 3);
+        const float ray_t_max = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
 
-        Array& ray_direction_info = static_cast<Array&>(*getValue(6, data));
-        std::vector<float> ray_direction;
-        for (unsigned i = 0; i < ray_direction_info.getSize(); ++i)
-            ray_direction.push_back(static_cast<Primitive&>(*(ray_direction_info[i])).data.fp32);
-
-        assert(ray_origin.size() == ray_direction.size());
-
-        const float rayTMax = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
-
-        // Only 8-least significant bits of cull mask are used.
-        ray_query.initialize(as, ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, rayTMax);
+        ray_query.bind(as);
+        as.initTrace(ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, false);
         break;
     }
     case spv::OpRayQueryTerminateKHR: { // 4474
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
-        ray_query.terminate();
+        ray_query.getAccelStruct().terminate();
         break;
     }
     case spv::OpRayQueryGenerateIntersectionKHR: { // 4475
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
-        const float hit_t = static_cast<Primitive&>(*getValue(1, data)).data.fp32;
-        ray_query.generateIntersection(hit_t);
+        const float t_hit = static_cast<Primitive&>(*getValue(1, data)).data.fp32;
+        ray_query.getAccelStruct().generateIntersection(t_hit);
         break;
     }
     case spv::OpRayQueryConfirmIntersectionKHR: { // 4476
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
-        ray_query.confirmIntersection();
+        ray_query.getAccelStruct().confirmIntersection();
         break;
     }
-    */
     }
 
     if (dst_val != nullptr) {
