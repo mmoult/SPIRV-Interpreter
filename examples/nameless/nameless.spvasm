@@ -1,0 +1,131 @@
+; SPIR-V
+; Version: 1.6
+; Generator: Khronos Glslang Reference Front End; 11
+; Bound: 77
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main" %world_position %_4 %gl_VertexIndex %_6 %out_view_dir %projected_pos %_
+               OpSource ESSL 320
+               OpName %main "main"
+               OpName %world_position "world_position"
+               OpName %UniformObj0 "UniformObj0"
+               OpMemberName %UniformObj0 0 "model"
+               OpMemberName %UniformObj0 1 "vertices"
+               OpName %_4 ""
+               OpName %transformed "transformed"
+               OpName %UniformObj1 "UniformObj1"
+               OpMemberName %UniformObj1 0 "view_pos"
+               OpMemberName %UniformObj1 1 "view_dir"
+               OpName %_6 ""
+               OpName %out_view_dir "out_view_dir"
+               OpName %projected_pos "projected_pos"
+               OpName %gl_PerVertex "gl_PerVertex"
+               OpMemberName %gl_PerVertex 0 "gl_Position"
+               OpMemberName %gl_PerVertex 1 "gl_PointSize"
+               OpName %_ ""
+               OpDecorate %world_position Location 0
+               OpDecorate %_arr_v4float_uint_8 ArrayStride 16
+               OpDecorate %UniformObj0 Block
+               OpMemberDecorate %UniformObj0 0 ColMajor
+               OpMemberDecorate %UniformObj0 0 MatrixStride 16
+               OpMemberDecorate %UniformObj0 0 Offset 0
+               OpMemberDecorate %UniformObj0 1 Offset 64
+               OpDecorate %_4 Binding 0
+               OpDecorate %_4 DescriptorSet 0
+               OpDecorate %gl_VertexIndex BuiltIn VertexIndex
+               OpDecorate %UniformObj1 Block
+               OpMemberDecorate %UniformObj1 0 Offset 0
+               OpMemberDecorate %UniformObj1 1 Offset 16
+               OpDecorate %_6 Binding 0
+               OpDecorate %_6 DescriptorSet 0
+               OpDecorate %out_view_dir Location 2
+               OpDecorate %projected_pos Location 1
+               OpDecorate %gl_PerVertex Block
+               OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
+               OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%world_position = OpVariable %_ptr_Output_v4float Output
+%mat4v4float = OpTypeMatrix %v4float 4
+       %uint = OpTypeInt 32 0
+     %uint_8 = OpConstant %uint 8
+%_arr_v4float_uint_8 = OpTypeArray %v4float %uint_8
+%UniformObj0 = OpTypeStruct %mat4v4float %_arr_v4float_uint_8
+%_ptr_Uniform_UniformObj0 = OpTypePointer Uniform %UniformObj0
+         %_4 = OpVariable %_ptr_Uniform_UniformObj0 Uniform
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+%_ptr_Uniform_mat4v4float = OpTypePointer Uniform %mat4v4float
+      %int_1 = OpConstant %int 1
+%_ptr_Input_int = OpTypePointer Input %int
+%gl_VertexIndex = OpVariable %_ptr_Input_int Input
+%_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
+    %v3float = OpTypeVector %float 3
+%_ptr_Function_v3float = OpTypePointer Function %v3float
+%UniformObj1 = OpTypeStruct %v4float %v4float
+%_ptr_Uniform_UniformObj1 = OpTypePointer Uniform %UniformObj1
+         %_6 = OpVariable %_ptr_Uniform_UniformObj1 Uniform
+%out_view_dir = OpVariable %_ptr_Output_v4float Output
+     %uint_0 = OpConstant %uint 0
+%_ptr_Function_float = OpTypePointer Function %float
+     %uint_1 = OpConstant %uint 1
+     %uint_2 = OpConstant %uint 2
+     %uint_3 = OpConstant %uint 3
+%_ptr_Output_float = OpTypePointer Output %float
+%projected_pos = OpVariable %_ptr_Output_v4float Output
+%float_0_123400003 = OpConstant %float 0.123400003
+%gl_PerVertex = OpTypeStruct %v4float %float
+%_ptr_Output_gl_PerVertex = OpTypePointer Output %gl_PerVertex
+          %_ = OpVariable %_ptr_Output_gl_PerVertex Output
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+%transformed = OpVariable %_ptr_Function_v3float Function
+         %20 = OpAccessChain %_ptr_Uniform_mat4v4float %_4 %int_0
+         %21 = OpLoad %mat4v4float %20
+         %25 = OpLoad %int %gl_VertexIndex
+         %27 = OpAccessChain %_ptr_Uniform_v4float %_4 %int_1 %25
+         %28 = OpLoad %v4float %27
+         %29 = OpMatrixTimesVector %v4float %21 %28
+               OpStore %world_position %29
+         %33 = OpLoad %v4float %world_position
+         %34 = OpVectorShuffle %v3float %33 %33 0 1 2
+         %38 = OpAccessChain %_ptr_Uniform_v4float %_6 %int_0
+         %39 = OpLoad %v4float %38
+         %40 = OpVectorShuffle %v3float %39 %39 0 1 2
+         %41 = OpFSub %v3float %34 %40
+               OpStore %transformed %41
+         %45 = OpAccessChain %_ptr_Function_float %transformed %uint_0
+         %46 = OpLoad %float %45
+         %48 = OpAccessChain %_ptr_Function_float %transformed %uint_1
+         %49 = OpLoad %float %48
+         %51 = OpAccessChain %_ptr_Function_float %transformed %uint_2
+         %52 = OpLoad %float %51
+         %55 = OpAccessChain %_ptr_Output_float %out_view_dir %uint_3
+         %56 = OpLoad %float %55
+         %57 = OpCompositeConstruct %v4float %46 %49 %52 %56
+               OpStore %out_view_dir %57
+         %58 = OpAccessChain %_ptr_Uniform_v4float %_6 %int_1
+         %59 = OpLoad %v4float %58
+         %60 = OpVectorShuffle %v3float %59 %59 0 1 2
+         %61 = OpLoad %v4float %out_view_dir
+         %62 = OpVectorShuffle %v3float %61 %61 0 1 2
+         %63 = OpDot %float %60 %62
+         %64 = OpAccessChain %_ptr_Output_float %out_view_dir %uint_3
+               OpStore %64 %63
+         %66 = OpLoad %v4float %world_position
+               OpStore %projected_pos %66
+         %68 = OpAccessChain %_ptr_Output_float %projected_pos %uint_2
+         %69 = OpLoad %float %68
+         %70 = OpFAdd %float %69 %float_0_123400003
+         %71 = OpAccessChain %_ptr_Output_float %projected_pos %uint_2
+               OpStore %71 %70
+         %75 = OpLoad %v4float %projected_pos
+         %76 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+               OpStore %76 %75
+               OpReturn
+               OpFunctionEnd

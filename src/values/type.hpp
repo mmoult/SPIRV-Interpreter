@@ -69,6 +69,7 @@ class Type : public Valuable {
     const Type* subElement;
     std::vector<const Type*> subList;
     std::vector<std::string> nameList;
+    std::string name;
 
     inline Type(DataType base, unsigned sub_size, const Type* sub_element):
         base(base),
@@ -239,6 +240,13 @@ public:
         if (i >= nameList.size())
             throw std::invalid_argument("Cannot name member at index beyond existing!");
         nameList[i] = name;
+    }
+
+    inline void setName(std::string& name) {
+        this->name = name;
+    }
+    inline const std::string& getName() const {
+        return name;
     }
 
     bool operator==(const Type& rhs) const;

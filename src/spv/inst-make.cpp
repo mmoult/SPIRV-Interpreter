@@ -58,6 +58,7 @@ const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigne
 
 void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
     bool set_name = false;
+    bool empty_name = false;
     if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
         for (auto location : *decorations) {
             const Instruction& deco = queue->insts[location];
@@ -65,8 +66,12 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
             case spv::OpName: { // 5
                 assert(deco.operands[1].type == Token::Type::STRING);
                 std::string name = std::get<std::string>(deco.operands[1].raw);
-                var.setName(name);
-                set_name = true;
+                if (name.empty())
+                    empty_name = true;
+                else {
+                    var.setName(name);
+                    set_name = true;
+                }
                 break;
             }
             case spv::OpDecorate: { // 71
@@ -84,13 +89,22 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
     }
     if (!set_name) {
         // It is helpful to name the builtin after what it is, but this may collide with custom user variables with the
-        // same name. Currently, we make no effort to prevent that, so the code is disabled.
-#if 0
-        if (auto builtin = var.getBuiltIn(); builtin != spv::BuiltIn::BuiltInMax)
+        // same name. The best approach would be to track names used and enforce uniqueness.
+        if (auto builtin = var.getBuiltIn(); builtin != spv::BuiltIn::BuiltInMax) {
+            set_name = true;
             var.setName(spv::BuiltInToString(builtin));
-        else
-#endif
-        var.setName(std::to_string(result_at));
+        } else {
+            if (empty_name) {
+                // Use the name of the type, (if that type has a custom name)
+                const Type& type = var.getVal()->getType();
+                if (std::string type_name = type.getName(); !type_name.empty()) {
+                    set_name = true;
+                    var.setName(type_name);
+                }
+            }
+            if (!set_name)
+                var.setName(std::to_string(result_at));
+        }
     }
 }
 
@@ -635,9 +649,12 @@ bool Instruction::makeResult(
             for (auto location : *decorations) {
                 const Instruction& deco = queue->insts[location];
                 switch (deco.opcode) {
-                case spv::OpName: // 5
-                case spv::OpMemberDecorate: // 72
-                    break; // not currently needed
+                case spv::OpName: { // 5
+                    assert(deco.operands[1].type == Token::Type::STRING);
+                    std::string name = std::get<std::string>(deco.operands[1].raw);
+                    strct->setName(name);
+                    break;
+                }
                 case spv::OpMemberName: { // 6
                     assert(deco.operands[1].type == Token::Type::UINT);
                     unsigned idx = std::get<unsigned>(deco.operands[1].raw);
@@ -646,6 +663,8 @@ bool Instruction::makeResult(
                     strct->nameMember(idx, name);
                     break;
                 }
+                case spv::OpMemberDecorate: // 72
+                    break; // not currently needed
                 default:
                     break;  // other decorations should not occur
                 }
