@@ -16,6 +16,7 @@ import format.yaml;
 import front.argparse;
 import front.console;
 import spv.program;
+import value.raytrace.shaderBindingTable;
 
 constexpr auto VERSION = "0.8.0";
 
@@ -69,6 +70,83 @@ ReturnCode load_file(ValueMap& values, const std::string& file_name, ValueFormat
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
+    }
+
+    return ReturnCode::OK;
+}
+
+ReturnCode parse_spv(Program& program, std::string program_path) {
+    std::ifstream ifs(program_path, std::ios::binary);
+    if (!ifs.is_open()) {
+        std::cerr << "Could not open source file \"" << program_path << "\"!" << std::endl;
+        return ReturnCode::BAD_FILE;
+    }
+
+    // get its size:
+    ifs.seekg(0, ifs.end);
+    int length = ifs.tellg();
+    ifs.seekg(0, ifs.beg);
+    // allocate memory:
+    char* buffer = new char[length];
+    // read data as a block:
+    ifs.read(buffer, length);
+    ifs.close();
+
+    // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
+    try {
+        program.parse(program_path, std::bit_cast<uint8_t*>(buffer), length);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return ReturnCode::BAD_PARSE;
+    }
+    delete[] buffer; // delete source now that it has been inserted into the program
+
+    return ReturnCode::OK;
+}
+
+ReturnCode handle_record(
+    Program& program,
+    const ShaderRecord& record,
+    ValueFormat* preference,
+    RaytraceSubstage& stage
+) {
+    parse_spv(program, record.shaderSource);
+    if (!record.extraInput.empty()) {
+        ValueFormat* format = determine_format(record.extraInput, preference, false);
+        if (auto ret = load_file(stage.inputs, record.extraInput, format); ret != ReturnCode::OK)
+            return ret;
+    }
+    stage.data = program.getDataManager().makeView();
+    program.initRaytrace(stage);
+    return ReturnCode::OK;
+}
+
+ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueFormat* preference) {
+    // Not all three are required to be present, but at least one is, and input may not be specified if shader isn't.
+
+    bool present = false;
+#define CHECK_INPUT(TEST, STAGE) \
+if (TEST.extraInput.empty()) { \
+    std::cerr << "Shader binding hit record may not specify input, \"" << TEST.extraInput; \
+    std::cerr << "\" without a corresponding shader!" << std::endl; \
+    return ReturnCode::BAD_PROG_INPUT; \
+} else { \
+    present = true; \
+    handle_record(program, TEST, preference, STAGE); \
+}
+    // Note, we must create records even if the shader is empty because that is how we keep the groups aligned in a
+    // single list (by 3's, where any, closest, intersection).
+    RaytraceSubstage& any = program.nextHitRecord();
+    CHECK_INPUT(hit.any, any);
+    RaytraceSubstage& closest = program.nextHitRecord();
+    CHECK_INPUT(hit.closest, closest);
+    RaytraceSubstage& intersection = program.nextHitRecord();
+    CHECK_INPUT(hit.intersection, intersection);
+#undef CHECK_INPUT
+
+    if (!present) {
+        std::cerr << "Shader binding hit record needs at least one shader but has none!" << std::endl;
+        return ReturnCode::BAD_PROG_INPUT;
     }
 
     return ReturnCode::OK;
@@ -191,34 +269,20 @@ int main(int argc, char* argv[]) {
         template_arg.setValue("-");
 
     ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
-    assert(format != nullptr);
+    if (format == nullptr) {
+        std::cerr << "Unknown format preference: " << format_arg.getValue() << std::endl;
+        return ReturnCode::BAD_ARGS;
+    }
+
+#define REQUIRE(COND) { \
+auto ret = COND; \
+if (ret != ReturnCode::OK) \
+    return ret; \
+}
 
     // Load the SPIR-V input file:
-    std::ifstream ifs(spv_arg.getValue(), std::ios::binary);
-    if (!ifs.is_open()) {
-        std::cerr << "Could not open source file \"" << spv_arg.getValue() << "\"!" << std::endl;
-        return ReturnCode::BAD_FILE;
-    }
-
-    // get its size:
-    ifs.seekg(0, ifs.end);
-    int length = ifs.tellg();
-    ifs.seekg(0, ifs.beg);
-    // allocate memory:
-    char* buffer = new char[length];
-    // read data as a block:
-    ifs.read(buffer, length);
-    ifs.close();
-
-    // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
     Program program;
-    try {
-        program.parse(std::bit_cast<uint8_t*>(buffer), length);
-    } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        return ReturnCode::BAD_PARSE;
-    }
-    delete[] buffer; // delete source now that it has been replaced with program
+    REQUIRE(parse_spv(program, spv_arg.getValue()));
 
     // We must load the inputs, if any, before init. This is because specialization constants must know their input.
     // Indeed, if the size of input variables is dependent on specialization constants (which it might be), then it is
@@ -226,11 +290,10 @@ int main(int argc, char* argv[]) {
     // Of course, even if there are specialization constants, they should have some default value which will be used if
     // the user doesn't provide something to override it.
     ValueMap inputs;
-    if (in_arg.isPresent()) {
-        auto res = load_file(inputs, in_arg.getValue(), format);
-        if (res != ReturnCode::OK)
-            return res;
-    }
+    if (in_arg.isPresent())
+        REQUIRE(load_file(inputs, in_arg.getValue(), format));
+
+    // Handle cmd info second since it could theoretically override what has been presented in the file
     if (set_arg.isPresent()) {
         // Parse the value and save in the key
         try {
@@ -271,12 +334,27 @@ int main(int argc, char* argv[]) {
     }
 
     // Process the given inputs into the program
+    const ShaderBindingTable* sbt = nullptr;
     try {
-        program.checkInputs(inputs, unused.enabled);
+        sbt = program.checkInputs(inputs, unused.enabled);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROG_INPUT;
     }
+
+    // May need to process info given from shader binding table, if any
+    if (sbt != nullptr) {
+        const auto& shaderBindingTable = *sbt;
+        for (const auto& miss : shaderBindingTable.getMissRecords())
+            REQUIRE(handle_record(program, miss, format, program.nextMissRecord()));
+
+        for (const auto& hit: shaderBindingTable.getHitRecords())
+            REQUIRE(handle_hit_record(program, hit, format));
+
+        for (const auto& call : shaderBindingTable.getCallableRecords())
+            REQUIRE(handle_record(program, call, format, program.nextCallableRecord()));
+    }
+#undef REQUIRE
 
     // Run the program
     try {

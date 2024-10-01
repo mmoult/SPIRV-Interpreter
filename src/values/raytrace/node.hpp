@@ -15,6 +15,7 @@
 #include <glm/ext.hpp>
 
 #include "../value.hpp"
+import util.ternary;
 import value.aggregate;
 import value.primitive;
 
@@ -32,7 +33,7 @@ public:
         unsigned tri
     ) = 0;
 
-    virtual bool step(Trace* trace) const = 0;
+    virtual Ternary step(Trace* trace) const = 0;
 
     [[nodiscard]] virtual Struct* toStruct() const = 0;
 };
@@ -92,7 +93,7 @@ public:
 
     static const Type& getType();
 
-    bool step(Trace* trace) const override;
+    Ternary step(Trace* trace) const override;
 
     [[nodiscard]] static BoxNode* fromVal(const Value* val);
     [[nodiscard]] Struct* toStruct() const override;
@@ -144,7 +145,7 @@ public:
 
     static const Type& getType();
 
-    bool step(Trace* trace) const override;
+    Ternary step(Trace* trace) const override;
 
     uint32_t getId() const {
         return id;
@@ -190,7 +191,7 @@ public:
 
     static const Type& getType();
 
-    bool step(Trace* trace) const override;
+    Ternary step(Trace* trace) const override;
 
     [[nodiscard]] static TriangleNode* fromVal(const Value* val);
     [[nodiscard]] Struct* toStruct() const override;
@@ -233,7 +234,7 @@ public:
 
     static const Type& getType();
 
-    bool step(Trace* trace) const override;
+    Ternary step(Trace* trace) const override;
 
     [[nodiscard]] static ProceduralNode* fromVal(const Value* val);
     [[nodiscard]] Struct* toStruct() const override;

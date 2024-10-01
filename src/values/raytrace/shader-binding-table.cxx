@@ -15,7 +15,6 @@ module;
 #include <tuple>
 #include <vector>
 
-#define SPV_ENABLE_UTILITY_CODE 1
 #include "../../external/spirv.hpp"
 #include "../type.hpp"
 #include "../value.hpp"
@@ -28,7 +27,8 @@ import value.aggregate;
 import value.statics;
 import value.string;
 
-//using SBTShaderOutput = std::map<std::string, std::tuple<const Value*, spv::StorageClass>>;
+/*
+using SBTShaderOutput = std::map<std::string, std::tuple<const Value*, spv::StorageClass>>;
 
 enum class HitGroupType { Closest = 0, Any = 1, Intersection = 2 };
 static std::string hitGroupTypeToString(HitGroupType type) {
@@ -42,7 +42,6 @@ static std::string hitGroupTypeToString(HitGroupType type) {
     }
 }
 
-/*
 class ShaderRecord {
 private:
     std::vector<std::string> shaderFilePaths;
@@ -150,14 +149,53 @@ public:
         return (shaders[shader_index]).get();
     }
 };
-*/
 
 const unsigned MISS_INDEX = 1;
 const unsigned HIT_GROUP_INDEX = 2;
+*/
 
 ///////////
 
+export struct ShaderRecord {
+    inline static const std::vector<std::string> names{"shader", "input"};
 
+    std::string shaderSource;
+    std::string extraInput;
+
+    ShaderRecord(): shaderSource(""), extraInput("") {}
+    ShaderRecord(std::string src, std::string input = "") : shaderSource(src), extraInput(input) {}
+
+    void copyFrom(const Value* other) {
+        const Struct& str = Statics::extractStruct(other, "ShaderRecord", names);
+        shaderSource = Statics::extractString(str[0], "shader");
+        extraInput = Statics::extractString(str[1], "input");
+    }
+
+    [[nodiscard]] Struct* toStruct() const {
+        std::vector<Value*> elements{new String(shaderSource), new String(extraInput)};
+        return new Struct(elements, names);
+    }
+};
+
+export struct HitGroupRecord {
+    inline static const std::vector<std::string> names{"any", "closest", "intersection"};
+
+    ShaderRecord any;
+    ShaderRecord closest;
+    ShaderRecord intersection;
+
+    void copyFrom(const Value* other) {
+        const Struct& str = Statics::extractStruct(other, "ShaderRecord", names);
+        any.copyFrom(str[0]);
+        closest.copyFrom(str[1]);
+        intersection.copyFrom(str[2]);
+    }
+
+    [[nodiscard]] Struct* toStruct() const {
+        std::vector<Value*> fields{any.toStruct(),closest.toStruct(), intersection.toStruct()};
+        return new Struct(fields, names);
+    }
+};
 
 export class ShaderBindingTable {
 private:
@@ -168,47 +206,6 @@ private:
     //std::array<std::vector<ShaderRecord>, 4> shaderRecordGroups;
 
 private:
-    struct ShaderRecord {
-        inline static const std::vector<std::string> names{"shader", "input"};
-
-        std::string shaderSource;
-        std::string extraInput;
-
-        ShaderRecord(): shaderSource(""), extraInput("") {}
-        ShaderRecord(std::string src, std::string input = "") : shaderSource(src), extraInput(input) {}
-
-        void copyFrom(const Value* other) {
-            const Struct& str = Statics::extractStruct(other, "ShaderRecord", names);
-            shaderSource = Statics::extractString(str[0], "shader");
-            extraInput = Statics::extractString(str[1], "input");
-        }
-
-        [[nodiscard]] Struct* toStruct() const {
-            std::vector<Value*> elements{new String(shaderSource), new String(extraInput)};
-            return new Struct(elements, names);
-        }
-    };
-
-    struct HitGroupRecord {
-        inline static const std::vector<std::string> names{"any", "closest", "intersection"};
-
-        ShaderRecord any;
-        ShaderRecord closest;
-        ShaderRecord intersection;
-
-        void copyFrom(const Value* other) {
-            const Struct& str = Statics::extractStruct(other, "ShaderRecord", names);
-            any.copyFrom(str[0]);
-            closest.copyFrom(str[1]);
-            intersection.copyFrom(str[2]);
-        }
-
-        [[nodiscard]] Struct* toStruct() const {
-            std::vector<Value*> fields{any.toStruct(),closest.toStruct(), intersection.toStruct()};
-            return new Struct(fields, names);
-        }
-    };
-
     std::vector<ShaderRecord> miss;
     std::vector<HitGroupRecord> hit;
     std::vector<ShaderRecord> callable;
@@ -226,10 +223,20 @@ public:
             const std::vector<const Type*> rec_sub{&stringType, &stringType};
             const std::vector<std::string> rec_name{"shader", "input"};
             shaderRecordType = Type::structure(rec_sub, rec_name);
-            const std::vector<const Type*> hit_sub{&stringType, &stringType, &stringType};
+            const std::vector<const Type*> hit_sub{&shaderRecordType, &shaderRecordType, &shaderRecordType};
             const std::vector<std::string> hit_name{"any", "closest", "intersection"};
             hitGroupType = Type::structure(hit_sub, hit_name);
         }
+    }
+
+    const std::vector<ShaderRecord>& getMissRecords() const {
+        return miss;
+    }
+    const std::vector<HitGroupRecord>& getHitRecords() const {
+        return hit;
+    }
+    const std::vector<ShaderRecord>& getCallableRecords() const {
+        return callable;
     }
 
     /*

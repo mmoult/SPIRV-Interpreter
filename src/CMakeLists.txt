@@ -18,6 +18,7 @@ target_sources(spv-interp
       front/debug.cxx
       spv/data/data.cxx
       spv/frame.cxx
+      spv/inst-list.cxx
       spv/instruction.cxx
       spv/program.cxx
       spv/ray-flags.cxx
@@ -25,6 +26,7 @@ target_sources(spv-interp
       util/compare.cxx
       util/intersection.cxx
       util/string.cxx
+      util/ternary.cxx
       values/aggregate.cxx
       values/image.cxx
       values/pointer.cxx

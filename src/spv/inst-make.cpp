@@ -1495,11 +1495,6 @@ bool Instruction::makeResult(
         data[result_at].redefine(new Type(Type::rayQuery()));
         break;
     }
-    case spv::OpRayQueryProceedKHR: { // 4477
-        RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        data[result_at].redefine(new Primitive(ray_query.getAccelStruct().stepTrace()));
-        break;
-    }
     case spv::OpRayQueryGetIntersectionTypeKHR: { // 4479
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
@@ -1537,8 +1532,9 @@ bool Instruction::makeResult(
         } else {
             // Execute if running a ray tracing pipeline
             result = accel_struct->isIntersectionValid(t_hit);
-            if (result)
-                result = accel_struct->invokeAnyHitShader(t_hit, hit_kind);
+            // TODO invoke any hit shader here
+            //if (result)
+            //    result = accel_struct->invokeAnyHitShader(t_hit, hit_kind);
         }
 
         Value* res = getType(0, data)->construct();

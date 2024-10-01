@@ -13,7 +13,6 @@ module;
 #include <limits>
 #include <map>
 #include <memory>
-#include <stack>
 #include <string>
 #include <tuple>
 
@@ -32,6 +31,7 @@ export module value.raytrace.accelStruct;
 import spv.rayFlags;
 import util.intersection;
 import util.string;
+import util.ternary;
 import value.aggregate;
 import value.primitive;
 import value.raytrace.shaderBindingTable;
@@ -269,9 +269,9 @@ public:
 
     /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.
     /// @return whether there is more to trace (if so, there must have been an intersection)
-    bool stepTrace() {
+    Ternary stepTrace() {
         if (!trace.active)
-            return false;
+            return Ternary::NO;
 
         // Pre-increment the candidate index (because after a search, we may need to access the current intersection).
         // Note: unsigned overflow is *defined* as reduced modulo by the C99 spec (§6.2.5/9)
@@ -279,144 +279,48 @@ public:
             trace.candidate = std::numeric_limits<decltype(trace.candidate)>::max();
 
         // Traverse the acceleration structure until it reaches the next non-instance primitive.
-        bool found_primitive = false;
+        Ternary found_primitive = Ternary::NO;
         // Note: the node may make the trace inactive, so check that each iteration
-        while (trace.active && !found_primitive && ++trace.candidate < trace.candidates.size()) {
+        while (trace.active && (found_primitive == Ternary::NO) && ++trace.candidate < trace.candidates.size()) {
             const auto& cand = trace.getCandidate();
             found_primitive = cand.search->step(&trace);
         }
 
-        // Terminate on the first hit if the flag was risen
+        // Terminate on the first hit if the flag was set
         // Or terminate the search if there are no nodes left to look at
-        if ((found_primitive && trace.rayFlags.terminateOnFirstHit()) ||
-        (trace.candidate >= trace.candidates.size() - 1))
+        if (trace.candidate >= trace.candidates.size() - 1)
             trace.active = false;
 
         return found_primitive;
     }
 
     /// @brief Completely trace through the acceleration structure.
-    /// @param payload used for shader binding table input
-    void traceRay(Value* payload) {
+    /// @param skip_trace whether to skip the first step and go right to analyzing the result
+    Ternary traceRay(bool skip_trace) {
         bool intersect_once = false;
-        bool found_primitive = false;
+        Ternary found_primitive = Ternary::NO;
         do {
-            found_primitive = stepTrace();
-            if (found_primitive)
-                intersect_once = true;
+            if (!skip_trace) {
+                found_primitive = stepTrace();
+                if (found_primitive == Ternary::YES && trace.rayFlags.terminateOnFirstHit())
+                    trace.active = false;
+            } else {
+                found_primitive = Ternary::YES;
+                skip_trace = false;  // don't skip again on the next iteration
+            }
 
-            if (found_primitive) {
+            if (found_primitive == Ternary::YES) {
+                intersect_once = true;
                 if (trace.getCandidate().type == Intersection::Type::Triangle)
                     confirmIntersection();
                 else  // ... == Intersection::Type::AABB
                     generateIntersection(getIntersectionT(false));
             }
-        } while (found_primitive);
+        } while (found_primitive == Ternary::YES);
 
-        // Do not invoke any shaders if a shader binding table was not specified
-        bool used_sbt = false;
-        if (trace.useSBT) {
-            // Otherwise, invoke either the closest hit or miss shaders
-            //SBTShaderOutput outputs;
-            if (trace.hasCommitted()) {
-                // Closest hit
-                if (!trace.rayFlags.skipClosestHitShader()) {
-                    const int geometry_index = getIntersectionGeometryIndex(true);
-                    const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(true);
-                    /*
-                    const Program* shader = shaderBindingTable.getHitShader(
-                        sbt_offset, sbt_stride, geometry_index, instance_sbt_offset, HitGroupType::Closest
-                    );
-                    if (shader != nullptr) {
-                        used_sbt = true;
-                        ValueMap inputs = getNewShaderInputs(*shader, true, payload);
-                        outputs = shaderBindingTable.executeHit(
-                            inputs,
-                            sbt_offset,
-                            sbt_stride,
-                            geometry_index,
-                            instance_sbt_offset,
-                            HitGroupType::Closest
-                        );
-                    }
-                    */
-                }
-            } else {
-                // Miss
-                /*
-                const Program* shader = shaderBindingTable.getMissShader(miss_index);
-                if (shader != nullptr) {
-                    used_sbt = true;
-                    ValueMap inputs = getNewShaderInputs(*shader, true, payload);
-                    outputs = shaderBindingTable.executeMiss(inputs, miss_index);
-                }
-                */
-            }
-
-            /*if (used_sbt) {
-                // Get the payload from the output
-                const Value* incoming_payload = nullptr;
-                for (const auto& [name, info] : outputs) {
-                    const auto value = get<0>(info);
-                    const auto storage_class = get<1>(info);
-                    if (storage_class == spv::StorageClass::StorageClassIncomingRayPayloadKHR)
-                        incoming_payload = value;
-                }
-                if (incoming_payload == nullptr)
-                    throw std::runtime_error("Could not find the payload from a closest-hit / miss shader!");
-
-                // Update the payload
-                if (!(payload->getType().sameBase(incoming_payload->getType())))
-                    throw std::runtime_error("Incoming payload type does not match payload type!");
-                payload->copyFrom(*incoming_payload);
-                assert(payload->equals(*incoming_payload));
-            }*/
-        }
-
-        // If the expected shader was missing from the SBT or if we shouldn't use the SBT, fill in default
-        if (!used_sbt) {
-            std::stack<Value*> frontier;
-            frontier.push(payload);
-
-            while (!frontier.empty()) {
-                Value* curr = frontier.top();
-                frontier.pop();
-
-                switch (curr->getType().getBase()) {
-                default: {
-                    std::stringstream err;
-                    err << "Cannot fill data of unsupported payload type: " << curr->getType().getBase();
-                    throw std::runtime_error(err.str());
-                }
-                case DataType::FLOAT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<float>(intersect_once)));
-                    break;
-                }
-                case DataType::UINT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<unsigned>(intersect_once)));
-                    break;
-                }
-                case DataType::INT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<int>(intersect_once)));
-                    break;
-                }
-                case DataType::BOOL: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(intersect_once));
-                    break;
-                }
-                case DataType::ARRAY:
-                case DataType::STRUCT: {
-                    for (auto it : static_cast<const Aggregate&>(*curr))
-                        frontier.push(it);
-                    break;
-                }
-                }
-            }
-        }
+        if (intersect_once)
+            return Ternary::YES;
+        return found_primitive;  // could be no for no more to trace or maybe for something to check
     }
 
     /// @brief Check whether some hit distance is within the ray's interval.
@@ -426,6 +330,7 @@ public:
         return (t_hit >= trace.rayTMin) && (t_hit <= trace.rayTMax);
     }
 
+    /*
     /// @brief Invokes the any-hit shader.
     /// @param t_hit distance from the ray to the intersection.
     /// @param hit_kind object kind that was intersected.
@@ -434,7 +339,6 @@ public:
         const int geometry_index = getIntersectionGeometryIndex(false);
         const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(false);
         bool ignore_intersection = false;
-        /*
         const Program* shader = shaderBindingTable.getHitShader(
             offsetSBT, strideSBT, geometry_index, instance_sbt_offset, HitGroupType::Any
         );
@@ -450,7 +354,6 @@ public:
                 static_cast<void*>(&ignore_intersection)
             );
         }
-        */
 
         if (ignore_intersection) {
             //intersectedProcedural = false;
@@ -458,13 +361,12 @@ public:
         }
 
         // Otherwise, update respective properties
-        /*
         candidateIntersection.properties.hitT = t_hit;
         candidateIntersection.properties.hitKind = hit_kind;
-        */
 
         return true;
     }
+    */
 
     /// @brief Include the current AABB/procedural intersection in determining the closest hit.
     /// The candidate intersection must be of type AABB.
@@ -624,6 +526,10 @@ public:
 
     void terminate() {
         trace.active = false;
+    }
+
+    const ShaderBindingTable& getShaderBindingTable() const {
+        return shaderBindingTable;
     }
 
     [[nodiscard]] Struct* toStruct() const {

@@ -163,10 +163,6 @@ public:
         Variable& var = *getVariable(1, data);
         unsigned id = std::get<unsigned>(operands[1].raw);
 
-        // Make sure <entry_point> is an actual entry point before identifying the execution model
-        const int execution_model =
-            (entry_point.opcode == spv::OpEntryPoint) ? std::get<unsigned>(entry_point.operands[0].raw) : -1;
-
         using SC = spv::StorageClass;
         switch (var.getStorageClass()) {
         case SC::StorageClassPushConstant:
@@ -199,7 +195,10 @@ public:
             outs.push_back(id);
             break;
         case SC::StorageClassHitAttributeKHR: {
-            switch (execution_model) {
+            // Make sure <entry_point> is an actual entry point before identifying the execution model
+            if (entry_point.opcode != spv::OpEntryPoint)
+                throw std::runtime_error("Unsupported execution model for variable with storage class HitAttributeKHR");
+            switch (std::get<unsigned>(entry_point.operands[0].raw)) {
                 default:
                     throw std::runtime_error("Bad execution model using storage class HitAttributeKHR.");
                 case spv::ExecutionModelIntersectionKHR:

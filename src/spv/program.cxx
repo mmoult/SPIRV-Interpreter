@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <iostream>
@@ -13,24 +14,43 @@ module;
 
 #include "data/manager.h"
 #include "../external/spirv.hpp"
+#include "../values/type.hpp"
 #include "../values/value.hpp"
 export module spv.program;
 import format.parse;
 import front.debug;
 import spv.data.data;
 import spv.frame;
+import spv.instList;
 import spv.instruction;
 import value.aggregate;
 import value.primitive;
+import value.raytrace.accelStruct;
+import value.raytrace.shaderBindingTable;
+
+export struct RaytraceSubstage {
+    // entry location in instructions vector
+    unsigned entry;
+    // root/global for the substage
+    DataView* data;
+    // index within data of the variable interface
+    std::vector<unsigned> ins;
+    std::vector<unsigned> outs;
+    std::vector<unsigned> specs;
+    // From the extra input file- must be used to refresh the data for each new execution
+    ValueMap inputs;
+
+    RaytraceSubstage(): entry(0), data(nullptr) {}
+};
 
 export class Program {
-    std::vector<Instruction> insts;
+    InstList insts;
     // Entry point information
     unsigned entry;
 
     DataManager data;
-    // Note: At some future time, we may associate one program with multiple data vectors. Therefore, the program
-    // may keep ids, but never data objects directly!
+    // We may associate one program with multiple data vectors. Therefore, the program may keep ids, but never data
+    // objects directly!
     std::vector<unsigned> ins;
     std::vector<unsigned> outs;
     std::vector<unsigned> specs;
@@ -39,6 +59,10 @@ export class Program {
     unsigned localInvocId  = 0;
     unsigned globalInvocId = 0;
     unsigned workGroupSize = 0;
+
+    std::vector<RaytraceSubstage> misses;
+    std::vector<RaytraceSubstage> hits;
+    std::vector<RaytraceSubstage> callables;
 
     /// @brief Parses instructions from the binary words.
     /// Should identify whether the whole program is valid before any instructions are executed.
@@ -145,29 +169,27 @@ if (!(COND)) \
         return ret;
     }
 
-public:
+    unsigned init(ValueMap& provided, DataView& global, RaytraceSubstage* stage) {
+        unsigned entry = 0;
+        std::vector<unsigned>& ins = (stage == nullptr)? this->ins : stage->ins;
+        std::vector<unsigned>& outs = (stage == nullptr)? this->outs : stage->outs;
+        std::vector<unsigned>& specs = (stage == nullptr)? this->specs : stage->specs;
 
-    void parse(uint8_t* buffer, int length) noexcept(false) {
-        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
-        // This allows for a cleaner separation of data.
-        ProgramLoader load(buffer, length);
-        uint32_t bound = load.parse(insts);
-        data.setBound(bound);
-    }
-
-    void init(ValueMap& provided) noexcept(false) {
-        Instruction::DecoQueue decorations(insts);
+        unsigned location = insts.getLastBreak();
+        Instruction::DecoQueue decorations(insts.getInstructions());
         bool entry_found = false; // whether the entry instruction has been found
         bool static_ctn = true; // whether we can construct results statically (until first OpFunction)
-        DataView& global = data.getGlobal();
-        for (unsigned location = 0; location < insts.size(); ++location) {
+        for (; location < insts.size(); ++location) {
             Instruction& inst = insts[location];
             auto opcode = inst.getOpcode();
 
             if (static_ctn || inst.isStaticDependent()) {
                 if (opcode == spv::OpFunction) {
-                    static_ctn = false;
                     // Static construction is no longer legal at the first non-static
+                    static_ctn = false;
+
+                    if (!entry_found)
+                        break;
                     // OpFunction is static dependent, so intended fallthrough
                 }
 
@@ -185,22 +207,26 @@ public:
 
                     // Some builtins need to be removed from the interface, in which case they continue,
                     // others just need to report results, in which they can be saved and break.
-                    switch (inst.getVarBuiltIn(global)) {
-                    case spv::BuiltIn::BuiltInLocalInvocationIndex:
-                    case spv::BuiltIn::BuiltInInvocationId:
-                        localInvocIdx = inst.getResult();
-                        continue;
-                    case spv::BuiltIn::BuiltInLocalInvocationId:
-                        localInvocId = inst.getResult();
-                        continue;
-                    case spv::BuiltIn::BuiltInGlobalInvocationId:
-                        globalInvocId = inst.getResult();
-                        continue;
-                    case spv::BuiltIn::BuiltInWorkgroupSize:
-                        workGroupSize = inst.getResult();
-                        break;
-                    default:
-                        break;
+                    if (stage == nullptr) {
+                        switch (inst.getVarBuiltIn(global)) {
+                        case spv::BuiltIn::BuiltInLocalInvocationIndex:
+                        case spv::BuiltIn::BuiltInInvocationId:
+                            localInvocIdx = inst.getResult();
+                            continue;
+                        case spv::BuiltIn::BuiltInLocalInvocationId:
+                            localInvocId = inst.getResult();
+                            continue;
+                        case spv::BuiltIn::BuiltInGlobalInvocationId:
+                            globalInvocId = inst.getResult();
+                            continue;
+                        case spv::BuiltIn::BuiltInWorkgroupSize:
+                            workGroupSize = inst.getResult();
+                            break;
+                        default:
+                            break;
+                        }
+                    } else {
+                        // TODO need to catch some builtins for rt substages here
                     }
 
                     if (static_ctn)
@@ -211,13 +237,37 @@ public:
 
         if (!entry_found)
             throw std::runtime_error("Program is missing entry function!");
+        return entry;
+    }
+
+public:
+    void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false) {
+        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
+        // This allows for a cleaner separation of data.
+        ProgramLoader load(buffer, length);
+        insts.addBreak(insts.size(), file_path);
+        uint32_t bound = load.parse(insts.getInstructions());
+        data.setBound(std::max(bound, data.getBound()));
+    }
+
+    unsigned getInstLength() const {
+        return insts.size();
+    }
+
+    void init(ValueMap& provided) noexcept(false) {
+        entry = init(provided, data.getGlobal(), nullptr);
+    }
+    void initRaytrace(RaytraceSubstage& stage) {
+        unsigned entry = init(stage.inputs, *stage.data, &stage);
+        stage.entry = entry;
     }
 
     /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
     /// @param provided map of names to values
     /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
     ///               default values.
-    void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
+    /// @return the shader binding table to process (if any), otherwise, nullptr
+    const ShaderBindingTable* checkInputs(ValueMap& provided, bool unused) noexcept(false) {
         DataView& global = data.getGlobal();
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
@@ -233,6 +283,7 @@ public:
             specConsts.push_back(global[spec].getVariable());
 
         // Next go through variables defined and verify they match needed
+        const ShaderBindingTable* sbt = nullptr;
         for (const auto& [name, val] : provided) {
             bool found = false;
             // first, find the variable which matches the name
@@ -244,6 +295,10 @@ public:
 
                     // Special case for acceleration structures since their shader binding table may have extra shaders
                     // to parse and resolve.
+                    if (Value* val = var->getVal(); val->getType().getBase() == DataType::ACCEL_STRUCT) {
+                        assert(sbt == nullptr);  // Cannot currently handle multiple shader binding tables.
+                        sbt = &static_cast<AccelStruct&>(*val).getShaderBindingTable();
+                    }
 
                     // Remove the interface from the check list
                     inputs.erase(inputs.begin() + i);
@@ -286,6 +341,8 @@ public:
             error << "!";
             throw std::runtime_error(error.str());
         }
+
+        return sbt;
     }
 
     std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true) {
@@ -509,5 +566,24 @@ public:
             ret.emplace(var->getName(), var->getBuiltIn());
         }
         return ret;
+    }
+
+    RaytraceSubstage& nextMissRecord() {
+        unsigned before = misses.size();
+        misses.resize(before + 1);
+        return misses[before];
+    }
+    RaytraceSubstage& nextHitRecord() {
+        unsigned before = hits.size();
+        hits.resize(before + 1);
+        return hits[before];
+    }
+    RaytraceSubstage& nextCallableRecord() {
+        unsigned before = callables.size();
+        callables.resize(before + 1);
+        return callables[before];
+    }
+    DataManager& getDataManager() {
+        return data;
     }
 };

@@ -11,6 +11,13 @@ module;
 #include "data/manager.h"
 export module spv.frame;
 
+export enum RayTraceSubstage {
+    NONE,
+    ANY_HIT,
+    CLOSEST,
+    INTERSECTION,
+};
+
 export class Frame {
     unsigned pc;
 
@@ -35,6 +42,12 @@ export class Frame {
     unsigned argCount;
     /// Whether this instruction needs to use an argument before incrementing the PC
     bool first;
+
+    struct {
+        RayTraceSubstage trigger = RayTraceSubstage::NONE;
+        unsigned index;
+        const Value* result;
+    } rt;
 
 public:
     Frame(unsigned pc, std::vector<const Value*>& args, unsigned ret_at, DataView& data) :
@@ -97,5 +110,14 @@ public:
 
     DataView& getData() {
         return *view;
+    }
+
+    RayTraceSubstage getRtTrigger() const {
+        return rt.trigger;
+    }
+    void triggerRaytrace(RayTraceSubstage stage, unsigned index) {
+        this->rt.trigger = stage;
+        this->rt.index = index;
+        this->rt.result = nullptr;
     }
 };

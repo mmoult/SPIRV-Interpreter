@@ -15,6 +15,7 @@
 #include "../value.hpp"
 #include "trace.hpp"
 import util.intersection;
+import util.ternary;
 import value.aggregate;
 import value.primitive;
 import value.statics;
@@ -34,7 +35,7 @@ const Type& BoxNode::getType() {
     return type;
 }
 
-bool BoxNode::step(Trace* trace_p) const {
+Ternary BoxNode::step(Trace* trace_p) const {
     Trace& trace = *trace_p;
     Intersection& candidate = trace.getCandidate();
     auto ray_pos = candidate.getRayPos(trace_p);
@@ -57,7 +58,7 @@ bool BoxNode::step(Trace* trace_p) const {
             cand.search = child_ref.ptr;
         }
     }
-    return false;
+    return Ternary::NO;
 }
 
 [[nodiscard]] BoxNode* BoxNode::fromVal(const Value* val) {
@@ -114,12 +115,12 @@ const Type& InstanceNode::getType() {
     return type;
 }
 
-bool InstanceNode::step(Trace* trace_p) const {
+Ternary InstanceNode::step(Trace* trace_p) const {
     Trace& trace = *trace_p;
 
     // Do not process this instance if it's invisible to the ray.
     if ((this->mask & trace.cullMask) == 0)
-        return false;
+        return Ternary::NO;
 
     // Transform the ray to match the instance's object-space.
     const Intersection& before = trace.getCandidate();
@@ -134,7 +135,7 @@ bool InstanceNode::step(Trace* trace_p) const {
     cand.worldToObj = worldToObj;
     cand.instance = this;
 
-    return false;
+    return Ternary::NO;
 }
 
 [[nodiscard]] InstanceNode* InstanceNode::fromVal(const Value* val) {
@@ -193,11 +194,11 @@ const Type& TriangleNode::getType() {
     return type;
 }
 
-bool TriangleNode::step(Trace* trace_p) const {
+Ternary TriangleNode::step(Trace* trace_p) const {
     Trace& trace = *trace_p;
     // Check skip triangle ray flag.
     if (trace.rayFlags.skipTriangles())
-        return false;
+        return Ternary::NO;
 
     // Check opaque related ray flags.
     bool is_opaque = this->opaque;
@@ -207,7 +208,7 @@ bool TriangleNode::step(Trace* trace_p) const {
         is_opaque = false;
 
     if ((trace.rayFlags.cullOpaque() && is_opaque) || (trace.rayFlags.cullNoOpaque() && !is_opaque))
-        return false;
+        return Ternary::NO;
 
     Intersection& candidate = trace.getCandidate();
     auto ray_pos = candidate.getRayPos(trace_p);
@@ -229,7 +230,7 @@ bool TriangleNode::step(Trace* trace_p) const {
     );
 
     if (!found)
-        return false;
+        return Ternary::NO;
 
     // Update candidate
     candidate.hitT = t;
@@ -240,7 +241,7 @@ bool TriangleNode::step(Trace* trace_p) const {
     candidate.primitiveIndex = this->primIndex;
     candidate.hitKind = entered_front ? HIT_KIND_FRONT_FACING_TRIANGLE_KHR : HIT_KIND_BACK_FACING_TRIANGLE_KHR;
     candidate.type = Intersection::Type::Triangle;
-    return found;
+    return Ternary::YES;
 }
 
 [[nodiscard]] TriangleNode* TriangleNode::fromVal(const Value* val) {
@@ -297,12 +298,12 @@ const Type& ProceduralNode::getType() {
     return type;
 }
 
-bool ProceduralNode::step(Trace* trace_p) const {
+Ternary ProceduralNode::step(Trace* trace_p) const {
     Trace& trace = *trace_p;
 
     // Check skip AABBs (procedurals) flag
     if (trace.rayFlags.skipAABBs())
-        return false;
+        return Ternary::NO;
 
     // Check opaque related ray flags.
     bool is_opaque = this->opaque;
@@ -312,7 +313,7 @@ bool ProceduralNode::step(Trace* trace_p) const {
         is_opaque = false;
 
     if ((trace.rayFlags.cullOpaque() && is_opaque) || (trace.rayFlags.cullNoOpaque() && !is_opaque))
-        return false;
+        return Ternary::NO;
 
     Intersection& candidate = trace.getCandidate();
     auto ray_pos = candidate.getRayPos(trace_p);
@@ -328,73 +329,14 @@ bool ProceduralNode::step(Trace* trace_p) const {
     );
 
     if (!found)
-        return false;
+        return Ternary::NO;
 
-    // Here is the fun part: we passed the bounding box, now we want to call the intersection shader to determine
-    // whether there is an actual intersection.
-    // TODO
-
-    /*//////////////////////////////////
-    candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*curr_node_ref);
-
-    // Run the intersection shader if the intersection was with a procedural node.
-    // Running the shader here because we need the instance SBT offset for calculating the index.
-    if (useSBT && (candidateIntersection.type == CandidateIntersectionType::AABB)) {
-        intersectedProcedural = true;
-        const int geometry_index = getIntersectionGeometryIndex(false);
-        const unsigned instance_sbt_offset =
-            getIntersectionInstanceShaderBindingTableRecordOffset(false);
-        //
-        const Program* shader = shaderBindingTable.getHitShader(
-            offsetSBT,
-            strideSBT,
-            geometry_index,
-            instance_sbt_offset,
-            HitGroupType::Intersection
-        );
-        if (shader != nullptr) {
-            ValueMap inputs = getNewShaderInputs(*shader, true, nullptr);
-            SBTShaderOutput outputs = shaderBindingTable.executeHit(
-                inputs,
-                offsetSBT,
-                strideSBT,
-                geometry_index,
-                instance_sbt_offset,
-                HitGroupType::Intersection
-            );
-
-            // If it fails the intersection, then cancel it.
-            // Note: variable <intersectedProcedural> will be modified when invoking intersection and
-            // any-hit shaders.
-            const bool missed = !intersectedProcedural;
-            if (missed) {
-                found_primitive = false;
-                candidateIntersection.update(false, IntersectionProperties {});
-                break;
-            }
-
-            // Otherwise, store the hit attribute for later use.
-            for (const auto& [name, info] : outputs) {
-                const auto value = get<0>(info);
-                const auto storage_class = get<1>(info);
-                if (storage_class == spv::StorageClass::StorageClassHitAttributeKHR) {
-                    Value* hit_attribute = value->getType().construct();
-                    hit_attribute->copyFrom(*value);
-                    candidateIntersection.properties.hitAttribute = hit_attribute;
-                }
-            }
-        }
-    }
-    *////////////////////////////
-
-    if (found) {
-        candidate.isOpaque = this->opaque;
-        candidate.geometryIndex = this->geomIndex;
-        candidate.primitiveIndex = this->primIndex;
-        candidate.type = Intersection::Type::AABB;
-    }
-
-    return found;
+    // Assume that the intersection is successful, we can backpeddle if it turns out not to be true.
+    candidate.isOpaque = this->opaque;
+    candidate.geometryIndex = this->geomIndex;
+    candidate.primitiveIndex = this->primIndex;
+    candidate.type = Intersection::Type::AABB;
+    return Ternary::MAYBE;
 }
 
 [[nodiscard]] ProceduralNode* ProceduralNode::fromVal(const Value* val) {

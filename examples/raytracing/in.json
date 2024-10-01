@@ -78,7 +78,7 @@
                         "custom_index" : 4,
                         "mask" : 255,
                         "shader_binding_table_record_offset" : 0,
-                        "acceleration_structure_index" : 1
+                        "acceleration_structure_index" : 1  // [0, 1]
                     },
                     { // Orange wall
                         "object_to_world_matrix" : [
@@ -90,7 +90,7 @@
                         "custom_index" : 5,
                         "mask" : 253,
                         "shader_binding_table_record_offset" : 0,
-                        "acceleration_structure_index" : 1
+                        "acceleration_structure_index" : 1  // [0, 1]
                     },
                     { // Reflective sphere
                         "object_to_world_matrix" : [
@@ -102,7 +102,7 @@
                         "custom_index" : 6,
                         "mask" : 254,
                         "shader_binding_table_record_offset" : 1,
-                        "acceleration_structure_index" : 2
+                        "acceleration_structure_index" : 2 // [3, 0]
                     }
                 ],
                 "triangle_nodes" : [],

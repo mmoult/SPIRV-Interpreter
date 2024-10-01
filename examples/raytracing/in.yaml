@@ -1,0 +1,124 @@
+payload: [ 0.0, 0.0, 0.0 ]
+
+ray:
+  flags: 16
+  cullMask: 255
+  origin: [ 0.0, 0.0, 25.0 ]
+  direction: [ -0.057, 0.094, -1.0 ]
+  tMin: 0.0
+  tMax: 1000.0
+
+accelerationStructure:
+  tlas: [ 0, 0 ]
+  box_nodes:
+  -
+      min_bounds: [ -10.0, -10.0, -10.0 ]
+      max_bounds: [ 10.0, 10.0, 10.0 ]
+      child_nodes: [ [ 1, 0 ], [ 1, 1 ], [ 1, 2 ], [ 1, 3 ], [ 1, 4 ], [ 1, 5 ], [ 1, 6 ] ]
+  -
+      min_bounds: [ -10.0, -10.0, -0.1 ]
+      max_bounds: [ 10.0, 10.0, 0.1 ]
+      child_nodes: [ [ 2, 0 ], [ 2, 1 ] ]
+  instance_nodes:
+  - # Ceiling
+      transformation:
+      - [ 1.0, 0.0, 0.0, 0.0 ]
+      - [ 0.0, 0.0, -1.0, 10.0 ]
+      - [ 0.0, 1.0, 0.0, 0.0 ]
+      child_node: [ 0, 1 ]
+      id: 0
+      custom_index: 0
+      mask: 255
+      sbt_record_offset: 0
+  - # Floor
+      transformation:
+      - [ 1.0, 0.0, 0.0, 0.0 ]
+      - [ 0.0, 0.0, 1.0, -10.0 ]
+      - [ 0.0, -1.0, 0.0, 0.0 ]
+      child_node: [ 0, 1 ]
+      id: 1
+      custom_index: 1
+      mask: 255
+      sbt_record_offset: 0
+  - # Red wall
+      transformation:
+      - [ 0.0, 0.0, 1.0, -10.0 ]
+      - [ 0.0, 1.0, 0.0, 0.0 ]
+      - [ -1.0, 0.0, 0.0, 0.0 ]
+      child_node: [ 0, 1 ]
+      id: 2
+      custom_index: 2
+      mask: 255
+      sbt_record_offset: 0
+  - # Green wall
+      transformation:
+      - [ 0.0, 0.0, -1.0, 10.0 ]
+      - [ 0.0, 1.0, 0.0, 0.0 ]
+      - [ 1.0, 0.0, 0.0, 0.0 ]
+      child_node: [ 0, 1 ]
+      id: 3
+      custom_index: 3
+      mask: 255
+      sbt_record_offset: 0
+  - # Blue wall
+      transformation:
+      - [ -1.0, 0.0, 0.0, 0.0 ]
+      - [ 0.0, 1.0, 0.0, 0.0 ]
+      - [ 0.0, 0.0, -1.0, 10.0 ]
+      child_node: [ 0, 1 ]
+      id: 4
+      custom_index: 4
+      mask: 255
+      sbt_record_offset: 0
+  - # Orange wall
+      transformation:
+      - [ 1.0, 0.0, 0.0, 0.0 ]
+      - [ 0.0, 1.0, 0.0, 0.0 ]
+      - [ 0.0, 0.0, 1.0, -10.0 ]
+      child_node: [ 0, 1 ]
+      id: 5
+      custom_index: 5
+      mask: 255
+      sbt_record_offset: 0
+  - # Reflective sphere
+      transformation:
+      - [ 0.1, 0.0, 0.0, -3.0 ]
+      - [ 0.0, 0.1, 0.0, -5.0 ]
+      - [ 0.0, 0.0, 0.1, 0.0 ]
+      child_node: [ 3, 0 ]
+      id: 6
+      custom_index: 6
+      mask: 254
+      sbt_record_offset: 1
+  triangle_nodes:
+  -
+      geometry_index: 0
+      primitive_index: 0
+      opaque: true
+      vertices: [ [ -10.0, -10.0, 0.0 ], [ 10.0, -10.0, 0.0 ], [ -10.0, 10.0, 0.0 ] ]
+  -
+      geometry_index: 0
+      primitive_index: 1
+      opaque: true
+      vertices: [ [ -10.0, 10.0, 0.0 ], [ 10.0, -10.0, 0.0 ], [ 10.0, 10.0, 0.0 ] ]
+  procedural_nodes:
+  -
+      min_bounds: [ -50.0, -50.0, -50.0 ]
+      max_bounds: [ 50.0, 50.0, 50.0 ]
+      opaque: true
+      geometry_index: 0
+      primitive_index: 0
+  shader_binding_table:
+    miss_records:
+    - { shader: "./shaders/miss_sky.spv", input: "" }
+    - { shader: "./shaders/miss_shadow.spv", input: "" }
+    hit_group_records:
+    -
+        any: { shader: "./shaders/wall_rahit.spv", input: "./inputs/wall_rahit-in.json" }
+        closest: { shader: "./shaders/wall_rchit.spv", input: "./inputs/wall_rchit-in.json" }
+        intersection: { shader: "", input: "" }
+    -
+        any: { shader: "./shaders/sphere_rahit.spv", input: "" }
+        closest: { shader: "./shaders/sphere_rchit.spv", input: "" }
+        intersection: { shader: "./shaders/sphere_intersection.spv", input: "./inputs/sphere_intersection-in.json" }
+    callable_records: []

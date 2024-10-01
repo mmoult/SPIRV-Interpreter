@@ -23,6 +23,7 @@ import format.parse;
 import front.console;
 import spv.data.data;
 import spv.frame;
+import spv.instList;
 import spv.instruction;
 import value.string;
 
@@ -31,7 +32,7 @@ struct BreakPoint {
 };
 
 export class Debugger {
-    const std::vector<Instruction>& insts;
+    const InstList& insts;
     ValueFormat& format;
     unsigned maxLineDigits;
     unsigned maxInvocDigits;
@@ -155,7 +156,7 @@ export class Debugger {
     }
 
 public:
-    Debugger(const std::vector<Instruction>& insts, ValueFormat& format, unsigned num_invoc):
+    Debugger(const InstList& insts, ValueFormat& format, unsigned num_invoc):
             insts(insts), format(format), maxLineDigits(numDigits(insts.size())) {
         rootCommands.insert("break", Cmd::BREAK);
         breakCommands.insert("add", Cmd::BREAK_ADD);
@@ -502,6 +503,9 @@ public:
                 for (unsigned i = start; i < end; ++i) {
                     bool bp = bps.contains(i);
                     bool curr = (i == i_at);
+
+                    if (const std::string* file_path = insts.getBreak(i); file_path != nullptr)
+                        std::cout << "=== " << *file_path << " ===" << std::endl;
 
                     // Print special line annotations
                     if (bp)
