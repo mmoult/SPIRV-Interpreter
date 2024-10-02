@@ -23,25 +23,11 @@ import spv.data.data;
 import spv.frame;
 import spv.instList;
 import spv.instruction;
+import spv.raySubstage;
 import value.aggregate;
 import value.primitive;
 import value.raytrace.accelStruct;
 import value.raytrace.shaderBindingTable;
-
-export struct RaytraceSubstage {
-    // entry location in instructions vector
-    unsigned entry;
-    // root/global for the substage
-    DataView* data;
-    // index within data of the variable interface
-    std::vector<unsigned> ins;
-    std::vector<unsigned> outs;
-    std::vector<unsigned> specs;
-    // From the extra input file- must be used to refresh the data for each new execution
-    ValueMap inputs;
-
-    RaytraceSubstage(): entry(0), data(nullptr) {}
-};
 
 export class Program {
     InstList insts;
@@ -60,9 +46,9 @@ export class Program {
     unsigned globalInvocId = 0;
     unsigned workGroupSize = 0;
 
-    std::vector<RaytraceSubstage> misses;
-    std::vector<RaytraceSubstage> hits;
-    std::vector<RaytraceSubstage> callables;
+    std::vector<RayTraceSubstage> misses;
+    std::vector<RayTraceSubstage> hits;
+    std::vector<RayTraceSubstage> callables;
 
     /// @brief Parses instructions from the binary words.
     /// Should identify whether the whole program is valid before any instructions are executed.
@@ -169,7 +155,7 @@ if (!(COND)) \
         return ret;
     }
 
-    unsigned init(ValueMap& provided, DataView& global, RaytraceSubstage* stage) {
+    unsigned init(ValueMap& provided, DataView& global, RayTraceSubstage* stage) {
         unsigned entry = 0;
         std::vector<unsigned>& ins = (stage == nullptr)? this->ins : stage->ins;
         std::vector<unsigned>& outs = (stage == nullptr)? this->outs : stage->outs;
@@ -205,32 +191,35 @@ if (!(COND)) \
                 if (!inst.queueDecoration(data.getBound(), location, decorations)) {
                     inst.makeResult(global, location, &decorations);
 
-                    // Some builtins need to be removed from the interface, in which case they continue,
-                    // others just need to report results, in which they can be saved and break.
-                    if (stage == nullptr) {
-                        switch (inst.getVarBuiltIn(global)) {
-                        case spv::BuiltIn::BuiltInLocalInvocationIndex:
-                        case spv::BuiltIn::BuiltInInvocationId:
-                            localInvocIdx = inst.getResult();
-                            continue;
-                        case spv::BuiltIn::BuiltInLocalInvocationId:
-                            localInvocId = inst.getResult();
-                            continue;
-                        case spv::BuiltIn::BuiltInGlobalInvocationId:
-                            globalInvocId = inst.getResult();
-                            continue;
-                        case spv::BuiltIn::BuiltInWorkgroupSize:
-                            workGroupSize = inst.getResult();
-                            break;
-                        default:
-                            break;
+                    if (static_ctn) {
+                        // Some builtins need to be removed from the interface, in which case they continue,
+                        // others just need to report results, in which they can be saved and break.
+                        if (stage == nullptr) {
+                            switch (inst.getVarBuiltIn(global)) {
+                            case spv::BuiltIn::BuiltInLocalInvocationIndex:
+                            case spv::BuiltIn::BuiltInInvocationId:
+                                localInvocIdx = inst.getResult();
+                                continue;
+                            case spv::BuiltIn::BuiltInLocalInvocationId:
+                                localInvocId = inst.getResult();
+                                continue;
+                            case spv::BuiltIn::BuiltInGlobalInvocationId:
+                                globalInvocId = inst.getResult();
+                                continue;
+                            case spv::BuiltIn::BuiltInWorkgroupSize:
+                                workGroupSize = inst.getResult();
+                                break;
+                            default:
+                                break;
+                            }
+                        } else {
+                            // need to catch some builtins for rt substages here
+                            if (stage->handleStaticInst(inst))
+                                continue;
                         }
-                    } else {
-                        // TODO need to catch some builtins for rt substages here
-                    }
 
-                    if (static_ctn)
                         inst.ioGen(global, ins, outs, specs, provided, insts[entry]);
+                    }
                 }
             }
         }
@@ -238,6 +227,53 @@ if (!(COND)) \
         if (!entry_found)
             throw std::runtime_error("Program is missing entry function!");
         return entry;
+    }
+
+    RayTraceSubstage& getSubstage(RtStageKind stage, Frame& launched_from) {
+        unsigned index = launched_from.getRtIndex();
+        RayTraceSubstage* rt_stage = nullptr;
+        switch (stage) {
+        default: // including NONE
+            assert(false);
+            break;
+        // TODO add error messages if we try to go out of bounds
+        case RtStageKind::ANY_HIT:
+            rt_stage = &hits[index * 3 + 0];
+            break;
+        case RtStageKind::CLOSEST:
+            rt_stage = &hits[index * 3 + 1];
+            break;
+        case RtStageKind::INTERSECTION:
+            rt_stage = &hits[index * 3 + 2];
+            break;
+        case RtStageKind::MISS:
+            rt_stage = &misses[index];
+            break;
+        case RtStageKind::CALLABLE:
+            rt_stage = &callables[index];
+            break;
+        }
+        return *rt_stage;
+    }
+
+    void launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
+        Frame& launched_from = *frame_stack.back();
+        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
+        DataView& data = *rt_stage.data;
+        // fill in builtins into the data
+        rt_stage.setUpInputs(*launched_from.getAccelStruct(), *launched_from.getRtResult());
+        // checkInputs
+        const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
+        std::vector<const Value*> entry_args;  // no formal arguments to the substage's main
+        // Note: a frame assumes that it owns the data (and will therefore delete it upons its deconstruction). We avoid
+        // this problem by making a change to instruction's execute and preventing data delete if the frame before has
+        // a raytracing trigger enabled.
+        frame_stack.push_back(new Frame(ep.getLocation(), entry_args, 0, data));
+    }
+    void completeSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
+        Frame& launched_from = *frame_stack.back();
+        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
+        rt_stage.cleanUp(launched_from);
     }
 
 public:
@@ -257,7 +293,7 @@ public:
     void init(ValueMap& provided) noexcept(false) {
         entry = init(provided, data.getGlobal(), nullptr);
     }
-    void initRaytrace(RaytraceSubstage& stage) {
+    void initRaytrace(RayTraceSubstage& stage) {
         unsigned entry = init(stage.inputs, *stage.data, &stage);
         stage.entry = entry;
     }
@@ -295,9 +331,11 @@ public:
 
                     // Special case for acceleration structures since their shader binding table may have extra shaders
                     // to parse and resolve.
-                    if (Value* val = var->getVal(); val->getType().getBase() == DataType::ACCEL_STRUCT) {
+                    const Value& now_val = *var->getVal();
+                    if (now_val.getType().getBase() == DataType::ACCEL_STRUCT &&
+                    val->getType().getBase() == DataType::STRUCT) {
                         assert(sbt == nullptr);  // Cannot currently handle multiple shader binding tables.
-                        sbt = &static_cast<AccelStruct&>(*val).getShaderBindingTable();
+                        sbt = &static_cast<const AccelStruct&>(now_val).getShaderBindingTable();
                     }
 
                     // Remove the interface from the check list
@@ -519,16 +557,16 @@ public:
             }
 
             unsigned frame_depth = frame_stack.size();
-            if (insts[i_at].execute(cur_data, frame_stack, verbose, extra_data))
+            if (insts[i_at].execute(cur_data, frame_stack, verbose))
                 active_threads.erase(next_invoc);
 
             // print the result if verbose
             if (unsigned result = insts[i_at].getResult();
-                    // Print the result's value iff:
-                    // - verbose mode is enabled
-                    // - the instruction has a result to print
-                    // - the instruction didn't add or remove a frame (in which case, the value may be undefined)
-                    verbose && result > 0 && frame_stack.size() == frame_depth) {
+            // Print the result's value iff:
+            // - verbose mode is enabled
+            // - the instruction has a result to print
+            // - the instruction didn't add or remove a frame (in which case, the value may be undefined)
+            verbose && result > 0 && frame_stack.size() == frame_depth) {
                 debugger.print(result, cur_data);
             }
 
@@ -537,6 +575,11 @@ public:
                 active_threads.erase(next_invoc);
                 live_threads.erase(next_invoc);
                 data.destroyView(invoc_globals[next_invoc]);
+            } else {
+                // If the frame has triggered raytracing, we need to launch the substage
+                auto& frame = *frame_stack.back();
+                if (auto substage = frame.getRtTrigger(); substage != RtStageKind::NONE)
+                    launchSubstage(substage, frame_stack);
             }
         }
     }
@@ -568,17 +611,17 @@ public:
         return ret;
     }
 
-    RaytraceSubstage& nextMissRecord() {
+    RayTraceSubstage& nextMissRecord() {
         unsigned before = misses.size();
         misses.resize(before + 1);
         return misses[before];
     }
-    RaytraceSubstage& nextHitRecord() {
+    RayTraceSubstage& nextHitRecord() {
         unsigned before = hits.size();
         hits.resize(before + 1);
         return hits[before];
     }
-    RaytraceSubstage& nextCallableRecord() {
+    RayTraceSubstage& nextCallableRecord() {
         unsigned before = callables.size();
         callables.resize(before + 1);
         return callables[before];

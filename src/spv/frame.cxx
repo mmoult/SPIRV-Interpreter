@@ -5,17 +5,21 @@
  */
 module;
 #include <stdexcept>
+#include <tuple>
 #include <vector>
 
 #include "../values/value.hpp"
 #include "data/manager.h"
 export module spv.frame;
+import value.raytrace.accelStruct;
 
-export enum RayTraceSubstage {
+export enum RtStageKind {
     NONE,
     ANY_HIT,
     CLOSEST,
     INTERSECTION,
+    MISS,
+    CALLABLE
 };
 
 export class Frame {
@@ -44,9 +48,10 @@ export class Frame {
     bool first;
 
     struct {
-        RayTraceSubstage trigger = RayTraceSubstage::NONE;
+        RtStageKind trigger = RtStageKind::NONE;
         unsigned index;
-        const Value* result;
+        AccelStruct* as;
+        Value* result;
     } rt;
 
 public:
@@ -111,13 +116,36 @@ public:
     DataView& getData() {
         return *view;
     }
+    /// @brief removes the data view from this frame
+    /// Necessary to preserve the data view, since deleting this frame deletes the data by default
+    void removeData() {
+        view = nullptr;
+    }
 
-    RayTraceSubstage getRtTrigger() const {
+    RtStageKind getRtTrigger() const {
         return rt.trigger;
     }
-    void triggerRaytrace(RayTraceSubstage stage, unsigned index) {
+    void triggerRaytrace(RtStageKind stage, unsigned index, Value* payload, AccelStruct& as) {
         this->rt.trigger = stage;
         this->rt.index = index;
+        this->rt.as = &as;
+        this->rt.result = payload;
+    }
+    void disableRaytrace() {
+        this->rt.trigger = RtStageKind::NONE;
+        this->rt.index = 0;
+        this->rt.as = nullptr;
         this->rt.result = nullptr;
+    }
+
+    unsigned getRtIndex() const {
+        return this->rt.index;
+    }
+    // Modify the result through `copyFrom` as necessary
+    Value* getRtResult() const {
+        return this->rt.result;
+    }
+    AccelStruct* getAccelStruct() const {
+        return this->rt.as;
     }
 };

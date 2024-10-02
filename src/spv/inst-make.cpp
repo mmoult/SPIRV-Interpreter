@@ -446,8 +446,7 @@ void element_tern_op(
 bool Instruction::makeResult(
     DataView& data,
     unsigned location,
-    Instruction::DecoQueue* queue,
-    void* extra_data
+    Instruction::DecoQueue* queue
 ) const noexcept(false) {
     if (!hasResult)
         return false; // no result made!
@@ -1516,33 +1515,6 @@ bool Instruction::makeResult(
         data[result_at].redefine(new Primitive(type));
         break;
     }
-    case spv::OpReportIntersectionKHR: { // 5334
-        const float t_hit = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
-        const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
-
-        // Get necessary data from the ray tracing pipeline if it exist
-        AccelStruct* accel_struct = nullptr;
-        if (extra_data != nullptr)
-            accel_struct = static_cast<AccelStruct*>(extra_data);
-
-        bool result = false;
-        if (accel_struct == nullptr) {
-            // Execute this if testing a single intersection shader: Assume range is [0.0, infinity)
-            result = t_hit > 0.0f;
-        } else {
-            // Execute if running a ray tracing pipeline
-            result = accel_struct->isIntersectionValid(t_hit);
-            // TODO invoke any hit shader here
-            //if (result)
-            //    result = accel_struct->invokeAnyHitShader(t_hit, hit_kind);
-        }
-
-        Value* res = getType(0, data)->construct();
-        Primitive prim(result);
-        res->copyFrom(prim);
-        data[result_at].redefine(res);
-        break;
-    }
     case spv::OpTypeAccelerationStructureKHR: { // 5341
         data[result_at].redefine(new Type(Type::accelStruct()));
         break;
@@ -1657,14 +1629,14 @@ bool Instruction::makeResult(
     }
     case spv::OpRayQueryGetWorldRayDirectionKHR: { // 6029
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        std::vector<Primitive> direction = ray_query.getWorldRayDirection();
+        std::vector<Primitive> direction = ray_query.getAccelStruct().getWorldRayDirection();
         const Type* res_type = getType(0, data);
         data[result_at].redefine(construct_from_vec(direction, res_type));
         break;
     }
     case spv::OpRayQueryGetWorldRayOriginKHR: { // 6030
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        std::vector<Primitive> origin = ray_query.getWorldRayOrigin();
+        std::vector<Primitive> origin = ray_query.getAccelStruct().getWorldRayOrigin();
         const Type* res_type = getType(0, data);
         data[result_at].redefine(construct_from_vec(origin, res_type));
         break;

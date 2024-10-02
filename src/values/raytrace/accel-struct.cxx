@@ -492,6 +492,16 @@ public:
         return trace.candidates[index].getRayPos(&trace);
     }
 
+    std::vector<Primitive> getWorldRayDirection() const {
+        const glm::vec3& ray_dir = trace.rayDirection;
+        return std::vector<Primitive> {ray_dir.x, ray_dir.y, ray_dir.z};
+    }
+
+    std::vector<Primitive> getWorldRayOrigin() const {
+        const glm::vec3& ray_pos = trace.rayOrigin;
+        return std::vector<Primitive> {ray_pos.x, ray_pos.y, ray_pos.z};
+    }
+
     /// @brief Get the object-to-world matrix of the intersected instance.
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-to-world matrix.

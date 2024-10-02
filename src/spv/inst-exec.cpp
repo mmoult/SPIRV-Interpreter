@@ -88,7 +88,19 @@ void thing() {
     *////////////////////////////
 }
 
-bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, void* extra_data) const {
+void invokeSubstageShader(Frame& frame, AccelStruct& as, Value* payload, RtStageKind kind) {
+    const Trace& trace = as.getTrace();
+    auto& candidate = trace.getCandidate();
+    int geom_index = candidate.geometryIndex;
+    unsigned instance_sbt_offset = 0;
+    if (candidate.instance != nullptr)
+        instance_sbt_offset = candidate.instance->getSbtRecordOffs();
+    // index = instance_sbt_offset + sbt_offset + (geometry_index * sbt_stride)
+    unsigned index = instance_sbt_offset + trace.offsetSBT + (geom_index * trace.strideSBT);
+    frame.triggerRaytrace(kind, index, payload, as);
+}
+
+bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
     bool inc_pc = true;
     bool blocked = false;
     Frame& frame = *frame_stack.back();
@@ -102,16 +114,25 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
     // Pops the current frame and returns whether there are any more frames after
     auto pop_frame = [&frame_stack]() {
+        // If the frame before is a raytracing launch, don't delete the frame's data
+        bool pop_to_rt = false;
+        if (frame_stack.size() > 1) {
+            const Frame* prev = frame_stack[frame_stack.size() - 2];
+            if (prev->getRtTrigger() != RtStageKind::NONE) {
+                frame_stack.back()->removeData();
+                pop_to_rt = true;
+            }
+        }
         delete frame_stack.back();
         frame_stack.pop_back();
-        return !frame_stack.empty();
+        return !(pop_to_rt || frame_stack.empty());
     };
 
     Value* dst_val = nullptr;
     switch (opcode) {
     default:
         // fall back on the makeResult function (no fallback should use location!)
-        if (!makeResult(data, 0, nullptr, extra_data)) {
+        if (!makeResult(data, 0, nullptr)) {
             std::stringstream err;
             err << "Unsupported instruction execution (" << spv::OpToString(opcode) << ")!";
             throw std::runtime_error(err.str());
@@ -290,9 +311,11 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     }
     case spv::OpIgnoreIntersectionKHR: // 4448
     case spv::OpTerminateRayKHR: { // 4449
+        /*
         assert(extra_data != nullptr);
         bool* ignore_intersection = static_cast<bool*>(extra_data);
         *ignore_intersection = (opcode == spv::OpIgnoreIntersectionKHR);
+        */
         [[fallthrough]];
     }
     case spv::OpReturn: // 253
@@ -318,160 +341,121 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     case spv::OpTraceRayKHR: { // 4445
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(0, data));
 
-        // This is the first time hitting this instruction. When it is complete, it will set trigger to none again.
-        if (frame.getRtTrigger() == RayTraceSubstage::NONE) {
-            const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
-            const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
-            const unsigned offset_sbt = static_cast<Primitive&>(*getValue(3, data)).data.u32;
-            const unsigned stride_sbt = static_cast<Primitive&>(*getValue(4, data)).data.u32;
-            const unsigned miss_index = static_cast<Primitive&>(*getValue(5, data)).data.u32;
+        // We use the trigger to keep track of rt stage:
+        // 1) NONE: first appearance at the instruction
+        // 2) INTERSECTION: returned after intersection (which itself may have invoked any hit)
+        // 3) CLOSEST or MISS: return after processing the chosen hit/miss
+        auto prev_stage = frame.getRtTrigger();
+        if (prev_stage != RtStageKind::MISS && prev_stage != RtStageKind::CLOSEST) {
+            if (prev_stage == RtStageKind::NONE) {
+                const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
+                const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
+                const unsigned offset_sbt = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+                const unsigned stride_sbt = static_cast<Primitive&>(*getValue(4, data)).data.u32;
+                const unsigned miss_index = static_cast<Primitive&>(*getValue(5, data)).data.u32;
 
-            std::vector<float> ray_origin = Statics::extractVec(getValue(6, data), "ray_origin", 3);
-            std::vector<float> ray_direction = Statics::extractVec(getValue(8, data), "ray_direction", 3);
+                std::vector<float> ray_origin = Statics::extractVec(getValue(6, data), "ray_origin", 3);
+                std::vector<float> ray_direction = Statics::extractVec(getValue(8, data), "ray_direction", 3);
 
-            const float ray_t_min = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
-            const float ray_t_max = static_cast<Primitive&>(*getValue(9, data)).data.fp32;
+                const float ray_t_min = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
+                const float ray_t_max = static_cast<Primitive&>(*getValue(9, data)).data.fp32;
 
-            // Run it through our implementation of a ray tracing pipeline
-            as.initTrace(
-                ray_flags,
-                cull_mask & 0xFF,  // Only the 8 least-significant bits of Cull Mask are used
-                ray_origin,
-                ray_direction,
-                ray_t_min,
-                ray_t_max,
-                true,
-                offset_sbt & 0xF,    // Only the 4 least-significant bits of SBT Offset are used
-                stride_sbt & 0xF,    // Only the 4 least-significant bits of SBT Stride are used
-                miss_index & 0xFFFF  // Only the 16 least-significant bits of Miss Index are used
-            );
-        } else {
-            // This is at least the second iteration- handle the result of the substage
+                // Run it through our implementation of a ray tracing pipeline
+                as.initTrace(
+                    ray_flags,
+                    cull_mask & 0xFF,  // Only the 8 least-significant bits of Cull Mask are used
+                    ray_origin,
+                    ray_direction,
+                    ray_t_min,
+                    ray_t_max,
+                    true,
+                    offset_sbt & 0xF,    // Only the 4 least-significant bits of SBT Offset are used
+                    stride_sbt & 0xF,    // Only the 4 least-significant bits of SBT Stride are used
+                    miss_index & 0xFFFF  // Only the 16 least-significant bits of Miss Index are used
+                );
+            } else {
+                // handle the result of the intersection shader
 
-        }
+            }
 
-        auto payload = getFromPointer(10, data);
-        // Return whether at least one intersection was made
-        Ternary status = as.traceRay(frame.getRtTrigger() != RayTraceSubstage::NONE);
-        if (status == Ternary::MAYBE) {
-            // We need to launch a substage here
-            // hit = instance_sbt_offset + sbt_offset + (geometry_index * sbt_stride)
-            frame.triggerRaytrace(RayTraceSubstage::INTERSECTION, 0);
-            inc_pc = false;
-            break;
-        }
-        bool intersect_once = status == Ternary::YES;
-        // This is the final iteration of this instruction
-        frame.triggerRaytrace(RayTraceSubstage::NONE, 0);
+            // Return whether at least one intersection was made
+            Ternary status = as.traceRay(frame.getRtTrigger() != RtStageKind::NONE);
+            if (status == Ternary::MAYBE) {
+                // We need to launch a substage here
+                invokeSubstageShader(frame, as, new Primitive(false), RtStageKind::INTERSECTION);
+                inc_pc = false;
+                break;
+            }
 
-        // Payload will either be filled with whether the trace intersected a geometry (a boolean)
-        // or the user-defined payload output.
+            // Payload should either be filled with whether the trace intersected a geometry (a boolean)
+            // or the user-defined payload output.
+            Variable* payload_var = getVariable(10, data);
+            Value* payload = payload_var->getVal();
 
-        // Do not invoke any shaders if a shader binding table was not specified
-        bool used_sbt = false;
-        const Trace& trace = as.getTrace();
-        if (trace.useSBT) {
-            // Otherwise, invoke either the closest hit or miss shaders
-            //SBTShaderOutput outputs;
-            if (trace.hasCommitted()) {
-                // Closest hit
-                if (!trace.rayFlags.skipClosestHitShader()) {
-                    //const int geometry_index = getIntersectionGeometryIndex(true);
-                    //const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(true);
-                    /*
-                    const Program* shader = shaderBindingTable.getHitShader(
-                        sbt_offset, sbt_stride, geometry_index, instance_sbt_offset, HitGroupType::Closest
-                    );
-                    if (shader != nullptr) {
+            // Do not invoke any shaders if a shader binding table was not specified
+            bool used_sbt = false;
+            const Trace& trace = as.getTrace();
+            if (trace.useSBT) {
+                // Otherwise, invoke either the closest hit or miss shaders
+                if (trace.hasCommitted()) {
+                    // Closest hit
+                    if (!trace.rayFlags.skipClosestHitShader()) {
+                        invokeSubstageShader(frame, as, payload, RtStageKind::CLOSEST);
                         used_sbt = true;
-                        ValueMap inputs = getNewShaderInputs(*shader, true, payload);
-                        outputs = shaderBindingTable.executeHit(
-                            inputs,
-                            sbt_offset,
-                            sbt_stride,
-                            geometry_index,
-                            instance_sbt_offset,
-                            HitGroupType::Closest
-                        );
                     }
-                    */
+                } else {
+                    // Miss
+                    invokeSubstageShader(frame, as, payload, RtStageKind::MISS);
+                    used_sbt = true;
+                }
+            }
+
+            // If the expected shader was missing from the SBT or if we shouldn't use the SBT, fill in default
+            if (!used_sbt) {
+                bool intersect_once = status == Ternary::YES;
+                std::stack<Value*> frontier;
+                frontier.push(payload);
+
+                while (!frontier.empty()) {
+                    Value* curr = frontier.top();
+                    frontier.pop();
+
+                    switch (curr->getType().getBase()) {
+                    default: {
+                        std::stringstream err;
+                        err << "Cannot fill data of unsupported payload type: " << curr->getType().getBase();
+                        throw std::runtime_error(err.str());
+                    }
+                    case DataType::FLOAT:
+                    case DataType::UINT:
+                    case DataType::INT: {
+                        Primitive& val = static_cast<Primitive&>(*curr);
+                        val.copyFrom(Primitive(intersect_once? 1: 0));
+                        break;
+                    }
+                    case DataType::BOOL: {
+                        Primitive& val = static_cast<Primitive&>(*curr);
+                        val.copyFrom(Primitive(intersect_once));
+                        break;
+                    }
+                    case DataType::ARRAY:
+                    case DataType::STRUCT: {
+                        for (auto it : static_cast<const Aggregate&>(*curr))
+                            frontier.push(it);
+                        break;
+                    }
+                    }
                 }
             } else {
-                // Miss
-                /*
-                const Program* shader = shaderBindingTable.getMissShader(miss_index);
-                if (shader != nullptr) {
-                    used_sbt = true;
-                    ValueMap inputs = getNewShaderInputs(*shader, true, payload);
-                    outputs = shaderBindingTable.executeMiss(inputs, miss_index);
-                }
-                */
+                inc_pc = false;
+                break;  // break to launch next substage
             }
-
-            /*if (used_sbt) {
-                // Get the payload from the output
-                const Value* incoming_payload = nullptr;
-                for (const auto& [name, info] : outputs) {
-                    const auto value = get<0>(info);
-                    const auto storage_class = get<1>(info);
-                    if (storage_class == spv::StorageClass::StorageClassIncomingRayPayloadKHR)
-                        incoming_payload = value;
-                }
-                if (incoming_payload == nullptr)
-                    throw std::runtime_error("Could not find the payload from a closest-hit / miss shader!");
-
-                // Update the payload
-                if (!(payload->getType().sameBase(incoming_payload->getType())))
-                    throw std::runtime_error("Incoming payload type does not match payload type!");
-                payload->copyFrom(*incoming_payload);
-                assert(payload->equals(*incoming_payload));
-            }*/
+        } else {
+            // Handle the result of the closest or miss shader
+            // Payload should already be copied into the substage's result, and since we loaded it as a reference to the
+            // variable's value, the copy should have done our work for us.
         }
-
-        // If the expected shader was missing from the SBT or if we shouldn't use the SBT, fill in default
-        if (!used_sbt) {
-            std::stack<Value*> frontier;
-            frontier.push(payload);
-
-            while (!frontier.empty()) {
-                Value* curr = frontier.top();
-                frontier.pop();
-
-                switch (curr->getType().getBase()) {
-                default: {
-                    std::stringstream err;
-                    err << "Cannot fill data of unsupported payload type: " << curr->getType().getBase();
-                    throw std::runtime_error(err.str());
-                }
-                case DataType::FLOAT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<float>(intersect_once)));
-                    break;
-                }
-                case DataType::UINT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<unsigned>(intersect_once)));
-                    break;
-                }
-                case DataType::INT: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(static_cast<int>(intersect_once)));
-                    break;
-                }
-                case DataType::BOOL: {
-                    Primitive& val = static_cast<Primitive&>(*curr);
-                    val.copyFrom(Primitive(intersect_once));
-                    break;
-                }
-                case DataType::ARRAY:
-                case DataType::STRUCT: {
-                    for (auto it : static_cast<const Aggregate&>(*curr))
-                        frontier.push(it);
-                    break;
-                }
-                }
-            }
-        }
+        frame.disableRaytrace();
         break;
     }
     case spv::OpExecuteCallableKHR: { // 4446
@@ -518,12 +502,52 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     case spv::OpRayQueryProceedKHR: { // 4477
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         AccelStruct& as = ray_query.getAccelStruct();
-        Ternary status = as.stepTrace();
-        // TODO HERE
-        const Trace& trace = as.getTrace();
-        if (status == Ternary::YES && trace.rayFlags.terminateOnFirstHit())
+
+        Ternary status = Ternary::NO;
+        if (frame.getRtTrigger() == RtStageKind::NONE) {
+            status = as.stepTrace();
+        } else {
+            // Handle the result of the previous stage (should only ever be intersection)
+            // status =
+            frame.disableRaytrace();
+        }
+
+        if (status == Ternary::MAYBE) {
+            invokeSubstageShader(frame, as, new Primitive(false), RtStageKind::INTERSECTION);
+            inc_pc = false;
+            break;
+        }
+
+        if (status == Ternary::YES && as.getTrace().rayFlags.terminateOnFirstHit())
             as.terminate();
-        data[result_at].redefine(new Primitive(status == Ternary::YES));
+
+        dst_val = new Primitive(status == Ternary::YES);
+        break;
+    }
+    case spv::OpReportIntersectionKHR: { // 5334
+        const float t_hit = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
+        const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+
+        // Get necessary data from the ray tracing pipeline if it exist
+        AccelStruct* accel_struct = nullptr;
+        //if (extra_data != nullptr)
+        //    accel_struct = static_cast<AccelStruct*>(extra_data);
+
+        bool result = false;
+        if (accel_struct == nullptr) {
+            // Execute this if testing a single intersection shader: Assume range is [0.0, infinity)
+            result = t_hit > 0.0f;
+        } else {
+            // Execute if running a ray tracing pipeline
+            result = accel_struct->isIntersectionValid(t_hit);
+            // TODO invoke any hit shader here
+            //if (result)
+            //    result = accel_struct->invokeAnyHitShader(t_hit, hit_kind);
+        }
+
+        dst_val = getType(0, data)->construct();
+        Primitive prim(result);
+        dst_val->copyFrom(prim);
         break;
     }
     }

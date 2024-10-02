@@ -466,7 +466,7 @@ public:
                                 if (!lfound.has_value())
                                     break;
                                 line_print = *lfound;
-                                if (num_tokens > 2) {
+                                if (num_tokens > 3) {
                                     auto xfound = from(tokens[3]);
                                     if (!xfound.has_value())
                                         break;

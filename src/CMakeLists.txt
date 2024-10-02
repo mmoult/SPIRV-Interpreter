@@ -22,6 +22,7 @@ target_sources(spv-interp
       spv/instruction.cxx
       spv/program.cxx
       spv/ray-flags.cxx
+      spv/ray-substage.cxx
       spv/token.cxx
       util/compare.cxx
       util/intersection.cxx

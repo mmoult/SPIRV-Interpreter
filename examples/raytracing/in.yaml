@@ -114,11 +114,11 @@ accelerationStructure:
     - { shader: "./shaders/miss_shadow.spv", input: "" }
     hit_group_records:
     -
-        any: { shader: "./shaders/wall_rahit.spv", input: "./inputs/wall_rahit-in.json" }
-        closest: { shader: "./shaders/wall_rchit.spv", input: "./inputs/wall_rchit-in.json" }
+        any: { shader: "./shaders/wall_rahit.spv", input: "" }
+        closest: { shader: "./shaders/wall_rchit.spv", input: "" }
         intersection: { shader: "", input: "" }
     -
         any: { shader: "./shaders/sphere_rahit.spv", input: "" }
         closest: { shader: "./shaders/sphere_rchit.spv", input: "" }
-        intersection: { shader: "./shaders/sphere_intersection.spv", input: "./inputs/sphere_intersection-in.json" }
+        intersection: { shader: "./shaders/sphere_intersection.spv", input: "./sphere_info-in.json" }
     callable_records: []

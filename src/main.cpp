@@ -16,6 +16,7 @@ import format.yaml;
 import front.argparse;
 import front.console;
 import spv.program;
+import spv.raySubstage;
 import value.raytrace.shaderBindingTable;
 
 constexpr auto VERSION = "0.8.0";
@@ -108,7 +109,7 @@ ReturnCode handle_record(
     Program& program,
     const ShaderRecord& record,
     ValueFormat* preference,
-    RaytraceSubstage& stage
+    RayTraceSubstage& stage
 ) {
     parse_spv(program, record.shaderSource);
     if (!record.extraInput.empty()) {
@@ -126,21 +127,24 @@ ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueF
 
     bool present = false;
 #define CHECK_INPUT(TEST, STAGE) \
-if (TEST.extraInput.empty()) { \
-    std::cerr << "Shader binding hit record may not specify input, \"" << TEST.extraInput; \
-    std::cerr << "\" without a corresponding shader!" << std::endl; \
-    return ReturnCode::BAD_PROG_INPUT; \
+if (TEST.shaderSource.empty()) { \
+    if (!TEST.extraInput.empty()) { \
+        std::cerr << "Shader binding hit record may not specify input, \"" << TEST.extraInput; \
+        std::cerr << "\" without a corresponding shader!" << std::endl; \
+        return ReturnCode::BAD_PROG_INPUT; \
+    } \
 } else { \
     present = true; \
-    handle_record(program, TEST, preference, STAGE); \
+    if (auto ret = handle_record(program, TEST, preference, STAGE); ret != ReturnCode::OK) \
+        return ret; \
 }
     // Note, we must create records even if the shader is empty because that is how we keep the groups aligned in a
     // single list (by 3's, where any, closest, intersection).
-    RaytraceSubstage& any = program.nextHitRecord();
+    RayTraceSubstage& any = program.nextHitRecord();
     CHECK_INPUT(hit.any, any);
-    RaytraceSubstage& closest = program.nextHitRecord();
+    RayTraceSubstage& closest = program.nextHitRecord();
     CHECK_INPUT(hit.closest, closest);
-    RaytraceSubstage& intersection = program.nextHitRecord();
+    RayTraceSubstage& intersection = program.nextHitRecord();
     CHECK_INPUT(hit.intersection, intersection);
 #undef CHECK_INPUT
 
