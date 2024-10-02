@@ -60,120 +60,6 @@ private:
 private:
     // TODO: handle the effects of winding order on intersections; currently, front face is CCW
 
-    /*
-    /// @brief Get populated shader inputs for the next shader in the ray tracing pipeline.
-    /// @param shader provides the inputs to populate.
-    /// @param get_committed whether to get the inputs of a candidate or committed intersection.
-    /// @param payload used to populate a shader input.
-    /// @return populated inputs that the respective shader can use.
-    ValueMap getNewShaderInputs(const Program& shader, bool get_committed, const Value* payload) const {
-        ValueMap result = shader.getInputs();
-
-        // Handle built-ins
-        for (const auto& [name, built_in] : shader.getBuiltIns()) {
-            switch (built_in) {
-            default:
-                break;
-            case spv::BuiltInObjectRayOriginKHR:  // 5323
-            case spv::BuiltInObjectRayDirectionKHR:  // 5324
-            case spv::BuiltIn::BuiltInObjectToWorldKHR:
-            case spv::BuiltIn::BuiltInWorldToObjectKHR:
-            case spv::BuiltIn::BuiltInHitKindKHR:
-            case spv::BuiltIn::BuiltInIncomingRayFlagsKHR:
-            case spv::BuiltIn::BuiltInRayGeometryIndexKHR:
-                throw std::runtime_error("Unimplemented builtin!");
-                break;
-            case spv::BuiltIn::BuiltInWorldRayOriginKHR: {  // 5321
-                Array* new_val = new Array(Type::primitive(DataType::FLOAT), 3);
-                Primitive x(rayOrigin.x);
-                Primitive y(rayOrigin.y);
-                Primitive z(rayOrigin.z);
-                std::vector<const Value*> world_ray_origin;
-                world_ray_origin.push_back(&x);
-                world_ray_origin.push_back(&y);
-                world_ray_origin.push_back(&z);
-                new_val->addElements(world_ray_origin);
-                result[name] = new_val;
-                break;
-            }
-            case spv::BuiltIn::BuiltInWorldRayDirectionKHR: {  // 5322
-                Array* new_val = new Array(Type::primitive(DataType::FLOAT), 3);
-                Primitive x(rayDirection.x);
-                Primitive y(rayDirection.y);
-                Primitive z(rayDirection.z);
-                std::vector<const Value*> world_ray_direction;
-                world_ray_direction.push_back(&x);
-                world_ray_direction.push_back(&y);
-                world_ray_direction.push_back(&z);
-                new_val->addElements(world_ray_direction);
-                result[name] = new_val;
-                break;
-            }
-            case spv::BuiltIn::BuiltInRayTminKHR:  // 5325
-                result[name] = new Primitive(rayTMin);
-                break;
-            case spv::BuiltIn::BuiltInRayTmaxKHR:  // 5326
-                result[name] = new Primitive(rayTMax);
-                break;
-            case spv::BuiltIn::BuiltInInstanceCustomIndexKHR:  // 5327
-                result[name] = new Primitive(getIntersectionInstanceCustomIndex(get_committed));
-                break;
-            }
-        }
-
-        // Handle storage classes
-        for (const auto& [name, storage_class] : shader.getStorageClasses()) {
-            switch (storage_class) {
-            default:
-                break;
-            case spv::StorageClass::StorageClassCallableDataKHR: {  // 5328
-                throw std::runtime_error("StorageClassCallableDataKHR not implemented!");
-            }
-            case spv::StorageClass::StorageClassIncomingCallableDataKHR: {  // 5329
-                throw std::runtime_error("StorageClassIncomingCallableDataKHR not implemented!");
-            }
-            case spv::StorageClass::StorageClassRayPayloadKHR: {  // 5338
-                // TODO: probably not necessary to handle this case, but will leave this comment
-                // in the case this storage class could be the problem.
-                break;
-            }
-            case spv::StorageClass::StorageClassHitAttributeKHR: {  // 5339
-                if (committedIntersection.properties.hitAttribute != nullptr) {
-                    const Value* hit = committedIntersection.properties.hitAttribute;
-                    assert(hit->getType().getBase() == DataType::ARRAY);
-                    const Array& hit_array = static_cast<const Array&>(*hit);
-                    for (unsigned a = 0; a < hit_array.getSize(); ++a)
-                        const Primitive& val = static_cast<const Primitive&>(*(hit_array[a]));
-                    result[name] = committedIntersection.properties.hitAttribute;
-                }
-                break;
-            }
-            case spv::StorageClass::StorageClassIncomingRayPayloadKHR: {  // 5342
-                if (payload == nullptr)
-                    throw std::runtime_error("Trying to fill an incoming payload but it doesn't exist!");
-                if (!(payload->getType().sameBase((result[name])->getType()))) {
-                    std::stringstream err;
-                    err << "Trying to fill an incoming payload but the input and payload types do not match (<payload "
-                           "type> != <input type>): ";
-                    err << payload->getType().getBase() << " != " << (result[name])->getType().getBase();
-                    throw std::runtime_error(err.str());
-                }
-                Value* incoming_payload = payload->getType().construct();
-                incoming_payload->copyFrom(*payload);
-                result[name] = incoming_payload;
-                break;
-            }
-            }
-            // Note: case shader record buffer is handled in shader binding table execution.
-        }
-
-        // Any acceleration structure input is handled in SBT class when executing.
-        // Same goes for any data tied to a shader record (shader record buffer).
-
-        return result;
-    }
-    */
-
     static glm::mat4x3 removeLastRow(glm::mat4 mat) {
         glm::mat4x3 ret;
         for (unsigned i = 0; i < 4; ++i) {
@@ -253,7 +139,7 @@ public:
         trace.rayOrigin = glm::vec3(ray_origin[0], ray_origin[1], ray_origin[2]);
         trace.rayDirection = glm::vec3(ray_direction[0], ray_direction[1], ray_direction[2]);
 
-        trace.useSBT = use_sbt;
+        trace.useSBT = use_sbt && !shaderBindingTable.isEmpty();
         trace.offsetSBT = offset_sbt;
         trace.strideSBT = stride_sbt;
         trace.missIndex = miss_index;
@@ -329,44 +215,6 @@ public:
     bool isIntersectionValid(const float t_hit) {
         return (t_hit >= trace.rayTMin) && (t_hit <= trace.rayTMax);
     }
-
-    /*
-    /// @brief Invokes the any-hit shader.
-    /// @param t_hit distance from the ray to the intersection.
-    /// @param hit_kind object kind that was intersected.
-    /// @return whether to accept the intersection.
-    bool invokeAnyHitShader(const float t_hit, const unsigned hit_kind) {
-        const int geometry_index = getIntersectionGeometryIndex(false);
-        const unsigned instance_sbt_offset = getIntersectionInstanceShaderBindingTableRecordOffset(false);
-        bool ignore_intersection = false;
-        const Program* shader = shaderBindingTable.getHitShader(
-            offsetSBT, strideSBT, geometry_index, instance_sbt_offset, HitGroupType::Any
-        );
-        if (shader != nullptr) {
-            ValueMap inputs = getNewShaderInputs(*shader, true, nullptr);
-            SBTShaderOutput outputs = shaderBindingTable.executeHit(
-                inputs,
-                offsetSBT,
-                strideSBT,
-                geometry_index,
-                instance_sbt_offset,
-                HitGroupType::Any,
-                static_cast<void*>(&ignore_intersection)
-            );
-        }
-
-        if (ignore_intersection) {
-            //intersectedProcedural = false;
-            return false;
-        }
-
-        // Otherwise, update respective properties
-        candidateIntersection.properties.hitT = t_hit;
-        candidateIntersection.properties.hitKind = hit_kind;
-
-        return true;
-    }
-    */
 
     /// @brief Include the current AABB/procedural intersection in determining the closest hit.
     /// The candidate intersection must be of type AABB.
@@ -532,6 +380,9 @@ public:
 
     const Trace& getTrace() const {
         return trace;
+    }
+    Intersection& getCandidate() {
+        return trace.getCandidate();
     }
 
     void terminate() {

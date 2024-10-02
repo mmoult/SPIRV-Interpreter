@@ -34,7 +34,6 @@ struct Intersection {
     bool isOpaque = true;
     bool enteredTriangleFrontFace = false;
     unsigned hitKind = std::numeric_limits<unsigned>::max();
-    const Value* hitAttribute = nullptr;
 
     glm::vec3 getRayPos(const Trace* trace) const;
     glm::vec3 getRayDir(const Trace* trace) const;

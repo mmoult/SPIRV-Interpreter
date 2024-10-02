@@ -118,6 +118,7 @@ ReturnCode handle_record(
             return ret;
     }
     stage.data = program.getDataManager().makeView();
+    // Should delete the view after the record is done, but since it exists until main is exited, don't bother
     program.initRaytrace(stage);
     return ReturnCode::OK;
 }
@@ -204,6 +205,13 @@ int main(int argc, char* argv[]) {
     );
     ArgParse::Flag verbose;
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
+    ArgParse::Flag rt_template;
+    parser.addOption(
+        &rt_template,
+        "raytrace",
+        "Treat the input as a ray tracing substage when creating an input template. Enables --template implicitly.",
+        "r"
+    );
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
     ArgParse::StringOption template_arg("FILE");
@@ -269,7 +277,7 @@ int main(int argc, char* argv[]) {
     // Peform the rest of the option actions
     if (debug.enabled)
         verbose.enabled = true;
-    if (generate.enabled && !template_arg.hasValue())
+    if ((generate.enabled || rt_template.enabled) && !template_arg.hasValue())
         template_arg.setValue("-");
 
     ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
@@ -309,8 +317,16 @@ if (ret != ReturnCode::OK) \
         }
     }
 
+    RayTraceSubstage dummy;
     try {
-        program.init(inputs);
+        if (!rt_template.enabled)
+            program.init(inputs);
+        else {
+            auto& manager = program.getDataManager();
+            dummy.data = &manager.getGlobal();
+            dummy.inputs = inputs;
+            program.initRaytrace(dummy);
+        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROGRAM;
@@ -319,12 +335,13 @@ if (ret != ReturnCode::OK) \
     if (template_arg.isPresent()) {
         std::string itemplate = template_arg.getValue();
         // Print out needed variables to file specified
-        std::stringstream ss;
-        auto prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
         if (indent_arg.isPresent())
             format2->setIndentSize(indent_arg.getValue());
         format2->setTemplate(!generate.enabled);
+
+        std::stringstream ss;
+        auto prog_ins = (!rt_template.enabled)? program.getInputs() : dummy.getInputs();
         format2->printFile(ss, prog_ins);
 
         if (itemplate == "-") {

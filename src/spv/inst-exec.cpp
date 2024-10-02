@@ -33,71 +33,20 @@ import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
 import value.statics;
 
-void thing() {
-    /*//////////////////////////////////
-    candidateIntersection.properties.instance = std::static_pointer_cast<InstanceNode>(*curr_node_ref);
-
-    // Run the intersection shader if the intersection was with a procedural node.
-    // Running the shader here because we need the instance SBT offset for calculating the index.
-    if (useSBT) {
-        intersectedProcedural = true;
-        const int geometry_index = getIntersectionGeometryIndex(false);
-        const unsigned instance_sbt_offset =
-            getIntersectionInstanceShaderBindingTableRecordOffset(false);
-        //
-        const Program* shader = shaderBindingTable.getHitShader(
-            offsetSBT,
-            strideSBT,
-            geometry_index,
-            instance_sbt_offset,
-            HitGroupType::Intersection
-        );
-        if (shader != nullptr) {
-            ValueMap inputs = getNewShaderInputs(*shader, true, nullptr);
-            SBTShaderOutput outputs = shaderBindingTable.executeHit(
-                inputs,
-                offsetSBT,
-                strideSBT,
-                geometry_index,
-                instance_sbt_offset,
-                HitGroupType::Intersection
-            );
-
-            // If it fails the intersection, then cancel it.
-            // Note: variable <intersectedProcedural> will be modified when invoking intersection and
-            // any-hit shaders.
-            const bool missed = !intersectedProcedural;
-            if (missed) {
-                found = false;
-                candidateIntersection.update(false, IntersectionProperties {});
-                break;
-            }
-
-            // Otherwise, store the hit attribute for later use.
-            for (const auto& [name, info] : outputs) {
-                const auto value = get<0>(info);
-                const auto storage_class = get<1>(info);
-                if (storage_class == spv::StorageClass::StorageClassHitAttributeKHR) {
-                    Value* hit_attribute = value->getType().construct();
-                    hit_attribute->copyFrom(*value);
-                    candidateIntersection.properties.hitAttribute = hit_attribute;
-                }
-            }
-        }
-    }
-    *////////////////////////////
-}
-
-void invokeSubstageShader(Frame& frame, AccelStruct& as, Value* payload, RtStageKind kind) {
+void invokeSubstageShader(Frame& frame, AccelStruct& as, Value* payload, Value* hit_attrib, RtStageKind kind) {
     const Trace& trace = as.getTrace();
-    auto& candidate = trace.getCandidate();
-    int geom_index = candidate.geometryIndex;
+    int geom_index = 0;
     unsigned instance_sbt_offset = 0;
-    if (candidate.instance != nullptr)
-        instance_sbt_offset = candidate.instance->getSbtRecordOffs();
-    // index = instance_sbt_offset + sbt_offset + (geometry_index * sbt_stride)
+    if (kind != RtStageKind::MISS) {
+        auto& candidate = trace.getCandidate();
+        geom_index = candidate.geometryIndex;
+        if (candidate.instance != nullptr)
+            instance_sbt_offset = candidate.instance->getSbtRecordOffs();
+    } else
+        instance_sbt_offset = trace.missIndex;
+
     unsigned index = instance_sbt_offset + trace.offsetSBT + (geom_index * trace.strideSBT);
-    frame.triggerRaytrace(kind, index, payload, as);
+    frame.triggerRaytrace(kind, index, payload, hit_attrib, as);
 }
 
 bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
@@ -126,6 +75,11 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         delete frame_stack.back();
         frame_stack.pop_back();
         return !(pop_to_rt || frame_stack.empty());
+    };
+    auto terminate_invocation = [&]() {
+        while (pop_frame())
+            ;
+        inc_pc = false;
     };
 
     Value* dst_val = nullptr;
@@ -304,19 +258,8 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     case spv::OpKill: // 252
     case spv::OpTerminateInvocation: { // 4416
         // Completely stops execution
-        while (pop_frame())
-            ;
-        inc_pc = false;
+        terminate_invocation();
         break;
-    }
-    case spv::OpIgnoreIntersectionKHR: // 4448
-    case spv::OpTerminateRayKHR: { // 4449
-        /*
-        assert(extra_data != nullptr);
-        bool* ignore_intersection = static_cast<bool*>(extra_data);
-        *ignore_intersection = (opcode == spv::OpIgnoreIntersectionKHR);
-        */
-        [[fallthrough]];
     }
     case spv::OpReturn: // 253
         // verify that the stack didn't expect a return value
@@ -347,6 +290,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // 3) CLOSEST or MISS: return after processing the chosen hit/miss
         auto prev_stage = frame.getRtTrigger();
         if (prev_stage != RtStageKind::MISS && prev_stage != RtStageKind::CLOSEST) {
+            Value* hit_attrib = nullptr;
             if (prev_stage == RtStageKind::NONE) {
                 const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
                 const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
@@ -375,14 +319,20 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                 );
             } else {
                 // handle the result of the intersection shader
-
+                hit_attrib = frame.getHitAttribute();
+                Primitive* intersected = static_cast<Primitive*>(frame.getRtResult());
+                // In the case of a failed intersection, we will not resume trace (since it failed, there is nothing to
+                // resume). In case of a hit, then we want to analyze the hit in traceRay.
+                if (!intersected->data.b32)
+                    frame.disableRaytrace();
+                delete intersected;
             }
 
             // Return whether at least one intersection was made
             Ternary status = as.traceRay(frame.getRtTrigger() != RtStageKind::NONE);
             if (status == Ternary::MAYBE) {
                 // We need to launch a substage here
-                invokeSubstageShader(frame, as, new Primitive(false), RtStageKind::INTERSECTION);
+                invokeSubstageShader(frame, as, new Primitive(false), nullptr, RtStageKind::INTERSECTION);
                 inc_pc = false;
                 break;
             }
@@ -400,15 +350,17 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                 if (trace.hasCommitted()) {
                     // Closest hit
                     if (!trace.rayFlags.skipClosestHitShader()) {
-                        invokeSubstageShader(frame, as, payload, RtStageKind::CLOSEST);
+                        invokeSubstageShader(frame, as, payload, hit_attrib, RtStageKind::CLOSEST);
                         used_sbt = true;
                     }
                 } else {
                     // Miss
-                    invokeSubstageShader(frame, as, payload, RtStageKind::MISS);
+                    invokeSubstageShader(frame, as, payload, nullptr, RtStageKind::MISS);
                     used_sbt = true;
                 }
             }
+            if (hit_attrib != nullptr)
+                delete hit_attrib;
 
             // If the expected shader was missing from the SBT or if we shouldn't use the SBT, fill in default
             if (!used_sbt) {
@@ -458,13 +410,41 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         frame.disableRaytrace();
         break;
     }
-    case spv::OpExecuteCallableKHR: { // 4446
+    //case spv::OpExecuteCallableKHR: { // 4446
         // TODO: implement callable shader execution
-        const unsigned index_sbt = static_cast<Primitive&>(*getValue(0, data)).data.u32;
-        const auto shader_args = getFromPointer(1, data);
-        std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
-        std::cout << "Invoking callable shader at SBT index = (" << index_sbt << ") with argument of type ("
-                  << shader_args->getType().getBase() << ")" << std::endl;
+        //const unsigned index_sbt = static_cast<Primitive&>(*getValue(0, data)).data.u32;
+        //const auto shader_args = getFromPointer(1, data);
+        //std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
+        //std::cout << "Invoking callable shader at SBT index = (" << index_sbt << ") with argument of type ("
+        //          << shader_args->getType().getBase() << ")" << std::endl;
+        //break;
+    //}
+    case spv::OpIgnoreIntersectionKHR: // 4448
+    case spv::OpTerminateRayKHR: { // 4449
+        // OpIgnoreIntersectionKHR: ignores/rejects this potential intersection. Continues intersection searching above
+        // OpTerminateRayKHR: Accepts the potential intersection and stops searching above
+        // The two are nearly identical. The only difference is which field in the result is changed.
+        unsigned field = opcode == spv::OpIgnoreIntersectionKHR? 0 : 1;
+
+        // First, we have to get the launching frame. It should be the most recent frame with an rt trigger
+        bool found = false;
+        unsigned launch_at = frame_stack.size() - 1;  // can skip current frame since it couldn't launch itself
+        while (launch_at-- > 0) {
+            if (auto trigger = frame_stack[launch_at]->getRtTrigger(); trigger != RtStageKind::NONE) {
+                assert(trigger == RtStageKind::ANY_HIT);
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            Value* result = frame_stack[launch_at]->getRtResult();
+            assert(result != nullptr);
+            Array& arr = static_cast<Array&>(*result);
+            Primitive& to_change = static_cast<Primitive&>(*arr[field]);
+            Primitive no(false);
+            to_change.copyFrom(no);
+        }
+        terminate_invocation();
         break;
     }
     case spv::OpRayQueryInitializeKHR: { // 4473
@@ -506,16 +486,20 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         Ternary status = Ternary::NO;
         if (frame.getRtTrigger() == RtStageKind::NONE) {
             status = as.stepTrace();
+
+            if (status == Ternary::MAYBE) {
+                invokeSubstageShader(frame, as, new Primitive(false), nullptr, RtStageKind::INTERSECTION);
+                inc_pc = false;
+                break;
+            }
         } else {
             // Handle the result of the previous stage (should only ever be intersection)
-            // status =
+            Primitive* intersected = static_cast<Primitive*>(frame.getRtResult());
+            if (Value* hit_attrib = frame.getHitAttribute(); hit_attrib != nullptr)
+                delete hit_attrib;
+            status = intersected->data.b32? Ternary::YES : Ternary::NO;
+            delete intersected;
             frame.disableRaytrace();
-        }
-
-        if (status == Ternary::MAYBE) {
-            invokeSubstageShader(frame, as, new Primitive(false), RtStageKind::INTERSECTION);
-            inc_pc = false;
-            break;
         }
 
         if (status == Ternary::YES && as.getTrace().rayFlags.terminateOnFirstHit())
@@ -526,28 +510,59 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     }
     case spv::OpReportIntersectionKHR: { // 5334
         const float t_hit = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
-        const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
 
-        // Get necessary data from the ray tracing pipeline if it exist
-        AccelStruct* accel_struct = nullptr;
-        //if (extra_data != nullptr)
-        //    accel_struct = static_cast<AccelStruct*>(extra_data);
+        auto prev_stage = frame.getRtTrigger();
+        bool valid_intersect = false;
+        bool continue_search = true;
+        if (prev_stage == RtStageKind::NONE) {
+            // Get data from the ray tracing pipeline if it exists (won't exist if this is run in a dummy pipeline)
+            AccelStruct* accel_struct = frame.getAccelStruct();
 
-        bool result = false;
-        if (accel_struct == nullptr) {
-            // Execute this if testing a single intersection shader: Assume range is [0.0, infinity)
-            result = t_hit > 0.0f;
+            if (accel_struct == nullptr) {
+                // Execute this if testing a single intersection shader: Assume range is [0.0, infinity)
+                valid_intersect = t_hit > 0.0f;
+            } else if (accel_struct->isIntersectionValid(t_hit)) {
+                // Invoke the any hit shader if running a ray tracing pipeline
+                // The interface for an any hit shader is a little different, since it needs to report up:
+                // 1) whether the hit is a valid intersection: defaults to true, false if IgnoreHit used.
+                // 2) whether we should continue the search (the alternative being immediate exit from the intersect):
+                //    defaults to true, false if AcceptHitAndEndSearch used.
+                // We use bool[2] to represent this data
+                std::vector<Value*> payload_el{new Primitive(!valid_intersect), new Primitive(continue_search)};
+                Value* payload = new Array(payload_el);
+                invokeSubstageShader(frame, *accel_struct, payload, frame.getHitAttribute(), RtStageKind::ANY_HIT);
+                inc_pc = false;
+                break;
+            }
         } else {
-            // Execute if running a ray tracing pipeline
-            result = accel_struct->isIntersectionValid(t_hit);
-            // TODO invoke any hit shader here
-            //if (result)
-            //    result = accel_struct->invokeAnyHitShader(t_hit, hit_kind);
+            // We have returned from the any hit shader. Handle its results
+            Array& payload = static_cast<Array&>(*frame.getRtResult());
+            valid_intersect = static_cast<Primitive&>(*payload[0]).data.b32;
+            continue_search = static_cast<Primitive&>(*payload[1]).data.b32;
+
+            if (valid_intersect) {
+                AccelStruct& as = *frame.getAccelStruct();
+                const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+                Intersection& candidate = as.getCandidate();
+                candidate.hitKind = hit_kind;
+                candidate.hitT = t_hit;
+            }
+
+            Primitive* intersect_result = static_cast<Primitive*>(frame.getRtResult());
+            if (intersect_result != nullptr) {
+                Primitive prim(valid_intersect);
+                intersect_result->copyFrom(prim);
+            }
+            frame.disableRaytrace();
+            delete &payload;
         }
 
         dst_val = getType(0, data)->construct();
-        Primitive prim(result);
+        Primitive prim(valid_intersect);
         dst_val->copyFrom(prim);
+
+        if (!continue_search)
+            terminate_invocation();
         break;
     }
     }

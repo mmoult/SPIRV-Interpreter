@@ -36,6 +36,18 @@ export struct RayTraceSubstage {
     // Note: it is called "incoming" because the payload is input (and may be modified) before output.
     unsigned payload = 0;
     unsigned accelStruct = 0;
+    // The spec says there can only be one hit attribute variable (if any). Only writable in intersection, but readable
+    // in any-hit, closest-hit, intersection (although undefined before first write).
+    unsigned hitAttribute = 0;
+
+    ValueMap getVariables(const std::vector<unsigned>& vars) const {
+        ValueMap ret;
+        for (const auto v : vars) {
+            const auto var = (*data)[v].getVariable();
+            ret.emplace(var->getName(), var->getVal());
+        }
+        return ret;
+    }
 
 public:
     // entry location in instructions vector
@@ -84,14 +96,19 @@ public:
             accelStruct = loc;
             return true;
         }
-        if (var.getStorageClass() == spv::StorageClassIncomingRayPayloadKHR) {
+        spv::StorageClass storage = var.getStorageClass();
+        if (storage == spv::StorageClassIncomingRayPayloadKHR) {
             payload = loc;
+            return true;
+        } else if (storage == spv::StorageClassHitAttributeKHR) {
+            hitAttribute = loc;
             return true;
         }
         return false;
     }
 
-    void setUpInputs(AccelStruct& as, Value& payload) {
+    // may return the hit attribute if needed
+    [[nodiscard]] Value* setUpInputs(AccelStruct& as, Value& payload, Value* hit_attribute) {
         DataView& dat = *data;
         std::vector<Primitive> origin = as.getWorldRayOrigin();
         for (unsigned loc : worldRayOrigin) {
@@ -135,21 +152,54 @@ public:
             var->getVal()->copyFrom(as);
         }
         if (unsigned tpayload = this->payload; tpayload != 0) {
-            Variable* var = dat[tpayload].getVariable();
-            assert(var != nullptr);
-            var->getVal()->copyFrom(payload);
+            try {
+                Variable* var = dat[tpayload].getVariable();
+                assert(var != nullptr);
+                var->getVal()->copyFrom(payload);
+            } catch (const std::runtime_error& _) {
+                throw std::runtime_error("Cannot invoke raytracing substage with incorrect payload type!");
+            }
         }
+        if (hitAttribute != 0) {
+            if (hit_attribute == nullptr) {
+                // For intersection case, create the hit attribute
+                Variable* var = dat[hitAttribute].getVariable();
+                assert(var != nullptr);
+                return var->getVal()->getType().construct();
+            } else {
+                try {
+                    Variable* var = dat[hitAttribute].getVariable();
+                    assert(var != nullptr);
+                    var->getVal()->copyFrom(*hit_attribute);
+                } catch (const std::runtime_error& _) {
+                    throw std::runtime_error("Cannot invoke raytracing substage with incorrect hit attribute type!");
+                }
+            }
+        }
+        return nullptr;
     }
 
     void cleanUp(Frame& frame) {
         DataView& dat = *data;
         // Save from the frame rt result into the payload (as necessary)
-        if (frame.getRtTrigger() == RtStageKind::INTERSECTION) {
-            if (payload != 0) {
-                Variable* var = dat[payload].getVariable();
-                assert(var != nullptr);
-                frame.getRtResult()->copyFrom(*var->getVal());
-            }
+        auto stage = frame.getRtTrigger();
+        if ((stage == RtStageKind::CLOSEST || stage == RtStageKind::MISS) && payload != 0) {
+            Variable* var = dat[payload].getVariable();
+            assert(var != nullptr);
+            frame.getRtResult()->copyFrom(*var->getVal());
         }
+        // Save updates to the hit attribute (if present)
+        if (stage == RtStageKind::INTERSECTION && hitAttribute != 0) {
+            Variable* var = dat[hitAttribute].getVariable();
+            assert(var != nullptr);
+            frame.getHitAttribute()->copyFrom(*var->getVal());
+        }
+    }
+
+    ValueMap getInputs() const {
+        auto input_map = getVariables(ins);
+        auto spec_consts = getVariables(specs);
+        input_map.insert(spec_consts.begin(), spec_consts.end());
+        return input_map;
     }
 };

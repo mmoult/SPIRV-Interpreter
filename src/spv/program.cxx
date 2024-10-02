@@ -231,71 +231,65 @@ if (!(COND)) \
 
     RayTraceSubstage& getSubstage(RtStageKind stage, Frame& launched_from) {
         unsigned index = launched_from.getRtIndex();
-        RayTraceSubstage* rt_stage = nullptr;
+        unsigned updated = index;
+        std::vector<RayTraceSubstage>* list = nullptr;
         switch (stage) {
         default: // including NONE
-            assert(false);
+            throw std::runtime_error("Cannot get raytracing substage for unsupported type!");
             break;
-        // TODO add error messages if we try to go out of bounds
         case RtStageKind::ANY_HIT:
-            rt_stage = &hits[index * 3 + 0];
+            list = &hits;
+            updated = index * 3 + 0;
             break;
         case RtStageKind::CLOSEST:
-            rt_stage = &hits[index * 3 + 1];
+            list = &hits;
+            updated = index * 3 + 1;
             break;
         case RtStageKind::INTERSECTION:
-            rt_stage = &hits[index * 3 + 2];
+            list = &hits;
+            updated = index * 3 + 2;
             break;
         case RtStageKind::MISS:
-            rt_stage = &misses[index];
+            list = &misses;
             break;
         case RtStageKind::CALLABLE:
-            rt_stage = &callables[index];
+            list = &callables;
             break;
         }
-        return *rt_stage;
+
+        if (updated >= list->size()) {
+            std::stringstream err;
+            err << "Index " << index << " is out of bounds for raytracing substage \"" << to_string(stage) << "\"!";
+            throw std::runtime_error(err.str());
+        }
+        return (*list)[updated];
     }
 
     void launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
         Frame& launched_from = *frame_stack.back();
         RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
-        DataView& data = *rt_stage.data;
         // fill in builtins into the data
-        rt_stage.setUpInputs(*launched_from.getAccelStruct(), *launched_from.getRtResult());
-        // checkInputs
+        Value* hit_attrib = rt_stage.setUpInputs(
+            *launched_from.getAccelStruct(), *launched_from.getRtResult(), launched_from.getHitAttribute()
+        );
+        if (hit_attrib != nullptr)
+            launched_from.setHitAttribute(hit_attrib);
+        DataView& data = *rt_stage.data;
+        // Load from the extra input file
+        auto* extra_accel = Program::checkInputs(rt_stage.inputs, data, rt_stage.ins, rt_stage.specs, false);
+        if (extra_accel != nullptr)  // We shouldn't see any extra accel structs
+            throw std::runtime_error("Extra acceleration struct found when invoking raytracing substage!");
         const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
         std::vector<const Value*> entry_args;  // no formal arguments to the substage's main
-        // Note: a frame assumes that it owns the data (and will therefore delete it upons its deconstruction). We avoid
+
+        // Note: a frame assumes that it owns its data (and will therefore delete it upons deconstruction). We avoid
         // this problem by making a change to instruction's execute and preventing data delete if the frame before has
         // a raytracing trigger enabled.
         frame_stack.push_back(new Frame(ep.getLocation(), entry_args, 0, data));
     }
-    void completeSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
-        Frame& launched_from = *frame_stack.back();
+    void completeSubstage(RtStageKind stage, Frame& launched_from) {
         RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
         rt_stage.cleanUp(launched_from);
-    }
-
-public:
-    void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false) {
-        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
-        // This allows for a cleaner separation of data.
-        ProgramLoader load(buffer, length);
-        insts.addBreak(insts.size(), file_path);
-        uint32_t bound = load.parse(insts.getInstructions());
-        data.setBound(std::max(bound, data.getBound()));
-    }
-
-    unsigned getInstLength() const {
-        return insts.size();
-    }
-
-    void init(ValueMap& provided) noexcept(false) {
-        entry = init(provided, data.getGlobal(), nullptr);
-    }
-    void initRaytrace(RayTraceSubstage& stage) {
-        unsigned entry = init(stage.inputs, *stage.data, &stage);
-        stage.entry = entry;
     }
 
     /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
@@ -303,8 +297,13 @@ public:
     /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
     ///               default values.
     /// @return the shader binding table to process (if any), otherwise, nullptr
-    const ShaderBindingTable* checkInputs(ValueMap& provided, bool unused) noexcept(false) {
-        DataView& global = data.getGlobal();
+    static const ShaderBindingTable* checkInputs(
+        ValueMap& provided,
+        DataView& global, // needed for fetching variables
+        std::vector<unsigned>& ins,
+        std::vector<unsigned>& specs,
+        bool unused
+    ) noexcept(false) {
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
         for (const auto in : ins)
@@ -334,7 +333,10 @@ public:
                     const Value& now_val = *var->getVal();
                     if (now_val.getType().getBase() == DataType::ACCEL_STRUCT &&
                     val->getType().getBase() == DataType::STRUCT) {
-                        assert(sbt == nullptr);  // Cannot currently handle multiple shader binding tables.
+                        if (sbt != nullptr)  // Cannot currently handle multiple shader binding tables.
+                            throw std::runtime_error(
+                                "Encountered multiple accel structures while checking input! At most one may be used."
+                            );
                         sbt = &static_cast<const AccelStruct&>(now_val).getShaderBindingTable();
                     }
 
@@ -381,6 +383,37 @@ public:
         }
 
         return sbt;
+    }
+
+public:
+    void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false) {
+        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
+        // This allows for a cleaner separation of data.
+        ProgramLoader load(buffer, length);
+        insts.addBreak(insts.size(), file_path);
+        uint32_t bound = load.parse(insts.getInstructions());
+        data.setBound(std::max(bound, data.getBound()));
+    }
+
+    unsigned getInstLength() const {
+        return insts.size();
+    }
+
+    void init(ValueMap& provided) noexcept(false) {
+        entry = init(provided, data.getGlobal(), nullptr);
+    }
+    void initRaytrace(RayTraceSubstage& stage) {
+        unsigned entry = init(stage.inputs, *stage.data, &stage);
+        stage.entry = entry;
+    }
+
+    /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
+    /// @param provided map of names to values
+    /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
+    ///               default values.
+    /// @return the shader binding table to process (if any), otherwise, nullptr
+    const ShaderBindingTable* checkInputs(ValueMap& provided, bool unused) noexcept(false) {
+        return Program::checkInputs(provided, this->data.getGlobal(), this->ins, this->specs, unused);
     }
 
     std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true) {
@@ -578,8 +611,12 @@ public:
             } else {
                 // If the frame has triggered raytracing, we need to launch the substage
                 auto& frame = *frame_stack.back();
-                if (auto substage = frame.getRtTrigger(); substage != RtStageKind::NONE)
-                    launchSubstage(substage, frame_stack);
+                if (auto substage = frame.getRtTrigger(); substage != RtStageKind::NONE) {
+                    if (frame_stack.size() == frame_depth)
+                        launchSubstage(substage, frame_stack);
+                    else
+                        completeSubstage(substage, frame);
+                }
             }
         }
     }

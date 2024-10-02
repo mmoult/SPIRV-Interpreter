@@ -21,6 +21,24 @@ export enum RtStageKind {
     MISS,
     CALLABLE
 };
+export const char* to_string(RtStageKind kind) {
+    switch (kind) {
+    case RtStageKind::NONE:
+        return "none";
+    case RtStageKind::ANY_HIT:
+        return "any_hit";
+    case RtStageKind::CLOSEST:
+        return "closest_hit";
+    case RtStageKind::INTERSECTION:
+        return "intersection";
+    case RtStageKind::MISS:
+        return "miss";
+    case RtStageKind::CALLABLE:
+        return "callable";
+    default:
+        return "invalid";
+    }
+}
 
 export class Frame {
     unsigned pc;
@@ -49,9 +67,14 @@ export class Frame {
 
     struct {
         RtStageKind trigger = RtStageKind::NONE;
-        unsigned index;
-        AccelStruct* as;
-        Value* result;
+        unsigned index = 0;
+        AccelStruct* as = nullptr;
+        // Used as:
+        // - the payload (for closest hit, miss)
+        // - bool hit data (for intersection)
+        // - [intersection_valid: bool, continue_search: bool] (for any hit)
+        Value* result = nullptr;
+        Value* hitAttribute = nullptr;
     } rt;
 
 public:
@@ -69,8 +92,10 @@ public:
     ~Frame() {
         while (argCount < args.size())
             delete getArg();
-        view->getSource()->destroyView(view);
-        view = nullptr;  // to prevent double deletion or after-deletion use
+        if (view != nullptr) {
+            view->getSource()->destroyView(view);
+            view = nullptr;  // to prevent double deletion or after-deletion use
+        }
     }
 
     unsigned getPC() const {
@@ -125,11 +150,13 @@ public:
     RtStageKind getRtTrigger() const {
         return rt.trigger;
     }
-    void triggerRaytrace(RtStageKind stage, unsigned index, Value* payload, AccelStruct& as) {
+
+    void triggerRaytrace(RtStageKind stage, unsigned index, Value* payload, Value* hit_attrib, AccelStruct& as) {
         this->rt.trigger = stage;
         this->rt.index = index;
         this->rt.as = &as;
         this->rt.result = payload;
+        this->rt.hitAttribute = hit_attrib;
     }
     void disableRaytrace() {
         this->rt.trigger = RtStageKind::NONE;
@@ -141,9 +168,17 @@ public:
     unsigned getRtIndex() const {
         return this->rt.index;
     }
-    // Modify the result through `copyFrom` as necessary
+    // Modify the result by using `copyFrom` (as necessary)
     Value* getRtResult() const {
         return this->rt.result;
+    }
+    Value* getHitAttribute() const {
+        return this->rt.hitAttribute;
+    }
+    // Unlike rt result, we cannot merely copy the hit attribute since it is output only (for intersection), and thus we
+    // don't necessarily have a starting value.
+    void setHitAttribute(Value* hit_attrib) {
+        this->rt.hitAttribute = hit_attrib;
     }
     AccelStruct* getAccelStruct() const {
         return this->rt.as;

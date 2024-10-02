@@ -1,5 +1,3 @@
-payload: [ 0.0, 0.0, 0.0 ]
-
 ray:
   flags: 16
   cullMask: 255
@@ -120,5 +118,5 @@ accelerationStructure:
     -
         any: { shader: "./shaders/sphere_rahit.spv", input: "" }
         closest: { shader: "./shaders/sphere_rchit.spv", input: "" }
-        intersection: { shader: "./shaders/sphere_intersection.spv", input: "./sphere_info-in.json" }
+        intersection: { shader: "./shaders/sphere_intersection.spv", input: "./sphere_in.yaml" }
     callable_records: []

@@ -1,6 +1,4 @@
 {
-    "payload" : [ 0.0, 0.0, 0.0 ],
-
     "rayFlags" : 0, // None
     "cullMask" : 254, // 0xFE
     "offsetSBT" : 0,

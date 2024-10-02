@@ -1,6 +1,4 @@
 {
-    "payload" : [ 0.0, 0.0, 0.0 ],
-
     "rayFlags" : 128, // Cull no opaque
     "cullMask" : 255, // 0xFF
     "offsetSBT" : 0,

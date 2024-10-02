@@ -1468,15 +1468,15 @@ bool Instruction::makeResult(
         // TODO: needs the get an acceleration structure from a buffer via a 64-bit address. How to do this?
         Value* address_ptr = getValue(2, data);
         assert(address_ptr != nullptr);
-        uint64_t address = 0;
+        //uint64_t address = 0;
         if (address_ptr->getType().getBase() == DataType::ARRAY) {
             // case uvec2
             Array& address_components = static_cast<Array&>(*address_ptr);
             assert(address_components.getSize() == 2);
-            address = static_cast<Primitive&>(*(address_components[0])).data.u32;
-            address <<= 32;
-            uint32_t lower = static_cast<Primitive&>(*(address_components[1])).data.u32;
-            address |= lower;
+            //address = static_cast<Primitive&>(*(address_components[0])).data.u32;
+            //address <<= 32;
+            //uint32_t lower = static_cast<Primitive&>(*(address_components[1])).data.u32;
+            //address |= lower;
         } else {
             // case uint64_t
             throw std::runtime_error("uint64_t is unsupported for OpConvertUToAccelerationStructureKHR.");
@@ -1484,7 +1484,7 @@ bool Instruction::makeResult(
 
         throw std::runtime_error("OpConvertUToAccelerationStructureKHR not implemented.");
 
-        Type* res_type = getType(0, data);
+        //Type* res_type = getType(0, data);
         // AccelStruct res; // update me; set the acceleration structure
         // std::vector<const Value*> values {&res};
         // data[result_at].redefine(res_type->construct(values));
