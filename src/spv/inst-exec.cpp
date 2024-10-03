@@ -38,7 +38,7 @@ void invokeSubstageShader(Frame& frame, AccelStruct& as, Value* payload, Value* 
     int geom_index = 0;
     unsigned instance_sbt_offset = 0;
     if (kind != RtStageKind::MISS) {
-        auto& candidate = trace.getCandidate();
+        const auto& candidate = kind == RtStageKind::CLOSEST? trace.getCommitted() : trace.getCandidate();
         geom_index = candidate.geometryIndex;
         if (candidate.instance != nullptr)
             instance_sbt_offset = candidate.instance->getSbtRecordOffs();
@@ -459,7 +459,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
         ray_query.setAccelStruct(as);
         ray_query.getAccelStruct().initTrace(
-            ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, false
+            ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, true
         );
         break;
     }

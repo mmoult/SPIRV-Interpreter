@@ -336,7 +336,7 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
     candidate.geometryIndex = this->geomIndex;
     candidate.primitiveIndex = this->primIndex;
     candidate.type = Intersection::Type::AABB;
-    return Ternary::MAYBE;
+    return trace.useSBT? Ternary::MAYBE : Ternary::YES;
 }
 
 [[nodiscard]] ProceduralNode* ProceduralNode::fromVal(const Value* val) {
