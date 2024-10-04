@@ -1175,11 +1175,11 @@ bool Instruction::makeResult(
         unsigned a = vres.getSize();
         unsigned b = vec.getSize();
         for (unsigned i = 0; i < a; ++i) {
-            const Primitive& vecv = *static_cast<const Primitive*>(vec[i]);
             Primitive el(0);
             for (unsigned j = 0; j < b; ++j) {
                 const Array& mcolumn = *static_cast<const Array*>(mat[j]);
                 const Primitive& matv = *static_cast<const Primitive*>(mcolumn[i]);
+                const Primitive& vecv = *static_cast<const Primitive*>(vec[j]);
                 Primitive eli = multiply_same(vecv, matv);
                 if (j == 0)
                     el = eli;
