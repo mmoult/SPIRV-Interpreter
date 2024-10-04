@@ -325,7 +325,7 @@ if (ret != ReturnCode::OK) \
         else {
             auto& manager = program.getDataManager();
             dummy.data = &manager.getGlobal();
-            program.initRaytrace(dummy, inputs);
+            program.initRaytrace(dummy, inputs, true);
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

@@ -416,10 +416,10 @@ public:
     void init(ValueMap& provided) noexcept(false) {
         entry = init(provided, data.getGlobal(), nullptr);
     }
-    void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs) {
+    void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs, bool unused = false) {
         unsigned entry = init(extra_inputs, *stage.data, &stage);
         stage.entry = entry;
-        auto* extra_accel = Program::checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, false);
+        auto* extra_accel = Program::checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, unused);
         if (extra_accel != nullptr)  // We shouldn't see any extra accel structs
             throw std::runtime_error("Extra acceleration struct found when invoking raytracing substage!");
     }
