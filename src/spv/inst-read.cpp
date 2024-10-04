@@ -64,7 +64,7 @@ void handle_type(
     }
 }
 
-Instruction* Instruction::readOp(
+void Instruction::readOp(
     std::vector<Instruction>& insts,
     uint16_t opcode,
     std::vector<uint32_t>& words
@@ -244,7 +244,7 @@ Instruction* Instruction::readOp(
     case spv::OpBitwiseAnd: // 199
     case spv::OpPtrEqual: // 401
     case spv::OpPtrNotEqual: // 402
-    case spv::OpExecuteCallableKHR: // 4446
+    //case spv::OpExecuteCallableKHR: // 4446
     case spv::OpRayQueryGenerateIntersectionKHR: // 4475
     case spv::OpRayQueryGetIntersectionTypeKHR: // 4479
     case spv::OpReportIntersectionKHR: // 5334
@@ -279,7 +279,7 @@ Instruction* Instruction::readOp(
     case spv::OpNot: // 200
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
-    case spv::OpConvertUToAccelerationStructureKHR: // 4447
+    //case spv::OpConvertUToAccelerationStructureKHR: // 4447
     case spv::OpRayQueryTerminateKHR: // 4474
     case spv::OpRayQueryConfirmIntersectionKHR: // 4476
     case spv::OpRayQueryProceedKHR: // 4477
@@ -461,6 +461,4 @@ Instruction* Instruction::readOp(
         err << "Extra words while parsing instruction " << spv::OpToString(op) << "!";
         throw std::length_error(err.str());
     }
-
-    return &inst;
 }

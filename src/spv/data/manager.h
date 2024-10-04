@@ -60,6 +60,8 @@ public:
     inline DataView* getPrev() const {
         return prev;
     }
+
+    DataView* clone() const;
 };
 
 class DataManager {

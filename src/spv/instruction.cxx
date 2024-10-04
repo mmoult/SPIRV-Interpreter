@@ -127,9 +127,7 @@ public:
     /// @param insts the vector of insts to place the instruction in
     /// @param opcode the opcode of the instruction to create
     /// @param words a vector of words which holds the necesary arguments for the instruction
-    /// @return a pointer to the instruction created. This is a convenience, where the pointer returned is the
-    ///         last instruction in the insts vector.
-    static Instruction* readOp(
+    static void readOp(
         std::vector<Instruction>& insts,
         uint16_t opcode,
         std::vector<uint32_t>& words
@@ -165,10 +163,6 @@ public:
         Variable& var = *getVariable(1, data);
         unsigned id = std::get<unsigned>(operands[1].raw);
 
-        // Make sure <entry_point> is an actual entry point before identifying the execution model
-        const int execution_model =
-            (entry_point.opcode == spv::OpEntryPoint) ? std::get<unsigned>(entry_point.operands[0].raw) : -1;
-
         using SC = spv::StorageClass;
         switch (var.getStorageClass()) {
         case SC::StorageClassPushConstant:
@@ -191,17 +185,20 @@ public:
         case SC::StorageClassStorageBuffer:
         case SC::StorageClassCallableDataKHR:
         case SC::StorageClassIncomingCallableDataKHR:
-        case SC::StorageClassRayPayloadKHR:
         case SC::StorageClassIncomingRayPayloadKHR:
             ins.push_back(id);
             if (var.isWritable())
                 outs.push_back(id);
             break;
         case SC::StorageClassOutput:
+        case SC::StorageClassRayPayloadKHR:
             outs.push_back(id);
             break;
         case SC::StorageClassHitAttributeKHR: {
-            switch (execution_model) {
+            // Make sure <entry_point> is an actual entry point before identifying the execution model
+            if (entry_point.opcode != spv::OpEntryPoint)
+                throw std::runtime_error("Unsupported execution model for variable with storage class HitAttributeKHR");
+            switch (std::get<unsigned>(entry_point.operands[0].raw)) {
                 default:
                     throw std::runtime_error("Bad execution model using storage class HitAttributeKHR.");
                 case spv::ExecutionModelIntersectionKHR:
@@ -314,9 +311,8 @@ public:
     /// @param data the vector of Data objects used by the program
     /// @param location the index of this instruction in the program
     /// @param queue the decorations to apply
-    /// @param extra_data a pointer to any kind of data that an instruction may need
     /// @return whether some result was made. If used as a fallback, this should be true!
-    bool makeResult(DataView& data, unsigned location, DecoQueue* queue, void* extra_data = nullptr) const noexcept(false);
+    bool makeResult(DataView& data, unsigned location, DecoQueue* queue) const noexcept(false);
 
     /// @brief whether instruction in non-static sections should make its result statically
     /// Some instructions, such as OpFunction and OpLabel, appear in non-static code sections, but need to
@@ -330,9 +326,8 @@ public:
     /// @param data the data view at the current frame or the global if the frame stack is empty
     /// @param frame_stack holds variables, arguments, return addresses, and program counters
     /// @param verbose whether to print a verbose trace of execution
-    /// @param extra_data a pointer to any kind of data that an instruction may need
     /// @return whether the instruction execution blocks the invocation (such as by a barrier)
-    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, void* extra_data = nullptr) const;
+    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const;
 
     void print() const;
 

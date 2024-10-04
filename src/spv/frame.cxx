@@ -5,11 +5,40 @@
  */
 module;
 #include <stdexcept>
+#include <tuple>
 #include <vector>
 
 #include "../values/value.hpp"
 #include "data/manager.h"
 export module spv.frame;
+import value.raytrace.accelStruct;
+
+export enum RtStageKind {
+    NONE,
+    ANY_HIT,
+    CLOSEST,
+    INTERSECTION,
+    MISS,
+    CALLABLE
+};
+export const char* to_string(RtStageKind kind) {
+    switch (kind) {
+    case RtStageKind::NONE:
+        return "none";
+    case RtStageKind::ANY_HIT:
+        return "any_hit";
+    case RtStageKind::CLOSEST:
+        return "closest_hit";
+    case RtStageKind::INTERSECTION:
+        return "intersection";
+    case RtStageKind::MISS:
+        return "miss";
+    case RtStageKind::CALLABLE:
+        return "callable";
+    default:
+        return "invalid";
+    }
+}
 
 export class Frame {
     unsigned pc;
@@ -36,6 +65,20 @@ export class Frame {
     /// Whether this instruction needs to use an argument before incrementing the PC
     bool first;
 
+    struct {
+        RtStageKind trigger = RtStageKind::NONE;
+        unsigned index = 0;
+        AccelStruct* as = nullptr;
+        // Used as:
+        // - the payload (for closest hit, miss)
+        // - bool hit data (for intersection)
+        // - [intersection_valid: bool, continue_search: bool] (for any hit)
+        Value* result = nullptr;
+        Value* hitAttribute = nullptr;
+        // the data which is a duplicate of the substage's
+        DataView* data = nullptr;
+    } rt;
+
 public:
     Frame(unsigned pc, std::vector<const Value*>& args, unsigned ret_at, DataView& data) :
         pc(pc),
@@ -51,8 +94,14 @@ public:
     ~Frame() {
         while (argCount < args.size())
             delete getArg();
-        view->getSource()->destroyView(view);
-        view = nullptr;  // to prevent double deletion or after-deletion use
+        if (view != nullptr) {
+            view->getSource()->destroyView(view);
+            view = nullptr;  // to prevent double deletion or after-deletion use
+        }
+        if (this->rt.data != nullptr) {
+            delete this->rt.data;
+            this->rt.data = nullptr;
+        }
     }
 
     unsigned getPC() const {
@@ -97,5 +146,60 @@ public:
 
     DataView& getData() {
         return *view;
+    }
+    /// @brief removes the data view from this frame
+    /// Necessary to preserve the data view, since deleting this frame deletes the data by default
+    void removeData() {
+        view = nullptr;
+    }
+
+    RtStageKind getRtTrigger() const {
+        return rt.trigger;
+    }
+
+    void triggerRaytrace(RtStageKind stage, unsigned index, Value* payload, Value* hit_attrib, AccelStruct& as) {
+        this->rt.trigger = stage;
+        this->rt.index = index;
+        this->rt.as = &as;
+        this->rt.result = payload;
+        this->rt.hitAttribute = hit_attrib;
+        if (this->rt.data != nullptr) {
+            delete this->rt.data;
+            this->rt.data = nullptr;
+        }
+    }
+    void disableRaytrace() {
+        this->rt.trigger = RtStageKind::NONE;
+        this->rt.index = 0;
+        this->rt.as = nullptr;
+        this->rt.result = nullptr;
+        delete this->rt.data;
+        this->rt.data = nullptr;
+    }
+
+    unsigned getRtIndex() const {
+        return this->rt.index;
+    }
+    // Modify the result by using `copyFrom` (as necessary)
+    Value* getRtResult() const {
+        return this->rt.result;
+    }
+    Value* getHitAttribute() const {
+        return this->rt.hitAttribute;
+    }
+    // Unlike rt result, we cannot merely copy the hit attribute since it is output only (for intersection), and thus we
+    // don't necessarily have a starting value.
+    void setHitAttribute(Value* hit_attrib) {
+        this->rt.hitAttribute = hit_attrib;
+    }
+    AccelStruct* getAccelStruct() const {
+        return this->rt.as;
+    }
+
+    void setRtData(DataView& view) {
+        this->rt.data = &view;
+    }
+    DataView* getRtData() const {
+        return this->rt.data;
     }
 };

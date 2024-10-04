@@ -90,6 +90,9 @@ class Type : public Valuable {
     [[nodiscard]] Value* construct(std::vector<const Value*>* values) const noexcept(false);
 
 public:
+    inline Type(): base(DataType::VOID), subSize(0), subElement(nullptr) {}
+    Type(const Type& t) = default;
+
     // Factory methods to create type variants:
 
     /// @brief Factory for floats, uints, ints, bools, voids
@@ -98,9 +101,9 @@ public:
     /// @param size the size of the type. Not all primitives have a usable size (bool and void don't)
     /// @return the created type
     static inline Type primitive(DataType primitive, unsigned size = 32) {
-        assert(primitive != DataType::STRUCT && primitive != DataType::FUNCTION &&
-               primitive != DataType::POINTER);
-        assert(size == 32 || (primitive != DataType::BOOL && primitive != DataType::VOID));
+        assert(primitive == DataType::UINT || primitive == DataType::INT ||
+               primitive == DataType::FLOAT || primitive == DataType::BOOL);
+        assert(size == 32 || (primitive != DataType::BOOL));
         return Type(primitive, size, nullptr);
     }
 
@@ -150,12 +153,8 @@ public:
         return Type(DataType::STRING, 0, nullptr);
     }
 
-    static inline Type accelStruct(
-        const std::vector<const Type*>& sub_list = std::vector<const Type*>{},
-        const std::vector<std::string>& name_list = std::vector<std::string>{}
-    ) {
-        assert(sub_list.size() == name_list.size());
-        return Type(DataType::ACCEL_STRUCT, sub_list, name_list);
+    static inline Type accelStruct() {
+        return Type(DataType::ACCEL_STRUCT, 0, nullptr);
     }
 
     static inline Type rayQuery() {
@@ -218,11 +217,11 @@ public:
     }
 
     inline const std::vector<const Type*>& getFields() const {
-        assert(base == DataType::STRUCT || base == DataType::ACCEL_STRUCT);
+        assert(base == DataType::STRUCT);
         return subList;
     }
     inline const std::vector<std::string>& getNames() const {
-        assert(base == DataType::STRUCT || base == DataType::ACCEL_STRUCT);
+        assert(base == DataType::STRUCT);
         return nameList;
     }
 
@@ -233,16 +232,11 @@ public:
 
     // TODO: deprecate or make private. The nearest valid use is operator==
     inline bool sameBase(const Type& rhs) const {
-        // STRUCT and ACCEL_STRUCT are considered the same
-        bool is_struct_and_accel_struct =
-            (base == DataType::STRUCT && rhs.base == DataType::ACCEL_STRUCT) ||
-            (base == DataType::ACCEL_STRUCT && rhs.base == DataType::STRUCT);
-
-        return base == rhs.base || is_struct_and_accel_struct;
+        return base == rhs.base;
     }
 
     inline void nameMember(unsigned i, std::string name) noexcept(false) {
-        assert(base == DataType::STRUCT || base == DataType::ACCEL_STRUCT);
+        assert(base == DataType::STRUCT);
         if (i >= nameList.size())
             throw std::invalid_argument("Cannot name member at index beyond existing!");
         nameList[i] = name;

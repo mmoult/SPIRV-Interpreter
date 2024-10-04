@@ -70,13 +70,9 @@ IntersectionProperties raySphereIntersection(
     return result;
 }
 
-<<<<<<< Updated upstream
-void main() 
-=======
 void main()
->>>>>>> Stashed changes
 {
-    const IntersectionProperties result = raySphereIntersection (
+    const IntersectionProperties result = raySphereIntersection(
         sphereCenter,
         sphereRadius,
         gl_WorldRayOriginEXT,

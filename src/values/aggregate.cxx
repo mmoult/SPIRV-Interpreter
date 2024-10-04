@@ -216,7 +216,7 @@ public:
     /// @param elements a pointer of value elements to pull types from in constructing this's type. When this
     /// constructor is used, the struct takes ownership of all elements given (and will delete them on destruction).
     /// @param names names of the elements, in order
-    Struct(std::vector<Value*>& elements, std::vector<std::string> names)
+    Struct(std::vector<Value*>& elements, const std::vector<std::string>& names)
         : Aggregate(createTypeFrom(elements, names)) {
         this->elements = elements;
     }

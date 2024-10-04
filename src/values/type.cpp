@@ -13,14 +13,15 @@
 import value.aggregate;
 import value.image;
 import value.primitive;
-import value.raytrace.accelManager;
+import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
 import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values) const {
     switch (base) {
     default:
-        throw std::runtime_error("Unsupported type!");
+        assert(false);
+        throw std::runtime_error("Cannot construct unsupported type!");
     case DataType::VOID:
         throw std::runtime_error("Cannot construct void type!");
     // Primitive types
@@ -60,12 +61,11 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     case DataType::STRING:
         return new String("");
     case DataType::ACCEL_STRUCT:
-        return new AccelStructManager(*this);
+        return new AccelStruct();
     case DataType::RAY_QUERY:
-        return new RayQuery(*this);
+        return new RayQuery();
     case DataType::IMAGE:
         return new Image(*this);
-    // TODO support other types
     }
 }
 
@@ -174,7 +174,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
         // Assume a void type array will become the other array type if it's a non-void type
         if (other.subElement->base == DataType::VOID || subElement->base == DataType::VOID) {
             if (other.subElement->base == DataType::VOID && subElement->base == DataType::VOID)
-                return Type::array(0, *(new Type(Type::primitive(DataType::VOID))));
+                return Type::array(0, *(new Type()));
             else if (other.subElement->base == DataType::VOID)
                 return Type::array(0, *(new Type((*subElement))));
             else if (subElement->base == DataType::VOID)

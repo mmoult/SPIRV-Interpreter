@@ -16,6 +16,8 @@ import format.yaml;
 import front.argparse;
 import front.console;
 import spv.program;
+import spv.raySubstage;
+import value.raytrace.shaderBindingTable;
 
 constexpr auto VERSION = "0.8.0";
 
@@ -74,6 +76,88 @@ ReturnCode load_file(ValueMap& values, const std::string& file_name, ValueFormat
     return ReturnCode::OK;
 }
 
+ReturnCode parse_spv(Program& program, std::string program_path) {
+    std::ifstream ifs(program_path, std::ios::binary);
+    if (!ifs.is_open()) {
+        std::cerr << "Could not open source file \"" << program_path << "\"!" << std::endl;
+        return ReturnCode::BAD_FILE;
+    }
+
+    // get its size:
+    ifs.seekg(0, ifs.end);
+    int length = ifs.tellg();
+    ifs.seekg(0, ifs.beg);
+    // allocate memory:
+    char* buffer = new char[length];
+    // read data as a block:
+    ifs.read(buffer, length);
+    ifs.close();
+
+    // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
+    try {
+        program.parse(program_path, std::bit_cast<uint8_t*>(buffer), length);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return ReturnCode::BAD_PARSE;
+    }
+    delete[] buffer; // delete source now that it has been inserted into the program
+
+    return ReturnCode::OK;
+}
+
+ReturnCode handle_record(
+    Program& program,
+    const ShaderRecord& record,
+    ValueFormat* preference,
+    RayTraceSubstage& stage
+) {
+    parse_spv(program, record.shaderSource);
+    ValueMap extra_inputs;
+    if (!record.extraInput.empty()) {
+        ValueFormat* format = determine_format(record.extraInput, preference, false);
+        if (auto ret = load_file(extra_inputs, record.extraInput, format); ret != ReturnCode::OK)
+            return ret;
+    }
+    stage.data = program.getDataManager().makeView();
+    // Should delete the view after the record is done, but since it exists until main is exited, don't bother
+    program.initRaytrace(stage, extra_inputs);
+    return ReturnCode::OK;
+}
+
+ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueFormat* preference) {
+    // Not all three are required to be present, but at least one is, and input may not be specified if shader isn't.
+
+    bool present = false;
+#define CHECK_INPUT(TEST, STAGE) \
+if (TEST.shaderSource.empty()) { \
+    if (!TEST.extraInput.empty()) { \
+        std::cerr << "Shader binding hit record may not specify input, \"" << TEST.extraInput; \
+        std::cerr << "\" without a corresponding shader!" << std::endl; \
+        return ReturnCode::BAD_PROG_INPUT; \
+    } \
+} else { \
+    present = true; \
+    if (auto ret = handle_record(program, TEST, preference, STAGE); ret != ReturnCode::OK) \
+        return ret; \
+}
+    // Note, we must create records even if the shader is empty because that is how we keep the groups aligned in a
+    // single list (by 3's, where any, closest, intersection).
+    RayTraceSubstage& any = program.nextHitRecord();
+    CHECK_INPUT(hit.any, any);
+    RayTraceSubstage& closest = program.nextHitRecord();
+    CHECK_INPUT(hit.closest, closest);
+    RayTraceSubstage& intersection = program.nextHitRecord();
+    CHECK_INPUT(hit.intersection, intersection);
+#undef CHECK_INPUT
+
+    if (!present) {
+        std::cerr << "Shader binding hit record needs at least one shader but has none!" << std::endl;
+        return ReturnCode::BAD_PROG_INPUT;
+    }
+
+    return ReturnCode::OK;
+}
+
 int main(int argc, char* argv[]) {
     ArgParse::Parser parser;
 
@@ -122,6 +206,13 @@ int main(int argc, char* argv[]) {
     );
     ArgParse::Flag verbose;
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
+    ArgParse::Flag rt_template;
+    parser.addOption(
+        &rt_template,
+        "raytrace",
+        "Treat the input as a ray tracing substage when creating an input template. Enables --template implicitly.",
+        "r"
+    );
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
     ArgParse::StringOption template_arg("FILE");
@@ -187,38 +278,24 @@ int main(int argc, char* argv[]) {
     // Peform the rest of the option actions
     if (debug.enabled)
         verbose.enabled = true;
-    if (generate.enabled && !template_arg.hasValue())
+    if ((generate.enabled || rt_template.enabled) && !template_arg.hasValue())
         template_arg.setValue("-");
 
     ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
-    assert(format != nullptr);
+    if (format == nullptr) {
+        std::cerr << "Unknown format preference: " << format_arg.getValue() << std::endl;
+        return ReturnCode::BAD_ARGS;
+    }
+
+#define REQUIRE(COND) { \
+auto ret = COND; \
+if (ret != ReturnCode::OK) \
+    return ret; \
+}
 
     // Load the SPIR-V input file:
-    std::ifstream ifs(spv_arg.getValue(), std::ios::binary);
-    if (!ifs.is_open()) {
-        std::cerr << "Could not open source file \"" << spv_arg.getValue() << "\"!" << std::endl;
-        return ReturnCode::BAD_FILE;
-    }
-
-    // get its size:
-    ifs.seekg(0, ifs.end);
-    int length = ifs.tellg();
-    ifs.seekg(0, ifs.beg);
-    // allocate memory:
-    char* buffer = new char[length];
-    // read data as a block:
-    ifs.read(buffer, length);
-    ifs.close();
-
-    // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
     Program program;
-    try {
-        program.parse(std::bit_cast<uint8_t*>(buffer), length);
-    } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        return ReturnCode::BAD_PARSE;
-    }
-    delete[] buffer; // delete source now that it has been replaced with program
+    REQUIRE(parse_spv(program, spv_arg.getValue()));
 
     // We must load the inputs, if any, before init. This is because specialization constants must know their input.
     // Indeed, if the size of input variables is dependent on specialization constants (which it might be), then it is
@@ -226,11 +303,10 @@ int main(int argc, char* argv[]) {
     // Of course, even if there are specialization constants, they should have some default value which will be used if
     // the user doesn't provide something to override it.
     ValueMap inputs;
-    if (in_arg.isPresent()) {
-        auto res = load_file(inputs, in_arg.getValue(), format);
-        if (res != ReturnCode::OK)
-            return res;
-    }
+    if (in_arg.isPresent())
+        REQUIRE(load_file(inputs, in_arg.getValue(), format));
+
+    // Handle cmd info second since it could theoretically override what has been presented in the file
     if (set_arg.isPresent()) {
         // Parse the value and save in the key
         try {
@@ -242,8 +318,15 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    RayTraceSubstage dummy;
     try {
-        program.init(inputs);
+        if (!rt_template.enabled)
+            program.init(inputs);
+        else {
+            auto& manager = program.getDataManager();
+            dummy.data = &manager.getGlobal();
+            program.initRaytrace(dummy, inputs, true);
+        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROGRAM;
@@ -252,12 +335,13 @@ int main(int argc, char* argv[]) {
     if (template_arg.isPresent()) {
         std::string itemplate = template_arg.getValue();
         // Print out needed variables to file specified
-        std::stringstream ss;
-        auto prog_ins = program.getInputs();
         ValueFormat* format2 = determine_format(itemplate, format);
         if (indent_arg.isPresent())
             format2->setIndentSize(indent_arg.getValue());
         format2->setTemplate(!generate.enabled);
+
+        std::stringstream ss;
+        auto prog_ins = (!rt_template.enabled)? program.getInputs() : dummy.getInputs();
         format2->printFile(ss, prog_ins);
 
         if (itemplate == "-") {
@@ -270,13 +354,28 @@ int main(int argc, char* argv[]) {
         return ReturnCode::INFO;
     }
 
-    // Verify that the inputs loaded match what the program expects
+    // Process the given inputs into the program
+    const ShaderBindingTable* sbt = nullptr;
     try {
-        program.checkInputs(inputs, unused.enabled);
+        sbt = program.checkInputs(inputs, unused.enabled);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROG_INPUT;
     }
+
+    // May need to process info given from shader binding table, if any
+    if (sbt != nullptr) {
+        const auto& shaderBindingTable = *sbt;
+        for (const auto& miss : shaderBindingTable.getMissRecords())
+            REQUIRE(handle_record(program, miss, format, program.nextMissRecord()));
+
+        for (const auto& hit: shaderBindingTable.getHitRecords())
+            REQUIRE(handle_hit_record(program, hit, format));
+
+        for (const auto& call : shaderBindingTable.getCallableRecords())
+            REQUIRE(handle_record(program, call, format, program.nextCallableRecord()));
+    }
+#undef REQUIRE
 
     // Run the program
     try {
@@ -318,7 +417,7 @@ int main(int argc, char* argv[]) {
         if (!ok) {
             std::cerr << "Output did NOT match!" << std::endl;
             return ReturnCode::BAD_COMPARE;
-        } else
+        } else {
             // Print the number of variables checked to know whether it was a trivial pass
             std::cout << total_tests;
             if (total_tests == 1)
@@ -326,6 +425,7 @@ int main(int argc, char* argv[]) {
             else
                 std::cout << " outputs match!";
             std::cout << std::endl;
+        }
 
         for (const auto& [_, val] : check_map)
             delete val;
