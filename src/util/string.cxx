@@ -58,7 +58,7 @@ export void print_float(std::stringstream& out, float fp) {
         // Even in the trivial case, we must print 0.0
         for (unsigned i = 1; i < 11; ++i) {
             // TODO: check the edge behavior. I assume that if i*digit >= max, then inf >= fp
-            if (i * digit > fp) {
+            if ((i * digit > fp) || (i == 10)) {
                 unsigned ii = i - 1;
                 fp -= (ii * digit);
                 toOut.push_back('0' + ii);

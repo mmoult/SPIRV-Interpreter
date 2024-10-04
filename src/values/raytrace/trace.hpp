@@ -62,9 +62,13 @@ struct Trace {
     unsigned missIndex;
 
     inline Intersection& getCandidate() {
+        if (candidate >= candidates.size())
+            throw std::runtime_error("Attempt to fetch candidate outside of valid range!");
         return candidates[candidate];
     }
     inline const Intersection& getCandidate() const {
+        if (candidate >= candidates.size())
+            throw std::runtime_error("Attempt to fetch candidate outside of valid range!");
         return candidates[candidate];
     }
 
@@ -73,9 +77,13 @@ struct Trace {
     }
 
     inline Intersection& getCommitted() {
+        if (committed >= candidates.size())
+            throw std::runtime_error("Attempt to fetch committed outside of valid range!");
         return candidates[committed];
     }
     inline const Intersection& getCommitted() const {
+        if (committed >= candidates.size())
+            throw std::runtime_error("Attempt to fetch committed outside of valid range!");
         return candidates[committed];
     }
 };

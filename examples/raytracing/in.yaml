@@ -76,7 +76,7 @@ accelerationStructure:
       child_node: [ 0, 1 ]
       id: 5
       custom_index: 5
-      mask: 255
+      mask: 253
       sbt_record_offset: 0
   - # Reflective sphere
       transformation:

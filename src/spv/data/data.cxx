@@ -46,8 +46,10 @@ public:
             storage(other.storage),
             name(other.name),
             builtIn(other.builtIn),
-            specConst(other.specConst) {
+            specConst(other.specConst),
+            noWrite(other.noWrite) {
         val = other.val->getType().construct();
+        val->copyFrom(*other.val);
     }
     Variable& operator= (const Variable&) = delete;
     ~Variable() {
@@ -293,5 +295,40 @@ public:
             break;  // the whole point of weak is to avoid deletion- that is someone else's responsibility
         }
         type = DType::UNDEFINED;
+    }
+
+    Data clone() const {
+        switch (type) {
+        default:
+            assert(false);
+            return Data();
+        case DType::UNDEFINED:
+            return Data();
+        case DType::VARIABLE: {
+            auto& before = *static_cast<Variable*>(raw);
+            return Data(new Variable(before));
+        }
+        case DType::FUNCTION: {
+            auto& before = *static_cast<Function*>(raw);
+            return Data(new Function(before));
+        }
+        case DType::ENTRY: {
+            auto& before = *static_cast<EntryPoint*>(raw);
+            return Data(new EntryPoint(before));
+        }
+        case DType::VALUE: {
+            Value* before = static_cast<Value*>(raw);
+            Value* after = before->getType().construct();
+            after->copyFrom(*before);
+            return Data(after);
+        }
+        case DType::TYPE: {
+            auto& before = *static_cast<Type*>(raw);
+            return Data(new Type(before));
+        }
+        case DType::WEAK:
+            throw std::runtime_error("Cannot clone weak data!");
+            return Data();
+        }
     }
 };

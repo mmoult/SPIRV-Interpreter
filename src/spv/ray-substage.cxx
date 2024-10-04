@@ -58,8 +58,6 @@ public:
     std::vector<unsigned> ins;
     std::vector<unsigned> outs;
     std::vector<unsigned> specs;
-    // From the extra input file- must be used to refresh the data for each new execution
-    ValueMap inputs;
 
     /// @brief handle the given instruction, which is in a static context
     /// @param inst the instruction to handle
@@ -108,8 +106,13 @@ public:
     }
 
     // may return the hit attribute if needed
-    [[nodiscard]] Value* setUpInputs(AccelStruct& as, Value& payload, Value* hit_attribute) {
-        DataView& dat = *data;
+    [[nodiscard]] Value* setUpInputs(
+        DataView& dat,
+        AccelStruct& as,
+        Value& payload,
+        Value* hit_attribute,
+        const InstanceNode* instance
+    ) const {
         std::vector<Primitive> origin = as.getWorldRayOrigin();
         for (unsigned loc : worldRayOrigin) {
             Variable* var = dat[loc].getVariable();
@@ -135,10 +138,6 @@ public:
             assert(var != nullptr);
             var->getVal()->copyFrom(tmin);
         }
-        const Intersection& cand = trace.getCandidate();
-        const InstanceNode* instance = nullptr;
-        if (cand.instance != nullptr)
-            instance = cand.instance;
         Primitive customIdx((instance == nullptr)? 0 : instance->getCustomIndex());
         for (unsigned loc : instanceCustomIndex) {
             Variable* var = dat[loc].getVariable();
@@ -179,8 +178,8 @@ public:
         return nullptr;
     }
 
-    void cleanUp(Frame& frame) {
-        DataView& dat = *data;
+    void cleanUp(Frame& frame) const {
+        DataView& dat = *frame.getRtData();
         // Save from the frame rt result into the payload (as necessary)
         auto stage = frame.getRtTrigger();
         if ((stage == RtStageKind::CLOSEST || stage == RtStageKind::MISS) && payload != 0) {

@@ -1,0 +1,88 @@
+payload: [ 0.772834, 0.437701, 0.241238 ]
+
+ray:
+  flags: 16
+  cullMask: 255
+  origin: [ 0.0, 0.0, 25.0 ]
+  direction: [ -0.057, 0.094, -1.0 ]
+  tMin: 0.0
+  tMax: 1000.0
+
+#== Trace summary of a successful run ==
+# 56   OpFunction %2 %4 = 0x0 %3
+# ...
+# 71   OpTraceRayKHR %9 %20 %23 %24 %24 %24 %28 %32 %35 %38 %40
+#-- Hit the orange wall. Launch wall_rchit.spv
+#   254  OpFunction %2 %4 = 0x0 %3
+#   ...
+#   457  OpTraceRayKHR %188 %189 %190 %45 %45 %191 %196 %198 %199 %203 %183
+#-- Shadow trace misses. Launch miss_shadow.spv
+#     117  OpFunction %2 %4 = 0x0 %3
+#     ...
+#     120  OpReturn
+#   457  OpTraceRayKHR %188 %189 %190 %45 %45 %191 %196 %198 %199 %203 %183
+#   458  OpLoad %25 %204 = %183
+#   '%204': false
+#   ...
+#   480  OpTraceRayKHR %213 %214 %51 %45 %45 %45 %218 %219 %220 %222 %224
+#-- Wall's reflection trace hits sphere. Launch sphere_intersection.spv
+#     807  OpFunction %2 %4 = 0x0 %3
+#     ...
+#     963  OpLoad %11 %122 = %22
+#     '%122':
+#       normal: [ -0.0676826, 0.754311, -0.65302 ]
+#       hit_t: 8.21989
+#       intersected: true
+#     964  OpReturnValue %122
+#     ...
+#     843  OpReportIntersectionKHR %10 %167 = %165 %166
+#-- Launch sphere_rahit.spv
+#       505  OpFunction %2 %4 = 0x0 %3
+#       ...
+#       507  OpReturn
+#     843  OpReportIntersectionKHR %10 %167 = %165 %166
+#     844  OpReturn
+#   480  OpTraceRayKHR %213 %214 %51 %45 %45 %45 %218 %219 %220 %222 %224
+#-- Since the sphere hit was accepted, launch sphere_rchit.spv
+#     598  OpFunction %2 %4 = 0x0 %3
+#     ...
+#     704  OpTraceRayKHR %116 %117 %118 %119 %119 %119 %124 %126 %127 %129 %133
+#-- The sphere has its own reflection, which hits the orange wall. Launch wall_rchit.spv
+#       254  OpFunction %2 %4 = 0x0 %3
+#       ...
+#       457  OpTraceRayKHR %188 %189 %190 %45 %45 %191 %196 %198 %199 %203 %183
+#-- Launch miss_shadow.spv
+#         117  OpFunction %2 %4 = 0x0 %3
+#         ...
+#         120  OpReturn
+#       457  OpTraceRayKHR %188 %189 %190 %45 %45 %191 %196 %198 %199 %203 %183
+#       458  OpLoad %25 %204 = %183
+#       '%204': false
+#       ...
+#       480  OpTraceRayKHR %213 %214 %51 %45 %45 %45 %218 %219 %220 %222 %224
+#-- Launch another specular reflection from the orange wall. This time, it misses: miss_sky.spv
+#         95   OpFunction %2 %4 = 0x0 %3
+#         ...
+#         98   OpReturn
+#       480  OpTraceRayKHR %213 %214 %51 %45 %45 %45 %218 %219 %220 %222 %224
+#       ...
+#       483  OpLoad %7 %228 = %224
+#       '%228': [ 0.52, 0.81, 0.92 ]
+#       ...
+#       491  OpReturn
+#     704  OpTraceRayKHR %116 %117 %118 %119 %119 %119 %124 %126 %127 %129 %133
+#     705  OpLoad %7 %134 = %133
+#     '%134': [ 0.581964, 0.455982, 0.403789 ]
+#     ...
+#     712  OpReturn
+#   480  OpTraceRayKHR %213 %214 %51 %45 %45 %45 %218 %219 %220 %222 %224
+#   ...
+#   483  OpLoad %7 %228 = %224
+#   '%228': [ 0.532742, 0.437318, 0.191115 ]
+#   ...
+#   489  OpLoad %7 %233 = %170
+#   '%233': [ 0.772834, 0.437701, 0.241238 ]
+#   490  OpStore %232 %233
+#   491  OpReturn
+# 71   OpTraceRayKHR %9 %20 %23 %24 %24 %24 %28 %32 %35 %38 %40
+# 72   OpReturn

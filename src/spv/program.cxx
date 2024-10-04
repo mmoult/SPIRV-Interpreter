@@ -16,6 +16,7 @@ module;
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
+#include "../values/raytrace/trace.hpp"
 export module spv.program;
 import format.parse;
 import front.debug;
@@ -269,16 +270,29 @@ if (!(COND)) \
         Frame& launched_from = *frame_stack.back();
         RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
         // fill in builtins into the data
+        AccelStruct& as = *launched_from.getAccelStruct();
+        const InstanceNode* instance = nullptr;
+        if (stage != RtStageKind::MISS) {
+            Intersection& cand = (stage == RtStageKind::CLOSEST)? as.getCommitted() : as.getCandidate();
+            instance = cand.instance;
+        }
+        // the instruction which called launchSubstage is responsible for cleaning up the data too.
+        DataView& data = *rt_stage.data->clone();
+        launched_from.setRtData(data);
         Value* hit_attrib = rt_stage.setUpInputs(
-            *launched_from.getAccelStruct(), *launched_from.getRtResult(), launched_from.getHitAttribute()
+            data,
+            as,
+            *launched_from.getRtResult(),
+            launched_from.getHitAttribute(),
+            instance
         );
-        if (hit_attrib != nullptr)
+        if (hit_attrib != nullptr) {
+            // We should not be generating a new hit attribute if there already was one. The setUpInputs function
+            // currently prevents this categorically, but the following assert is a good future-proof for memory safety.
+            assert(launched_from.getHitAttribute() == nullptr);
             launched_from.setHitAttribute(hit_attrib);
-        DataView& data = *rt_stage.data;
+        }
         // Load from the extra input file
-        auto* extra_accel = Program::checkInputs(rt_stage.inputs, data, rt_stage.ins, rt_stage.specs, false);
-        if (extra_accel != nullptr)  // We shouldn't see any extra accel structs
-            throw std::runtime_error("Extra acceleration struct found when invoking raytracing substage!");
         const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
         std::vector<const Value*> entry_args;  // no formal arguments to the substage's main
 
@@ -402,9 +416,12 @@ public:
     void init(ValueMap& provided) noexcept(false) {
         entry = init(provided, data.getGlobal(), nullptr);
     }
-    void initRaytrace(RayTraceSubstage& stage) {
-        unsigned entry = init(stage.inputs, *stage.data, &stage);
+    void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs) {
+        unsigned entry = init(extra_inputs, *stage.data, &stage);
         stage.entry = entry;
+        auto* extra_accel = Program::checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, false);
+        if (extra_accel != nullptr)  // We shouldn't see any extra accel structs
+            throw std::runtime_error("Extra acceleration struct found when invoking raytracing substage!");
     }
 
     /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.

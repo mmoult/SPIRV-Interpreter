@@ -112,14 +112,15 @@ ReturnCode handle_record(
     RayTraceSubstage& stage
 ) {
     parse_spv(program, record.shaderSource);
+    ValueMap extra_inputs;
     if (!record.extraInput.empty()) {
         ValueFormat* format = determine_format(record.extraInput, preference, false);
-        if (auto ret = load_file(stage.inputs, record.extraInput, format); ret != ReturnCode::OK)
+        if (auto ret = load_file(extra_inputs, record.extraInput, format); ret != ReturnCode::OK)
             return ret;
     }
     stage.data = program.getDataManager().makeView();
     // Should delete the view after the record is done, but since it exists until main is exited, don't bother
-    program.initRaytrace(stage);
+    program.initRaytrace(stage, extra_inputs);
     return ReturnCode::OK;
 }
 
@@ -324,8 +325,7 @@ if (ret != ReturnCode::OK) \
         else {
             auto& manager = program.getDataManager();
             dummy.data = &manager.getGlobal();
-            dummy.inputs = inputs;
-            program.initRaytrace(dummy);
+            program.initRaytrace(dummy, inputs);
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

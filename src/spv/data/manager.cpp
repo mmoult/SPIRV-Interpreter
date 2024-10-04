@@ -46,3 +46,12 @@ const Data& DataView::operator[](unsigned index) const {
 unsigned DataView::getBound() const {
     return src->getBound();
 }
+
+DataView* DataView::clone() const {
+    auto& other = *new DataView(src);
+    for (auto [index, dat] : data) {
+        const Data cloned = dat.clone();
+        other.data[index].redefine(cloned);
+    }
+    return &other;
+}

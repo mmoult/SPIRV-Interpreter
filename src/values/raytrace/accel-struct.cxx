@@ -197,10 +197,11 @@ public:
 
             if (found_primitive == Ternary::YES) {
                 intersect_once = true;
-                if (trace.getCandidate().type == Intersection::Type::Triangle)
+                Intersection& candidate = trace.getCandidate();
+                if (candidate.type == Intersection::Type::Triangle)
                     confirmIntersection();
                 else  // ... == Intersection::Type::AABB
-                    generateIntersection(getIntersectionT(false));
+                    generateIntersection(candidate.hitT);
             }
         } while (found_primitive == Ternary::YES);
 
@@ -383,6 +384,9 @@ public:
     }
     Intersection& getCandidate() {
         return trace.getCandidate();
+    }
+    Intersection& getCommitted() {
+        return trace.getCommitted();
     }
 
     void terminate() {

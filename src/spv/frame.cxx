@@ -75,6 +75,8 @@ export class Frame {
         // - [intersection_valid: bool, continue_search: bool] (for any hit)
         Value* result = nullptr;
         Value* hitAttribute = nullptr;
+        // the data which is a duplicate of the substage's
+        DataView* data = nullptr;
     } rt;
 
 public:
@@ -95,6 +97,10 @@ public:
         if (view != nullptr) {
             view->getSource()->destroyView(view);
             view = nullptr;  // to prevent double deletion or after-deletion use
+        }
+        if (this->rt.data != nullptr) {
+            delete this->rt.data;
+            this->rt.data = nullptr;
         }
     }
 
@@ -157,12 +163,18 @@ public:
         this->rt.as = &as;
         this->rt.result = payload;
         this->rt.hitAttribute = hit_attrib;
+        if (this->rt.data != nullptr) {
+            delete this->rt.data;
+            this->rt.data = nullptr;
+        }
     }
     void disableRaytrace() {
         this->rt.trigger = RtStageKind::NONE;
         this->rt.index = 0;
         this->rt.as = nullptr;
         this->rt.result = nullptr;
+        delete this->rt.data;
+        this->rt.data = nullptr;
     }
 
     unsigned getRtIndex() const {
@@ -182,5 +194,12 @@ public:
     }
     AccelStruct* getAccelStruct() const {
         return this->rt.as;
+    }
+
+    void setRtData(DataView& view) {
+        this->rt.data = &view;
+    }
+    DataView* getRtData() const {
+        return this->rt.data;
     }
 };
