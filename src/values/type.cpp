@@ -113,8 +113,9 @@ bool Type::operator==(const Type& rhs) const {
         return true;
     }
     case DataType::FUNCTION:
-        return (*subElement == *(rhs.subElement)) && subList == rhs.subList;
+        return (*subElement == *(rhs.subElement)) && (subList == rhs.subList);
     case DataType::POINTER:
+    case DataType::IMAGE: // Can compare dimensions and other fields in the image itself
         return *subElement == *(rhs.subElement);
     }
 }

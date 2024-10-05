@@ -174,8 +174,15 @@ public:
                 specs.push_back(id);
                 break;
             }
-            [[fallthrough]];
+            ins.push_back(id);
+            break;
         case SC::StorageClassUniformConstant:
+            // If the type is an image, then it may have been written to
+            // TODO: for a more complete solution, we may need to recursively search the type for any images.
+            if (var.getVal()->getType().getBase() == DataType::IMAGE && var.isWritable())
+                outs.push_back(id);
+            ins.push_back(id);
+            break;
         case SC::StorageClassInput:
         case SC::StorageClassShaderRecordBufferKHR:
             ins.push_back(id);

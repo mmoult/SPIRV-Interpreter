@@ -12,6 +12,8 @@ module;
 #include <stdexcept>
 #include <vector>
 
+#include <glm/ext.hpp>
+
 #include "data/manager.h"
 #include "../external/spirv.hpp"
 #include "../values/type.hpp"
@@ -271,23 +273,22 @@ if (!(COND)) \
         RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
         // fill in builtins into the data
         AccelStruct& as = *launched_from.getAccelStruct();
+
         const InstanceNode* instance = nullptr;
+        glm::vec2 barycentrics(0.0);
         if (stage != RtStageKind::MISS) {
             Intersection& cand = (stage == RtStageKind::CLOSEST)? as.getCommitted() : as.getCandidate();
             instance = cand.instance;
+            barycentrics = cand.barycentrics;
         }
         // the instruction which called launchSubstage is responsible for cleaning up the data too.
         DataView& data = *rt_stage.data->clone();
         launched_from.setRtData(data);
-        Value* hit_attrib = rt_stage.setUpInputs(
-            data,
-            as,
-            *launched_from.getRtResult(),
-            launched_from.getHitAttribute(),
-            instance
-        );
+        rt_stage.setUpInputs(data, as, *launched_from.getRtResult(), instance);
+
+        Value* hit_attrib = rt_stage.setUpHitAttribute(stage, data, barycentrics, launched_from.getHitAttribute());
         if (hit_attrib != nullptr) {
-            // We should not be generating a new hit attribute if there already was one. The setUpInputs function
+            // We should not be generating a new hit attribute if there already was one. The setUpHitAttribute function
             // currently prevents this categorically, but the following assert is a good future-proof for memory safety.
             assert(launched_from.getHitAttribute() == nullptr);
             launched_from.setHitAttribute(hit_attrib);

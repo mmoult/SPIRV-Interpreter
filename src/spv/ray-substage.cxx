@@ -105,14 +105,8 @@ public:
         return false;
     }
 
-    // may return the hit attribute if needed
-    [[nodiscard]] Value* setUpInputs(
-        DataView& dat,
-        AccelStruct& as,
-        Value& payload,
-        Value* hit_attribute,
-        const InstanceNode* instance
-    ) const {
+    /// @brief Set up all inputs except the hit attribute, which takes some special processing
+    void setUpInputs(DataView& dat, AccelStruct& as, Value& payload, const InstanceNode* instance) const {
         std::vector<Primitive> origin = as.getWorldRayOrigin();
         for (unsigned loc : worldRayOrigin) {
             Variable* var = dat[loc].getVariable();
@@ -159,17 +153,48 @@ public:
                 throw std::runtime_error("Cannot invoke raytracing substage with incorrect payload type!");
             }
         }
+    }
+
+    /// @brief Set up the hit attribute
+    /// The set up will fall into one of these four cases:
+    /// 1) may need to be generated to later reference (intersection)
+    /// 2) may come from a previous stage (intersection -> ahit, rchit)
+    /// 3) may need to be created from the intersection's barycentrics (triangle hit -> ahit, rchit)
+    /// 4) may not be needed at all (possible for all stages)
+    [[nodiscard]] Value* setUpHitAttribute(
+        RtStageKind stage,
+        DataView& dat,
+        glm::vec2 barycentrics,
+        Value* hit_attribute
+    ) const {
         if (hitAttribute != 0) {
+            Variable* var = dat[hitAttribute].getVariable();
+            Value& hit_attrib_val = *var->getVal();
             if (hit_attribute == nullptr) {
-                // For intersection case, create the hit attribute
-                Variable* var = dat[hitAttribute].getVariable();
-                assert(var != nullptr);
-                return var->getVal()->getType().construct();
+                if (stage == RtStageKind::INTERSECTION) {
+                    // For intersection case, create the hit attribute
+                    assert(var != nullptr);
+                    return hit_attrib_val.getType().construct();
+                } else {
+                    // Try to create a hit attribute from the barycentrics
+                    if (hit_attrib_val.getType().getBase() == DataType::ARRAY) {
+                        Array& arr = static_cast<Array&>(hit_attrib_val);
+                        if (unsigned arr_size = arr.getSize(); arr_size == 2 || arr_size == 3) {
+                            // The barycentrics size is expected to be 2, but using 3 is a common mistake we will accept
+                            for (unsigned i = 0; i < 2; ++i) {
+                                Primitive prim(barycentrics[i]);
+                                arr[i]->copyFrom(prim);
+                            }
+                            return nullptr;
+                        }
+                        // If the array length doesn't match expected, then it probably isn't intended as barycentric
+                    }
+                    throw std::runtime_error("Raytracing Substage launch missing non-barycentric hit attribute!");
+                }
             } else {
                 try {
-                    Variable* var = dat[hitAttribute].getVariable();
                     assert(var != nullptr);
-                    var->getVal()->copyFrom(*hit_attribute);
+                    hit_attrib_val.copyFrom(*hit_attribute);
                 } catch (const std::runtime_error& _) {
                     throw std::runtime_error("Cannot invoke raytracing substage with incorrect hit attribute type!");
                 }

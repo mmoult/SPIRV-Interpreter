@@ -16,7 +16,6 @@ module;
 #include <string>
 #include <tuple>
 
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext.hpp>
 
 // TODO it would be best for values/ to never import spv/, but here it is inconvenient not to use the flags which SPIR-V

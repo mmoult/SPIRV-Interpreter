@@ -1,0 +1,76 @@
+cam:
+  # Origin of the ray trace is (1, 2, 3)
+  # Direction of the ray trace is roughly (0.503, 0.574, 0.646)
+  # Should hit and launch rchit.spv
+  viewInverse:
+  - [ 1.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 1.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 1.0, 0.0 ]
+  - [ 1.0, 2.0, 3.0, 0.0 ]
+  projInverse:
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 7.0, 8.0, 9.0, 0.0 ]
+
+gl_LaunchIDEXT: [ 0, 0, 0 ]
+
+gl_LaunchSizeEXT: [ 1, 1, 0 ]
+
+image:
+  ref: ""
+  dim: [ 1, 1 ]
+  comps: 1234
+  data:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+
+topLevelAS:
+  tlas: [ 1, 0 ]
+  box_nodes: []
+  instance_nodes:
+  -
+      transformation:
+      - [ 1.0, 0.0, 0.0, 0.0 ]
+      - [ 0.0, 1.0, 0.0, 0.0 ]
+      - [ 0.0, 0.0, 1.0, 0.0 ]
+      child_node: [ 2, 0 ]
+      id: 0
+      custom_index: 0
+      mask: 255
+      sbt_record_offset: 0
+  triangle_nodes:
+  -
+      geometry_index: 0
+      primitive_index: 0
+      opaque: true
+      vertices:
+      - [ 8.0, 9.0, 9.0 ]
+      - [ 5.0, 9.0, 10.0 ]
+      - [ 5.0, 6.0, 11.0 ]
+  procedural_nodes: []
+  shader_binding_table:
+    miss_records:
+    - { shader: "./substages/rmiss.spv", input: "" }
+    hit_group_records:
+    -
+        any: { shader: "", input: "" }
+        closest: { shader: "./substages/rchit.spv", input: "" }
+        intersection: { shader: "", input: "" }
+    callable_records: []
+
+# See geometry at https://www.desmos.com/3d by using these entries:
+# R_{ayOriginX}=1
+# R_{ayOriginY}=2
+# R_{ayOriginZ}=3
+# R_{ayDirectionX}=\frac{7}{13.928388277184119338467738928513}
+# R_{ayDirectionY}=\frac{8}{13.928388277184119338467738928513}
+# R_{ayDirectionZ}=\frac{9}{13.928388277184119338467738928513}
+# R_{ayOrigin}=\left(R_{ayOriginX},\ R_{ayOriginY},\ R_{ayOriginZ}\right)
+# R_{ayDirection}=\left(R_{ayDirectionX},\ R_{ayDirectionY},\ R_{ayDirectionZ}\right)
+# R_{ayDirectionTranslatedByOrigin}=R_{ayDirection}+R_{ayOrigin}
+# R_{ayT}=12.0
+# \operatorname{vector}\left(R_{ayOrigin},\ R_{ayDirectionTranslatedByOrigin}\right)\cdot R_{ayT}
+# \operatorname{triangle}\left(\left(8,\ 9,\ 9\right),\ \left(5,\ 9,\ 10\right),\ \left(5,\ 6,\ 11\right)\right)

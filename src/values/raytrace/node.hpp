@@ -11,7 +11,6 @@
 #include <tuple>
 #include <sstream>
 
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext.hpp>
 
 #include "../value.hpp"

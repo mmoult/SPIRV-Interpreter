@@ -143,19 +143,31 @@ public:
         if (xx != other.xx || yy != other.yy || zz != other.zz)
             return false;
 
-        // The ordering of components does not have to be identical, but the number of components per fragment must
-        // be equivalent.
+        // The ordering of components does not have to be identical, but all active components per fragment in one image
+        // need to be active in the other image too.
         if (comps.count != other.comps.count || data.size() != other.data.size())
             return false;
+        for (unsigned i = 0; i < 4; ++i) {
+            if ((comps[i] == 0) != (other.comps[i] == 0))
+                return false;
+        }
 
         // Do a data analysis
+        const Type& subelement = type.getElement();
         for (unsigned i = 0; i < data.size(); i += comps.count) {
-            for (unsigned j = 0; j < comps.count; ++j) {
-                if (data[i + comps[j]] != other.data[i + other.comps[j]])
+            for (unsigned j = 0; j < 4; ++j) {
+                if (comps[j] == 0)
+                    continue;
+                // Compare data in the primitive type (needed since float allow for a more lenient comparison)
+                Primitive mine(data[i + comps[j] - 1]);
+                Primitive your(other.data[i + other.comps[j] - 1]);
+                mine.cast(subelement);
+                your.cast(subelement);
+                if (!mine.equals(your))
                     return false;
             }
         }
-        return false;
+        return true;
     }
 
     /// @brief Copy the image's fields from the other struct, if possible
@@ -219,7 +231,7 @@ public:
             // TODO handle if the number of channels gotten != 4
             for (unsigned i = 0; i < size; i += gc) {
                 unsigned ii = 0;
-                for (unsigned j = 0; j < comps.count; ++j) {
+                for (unsigned j = 0; j < 4; ++j) {
                     if (comps[j] == 0)
                         continue;
                     float norm = img[i + ii] / 255.0;
@@ -286,7 +298,7 @@ public:
             data.resize(size);
             // TODO actually cannot do this in case the data elements have different type :/
             for (unsigned i = 0; i < size; i += comps.count) {
-                for (unsigned j = 0; j < comps.count; ++j) {
+                for (unsigned j = 0; j < 4; ++j) {
                     if (comps[j] == 0)
                         continue;
                     const auto& prim = static_cast<const Primitive&>(*data_a[i + comp_new[j] - 1]);
@@ -317,7 +329,7 @@ public:
         data.resize(other.data.size());
         // TODO actually cannot do this in case the data elements have different type :/
         for (unsigned i = 0; i < data.size(); i += comps.count) {
-            for (unsigned j = 0; j < comps.count; ++j) {
+            for (unsigned j = 0; j < 4; ++j) {
                 if (comps[j] == 0)
                     continue;
                 data[i + comps[j] - 1] = other.data[i + other.comps[j] - 1];
