@@ -69,7 +69,9 @@ class Type : public Valuable {
     const Type* subElement;
     std::vector<const Type*> subList;
     std::vector<std::string> nameList;
+
     std::string name;
+    bool bufferBlock = false;
 
     inline Type(DataType base, unsigned sub_size, const Type* sub_element):
         base(base),
@@ -247,6 +249,13 @@ public:
     }
     inline const std::string& getName() const {
         return name;
+    }
+
+    inline void setBufferBlock() {
+        this->bufferBlock = true;
+    }
+    inline bool isBufferBlock() const {
+        return this->bufferBlock;
     }
 
     bool operator==(const Type& rhs) const;

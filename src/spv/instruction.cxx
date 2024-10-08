@@ -188,6 +188,11 @@ public:
             ins.push_back(id);
             break;
         case SC::StorageClassUniform:
+            ins.push_back(id);
+            // Uniforms decorated with Bufferblock was the pre-SPIR-V 1.3 solution for what is now `StorageBuffer`.
+            if (var.getVal()->getType().isBufferBlock() && var.isWritable())
+                outs.push_back(id);
+            break;
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
         case SC::StorageClassCallableDataKHR:

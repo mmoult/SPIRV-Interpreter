@@ -81,9 +81,10 @@ void Instruction::readOp(
     std::vector<Type> to_load;
     std::vector<Type> optional;
 
-    // The result and result type will be handled by default (as needed), so do NOT include
-    // them in to_load!
-    bool repeating = false; // whether the last optional type may be repeated
+    // The result and result type will be handled by default (as needed), so do NOT include them in to_load!
+    bool repeating = false; //  whether the last optional type may be repeated
+    // whether the the repeat type may be ommitted (false / a*) or must be used at least once (a+)
+    bool repeating_least_once = true;
     switch (op) {
     default: {
         // Unsupported op
@@ -365,6 +366,7 @@ void Instruction::readOp(
         optional.push_back(Type::CONST);
         optional.push_back(Type::REF);
         repeating = true;
+        repeating_least_once = false;
         break;
     case spv::OpSelect: // 169
     case spv::OpControlBarrier: // 224
@@ -442,13 +444,19 @@ void Instruction::readOp(
 
     if (!optional.empty()) {
         // Try optional.
-        // If any in optional are present, all in list must exist
+        // If any in optional are present, all in list must exist (except the last if repeating_least_once is false)
         // The list may be repeated if "repeating" is true
         do {
             if (i >= words.size())
                 break;
 
-            for (const auto opt_type : optional) {
+            for (unsigned j = 0; j < optional.size(); ++j) {
+                // Early break because the repeating term doesn't have to appear
+                if (!repeating_least_once && j == optional.size() - 1) {
+                    repeating = false;
+                    break;
+                }
+                auto opt_type = optional[j];
                 check_limit("");
                 handle_type(opt_type, inst.operands, words, i);
             }

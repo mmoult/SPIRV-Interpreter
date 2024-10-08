@@ -663,6 +663,13 @@ bool Instruction::makeResult(
                     strct->nameMember(idx, name);
                     break;
                 }
+                case spv::OpDecorate: { // 71
+                    assert(deco.operands[1].type == Token::Type::CONST);
+                    unsigned idx = std::get<unsigned>(deco.operands[1].raw);
+                    if (idx == spv::DecorationBufferBlock)
+                        strct->setBufferBlock();
+                    break;
+                }
                 case spv::OpMemberDecorate: // 72
                     break; // not currently needed
                 default:

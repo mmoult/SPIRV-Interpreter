@@ -1,4 +1,2 @@
-in_tex: { texture_samples: 1.24 }
-
 out_buf:
   adaptive_avg_pad: [ 36975.1, 36975.1, 2.32193, 0.0 ]
