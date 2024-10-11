@@ -241,7 +241,7 @@ Ternary TriangleNode::step(Trace* trace_p) const {
     candidate.primitiveIndex = this->primIndex;
     candidate.hitKind = entered_front ? HIT_KIND_FRONT_FACING_TRIANGLE_KHR : HIT_KIND_BACK_FACING_TRIANGLE_KHR;
     candidate.type = Intersection::Type::Triangle;
-    return Ternary::YES;
+    return (this->opaque || !trace.useSBT)? Ternary::YES : Ternary::MAYBE;
 }
 
 [[nodiscard]] TriangleNode* TriangleNode::fromVal(const Value* val) {

@@ -331,7 +331,8 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // We use the trigger to keep track of rt stage:
         // 1) NONE: first appearance at the instruction
         // 2) INTERSECTION: returned after intersection (which itself may have invoked any hit)
-        // 3) CLOSEST or MISS: return after processing the chosen hit/miss
+        // 3) ANY_HIT: returned after non-opaque triangle intersection
+        // 4) CLOSEST or MISS: return after processing the chosen hit/miss
         auto prev_stage = frame.getRtTrigger();
         if (prev_stage != RtStageKind::MISS && prev_stage != RtStageKind::CLOSEST) {
             Value* hit_attrib = nullptr;
@@ -362,21 +363,42 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                     miss_index & 0xFFFF  // Only the 16 least-significant bits of Miss Index are used
                 );
             } else {
-                // handle the result of the intersection shader
-                hit_attrib = frame.getHitAttribute();
-                Primitive* intersected = static_cast<Primitive*>(frame.getRtResult());
+                bool valid_intersect = false;
+
+                if (prev_stage == RtStageKind::INTERSECTION) {
+                    // handle the result of the intersection shader
+                    hit_attrib = frame.getHitAttribute();
+                    Primitive* intersected = static_cast<Primitive*>(frame.getRtResult());
+                    valid_intersect = intersected->data.b32;
+                    delete intersected;
+                } else {
+                    assert(prev_stage == RtStageKind::ANY_HIT);
+                    // Return from any hit for non-opaque triangle geometry
+                    Array& payload = static_cast<Array&>(*frame.getRtResult());
+                    valid_intersect = static_cast<Primitive&>(*payload[0]).data.b32;
+                    // We ignore payload[1] (continue_search) since it indicates whether we should continue the
+                    // intersection shader, which we don't have.
+                    delete &payload;
+                }
+
                 // In the case of a failed intersection, we will not resume trace (since it failed, there is nothing to
                 // resume). In case of a hit, then we want to analyze the hit in traceRay.
-                if (!intersected->data.b32)
+                if (!valid_intersect)
                     frame.disableRaytrace();
-                delete intersected;
             }
 
             // Return whether at least one intersection was made
             Ternary status = as.traceRay(frame.getRtTrigger() != RtStageKind::NONE);
             if (status == Ternary::MAYBE) {
                 // We need to launch a substage here
-                invoke_substage_shader(RtStageKind::INTERSECTION, frame, as, nullptr);
+                // Type must be triangle or intersection
+                invoke_substage_shader(
+                    (as.getTrace().getCandidate().type == Intersection::Type::Triangle) ? RtStageKind::ANY_HIT
+                                                                                        : RtStageKind::INTERSECTION,
+                    frame,
+                    as,
+                    nullptr
+                );
                 inc_pc = false;
                 break;
             }
@@ -499,7 +521,8 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
         ray_query.setAccelStruct(as);
         ray_query.getAccelStruct().initTrace(
-            ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, true
+            // Note: ray query does NOT support using the shader binding table
+            ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, false
         );
         break;
     }
@@ -523,24 +546,8 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         AccelStruct& as = ray_query.getAccelStruct();
 
-        Ternary status = Ternary::NO;
-        if (frame.getRtTrigger() == RtStageKind::NONE) {
-            status = as.stepTrace();
-
-            if (status == Ternary::MAYBE) {
-                invoke_substage_shader(RtStageKind::INTERSECTION, frame, as, nullptr);
-                inc_pc = false;
-                break;
-            }
-        } else {
-            // Handle the result of the previous stage (should only ever be intersection)
-            Primitive* intersected = static_cast<Primitive*>(frame.getRtResult());
-            if (Value* hit_attrib = frame.getHitAttribute(); hit_attrib != nullptr)
-                delete hit_attrib;
-            status = intersected->data.b32? Ternary::YES : Ternary::NO;
-            delete intersected;
-            frame.disableRaytrace();
-        }
+        Ternary status = as.stepTrace();
+        assert(status != Ternary::MAYBE);  // ray query cannot handle sbt, so it should have that disabled
 
         if (status == Ternary::YES && as.getTrace().rayFlags.terminateOnFirstHit())
             as.terminate();
@@ -554,46 +561,49 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         auto prev_stage = frame.getRtTrigger();
         bool valid_intersect = false;
         bool continue_search = true;
+        float t_min = 0.0;
+        Frame* launch_frame = get_launching_frame(frame_stack, RtStageKind::INTERSECTION);
         if (prev_stage == RtStageKind::NONE) {
             // Get data from the ray tracing pipeline if it exists (won't exist if this is run in a dummy pipeline)
             AccelStruct* accel_struct = nullptr;
-            Frame* launch_frame = get_launching_frame(frame_stack, RtStageKind::INTERSECTION);
             if (launch_frame != nullptr) {
                 accel_struct = launch_frame->getAccelStruct();
                 assert(accel_struct != nullptr);
+                const auto& trace = accel_struct->getTrace();
+                t_min = trace.rayTMin;
 
-                // Invoke the any hit shader if running a ray tracing pipeline
-                invoke_substage_shader(RtStageKind::ANY_HIT, frame, *accel_struct, launch_frame->getHitAttribute());
-                inc_pc = false;
-                break;
-            } else {
-                // Execute this if testing a single intersection shader: Assume range is [0.0, infinity)
-                valid_intersect = t_hit > 0.0f;
+                // Invoke the any hit shader if running a ray tracing pipeline and the geometry is non-opaque
+                if (!trace.getCandidate().isOpaque) {
+                    invoke_substage_shader(RtStageKind::ANY_HIT, frame, *accel_struct, launch_frame->getHitAttribute());
+                    inc_pc = false;
+                    break;
+                }
             }
+            // When not running the any hit, assume validity within the range
+            valid_intersect = t_hit >= t_min;
         } else {
             // We have returned from the any hit shader. Handle its results
             Array& payload = static_cast<Array&>(*frame.getRtResult());
             valid_intersect = static_cast<Primitive&>(*payload[0]).data.b32;
             continue_search = static_cast<Primitive&>(*payload[1]).data.b32;
 
-            Frame* launch_frame = get_launching_frame(frame_stack, RtStageKind::INTERSECTION);
-            if (launch_frame != nullptr) {
-                if (valid_intersect) {
-                    AccelStruct& as = *launch_frame->getAccelStruct();
-                    const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
-                    Intersection& candidate = as.getCandidate();
-                    candidate.hitKind = hit_kind;
-                    candidate.hitT = t_hit;
-                }
-
-                Primitive* intersect_result = static_cast<Primitive*>(launch_frame->getRtResult());
-                assert(intersect_result != nullptr);
-                Primitive prim(valid_intersect);
-                intersect_result->copyFrom(prim);
-            }
-
             frame.disableRaytrace();
             delete &payload;
+        }
+
+        if (launch_frame != nullptr) {
+            if (valid_intersect) {
+                AccelStruct& as = *launch_frame->getAccelStruct();
+                const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+                Intersection& candidate = as.getCandidate();
+                candidate.hitKind = hit_kind;
+                candidate.hitT = t_hit;
+            }
+
+            Primitive* intersect_result = static_cast<Primitive*>(launch_frame->getRtResult());
+            assert(intersect_result != nullptr);
+            Primitive prim(valid_intersect);
+            intersect_result->copyFrom(prim);
         }
 
         dst_val = getType(0, data)->construct();
