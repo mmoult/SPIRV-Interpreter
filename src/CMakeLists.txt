@@ -32,6 +32,7 @@ target_sources(spv-interp
       values/image.cxx
       values/pointer.cxx
       values/primitive.cxx
+      values/sampler.cxx
       values/statics.cxx
       values/string.cxx
       values/raytrace/accel-struct.cxx

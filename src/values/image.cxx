@@ -4,8 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <string>
 #include <cstdint>
+#include <functional>
+#include <string>
 #include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -394,6 +395,28 @@ public:
             }
         }
         return {x, y, z};
+    }
+
+    static void useCoords(
+        const Value* coords_v,
+        std::function<void(int, int, int)> int_fx,
+        std::function<void(float, float, float)> float_fx
+    ) {
+        // coords can be a scalar or vector of int or float type
+        const Type* coord_type = &coords_v->getType();
+        bool arrayed = false;
+        if (coord_type->getBase() == DataType::ARRAY) {
+            coord_type = &coord_type->getElement();
+            arrayed = true;
+        }
+        DataType base = coord_type->getBase();
+        if (base == DataType::INT) {
+            auto [x, y, z] = Image::extractIntCoords(arrayed, coords_v);
+            int_fx(x, y, z);
+        } else {
+            assert(base == DataType::FLOAT);
+            throw std::runtime_error("Float coordinates to image read not supported yet!");
+        }
     }
 
     [[nodiscard]] Array* read(int x, int y, int z) const {

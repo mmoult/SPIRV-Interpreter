@@ -15,12 +15,12 @@ import value.image;
 import value.primitive;
 import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
+import value.sampler;
 import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values) const {
     switch (base) {
     default:
-        assert(false);
         throw std::runtime_error("Cannot construct unsupported type!");
     case DataType::VOID:
         throw std::runtime_error("Cannot construct void type!");
@@ -66,6 +66,8 @@ Value* Type::construct(std::vector<const Value*>* values) const {
         return new RayQuery();
     case DataType::IMAGE:
         return new Image(*this);
+    case DataType::SAMPLER:
+        return new Sampler(*this);
     }
 }
 
@@ -125,7 +127,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
     std::string base_str;
     switch (base) {
     default:
-        throw std::invalid_argument("Unsupported type!");
+        throw std::invalid_argument("Unsupported type for unionOf!");
     case DataType::VOID:
         if (other.base == base)
             break;
@@ -247,6 +249,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
     SIMPLE(ACCEL_STRUCT, accelStruct);
     SIMPLE(RAY_QUERY, rayQuery);
     SIMPLE(IMAGE, image);
+    SIMPLE(SAMPLER, sampler);
     }
 #undef SIMPLE
 }

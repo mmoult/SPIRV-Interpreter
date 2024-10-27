@@ -199,7 +199,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         Value* from_val = getFromPointer(2, data);
 
         // The SPIR-V spec handles images differently.
-        if (ret_type->getBase() == DataType::IMAGE) {
+        if (auto base = ret_type->getBase(); base == DataType::IMAGE || base == DataType::SAMPLER) {
             // Unlike aggregates which own their data, images have metadata and a non-owning reference to the texels.
             // Due to this, each load from a variable will share the same texels. Since the metadata is constant, we can
             // simulate this by reusing the same image object
@@ -224,14 +224,6 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to ImageRead must be an image!");
         auto& image = static_cast<Image&>(*image_v);
-        const Value* coords_v = getValue(1, data);
-        // coords can be a scalar or vector of int or float type
-        const Type* coord_type = &coords_v->getType();
-        bool arrayed = false;
-        if (coord_type->getBase() == DataType::ARRAY) {
-            coord_type = &coord_type->getElement();
-            arrayed = true;
-        }
         const Value* texel = getValue(2, data);
         // If the texel is a single value, we need to compose it in a temporary array
         const Array* composed;
@@ -242,14 +234,15 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             throw std::runtime_error("Unimplemented ImageWrite variant!");
         }
 
-        DataType base = coord_type->getBase();
-        if (base == DataType::INT) {
-            auto [x, y, z] = Image::extractIntCoords(arrayed, coords_v);
-            image.write(x, y, z, *composed);
-        } else { // if (base == DataType::FLOAT) {
-            // TODO
-            throw std::runtime_error("Float coordinates to image read not supported yet!");
-        }
+        Image::useCoords(
+            getValue(1, data),
+            [&](int x, int y, int z) {
+                image.write(x, y, z, *composed);
+            },
+            [&](float x, float y, float z) {
+                throw std::runtime_error("Unsupported float coordinates!");
+            }
+        );
         break;
     }
     case spv::OpControlBarrier: { // 224

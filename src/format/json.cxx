@@ -21,6 +21,7 @@ import value.image;
 import value.pointer;
 import value.primitive;
 import value.raytrace.accelStruct;
+import value.sampler;
 import value.string;
 
 export class Json : public ValueFormat {
@@ -223,6 +224,8 @@ private:
 
     void printValue(std::stringstream& out, const Value& value, unsigned indents) const {
         const auto& type_base = value.getType().getBase();
+        Struct* structure = nullptr;
+
         switch (type_base) {
         case DataType::FLOAT: {
             if (templatize) {
@@ -342,19 +345,24 @@ private:
             break;
         }
         case DataType::ACCEL_STRUCT: {
-            Struct* structure = static_cast<const AccelStruct&>(value).toStruct();
-            printValue(out, *structure, 1);
-            delete structure;
+            structure = static_cast<const AccelStruct&>(value).toStruct();
             break;
         }
         case DataType::IMAGE: {
-            Struct* structure = static_cast<const Image&>(value).toStruct();
-            printValue(out, *structure, 1);
-            delete structure;
+            structure = static_cast<const Image&>(value).toStruct();
+            break;
+        }
+        case DataType::SAMPLER: {
+            structure = static_cast<const Sampler&>(value).toStruct();
             break;
         }
         default: // VOID, FUNCTION, RAY_QUERY
-            throw std::runtime_error("Cannot print value!");
+            throw std::runtime_error("Cannot print JSON for object of unsupported type!");
+        }
+
+        if (structure != nullptr) {
+            printValue(out, *structure, indents);
+            delete structure;
         }
     }
 

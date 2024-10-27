@@ -22,13 +22,14 @@ enum class DataType {
     STRUCT,
     ARRAY,
     STRING,
-    // Above is usable in TOML, below only internal to SPIR-V
+    // Above is usable in YAML/JSON input, below only internal to SPIR-V
     VOID,
     FUNCTION,
     POINTER,
     ACCEL_STRUCT,
     RAY_QUERY,
     IMAGE,
+    SAMPLER,  // image sampler, to be specific
 };
 
 inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
@@ -53,6 +54,7 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     SWITCH(ACCEL_STRUCT)
     SWITCH(RAY_QUERY)
     SWITCH(IMAGE)
+    SWITCH(SAMPLER)
     }
 #undef SWITCH
     return os;
@@ -164,7 +166,7 @@ public:
     }
 
     /// @brief Creates an image type
-    /// @param sampled the base type of the image. Should be a numeric scalar or void
+    /// @param texel_type the base type of the image. Should be a numeric scalar or void
     /// @param dim the number of dimensions. Ie a 1D image = 1, 2D = 2, 3D = 3. Max is 3
     /// @param comps integer defining the use and order of RGBA components. Each digit defines the order, starting
     ///              from 1 (0 indicates the component is unused). For example,
@@ -172,10 +174,14 @@ public:
     ///              - comps = 1000 means that only red is enabled
     ///              - comps = 2341 means that all components active in ARGB order
     /// @return the created image type
-    static inline Type image(const Type* sampled, unsigned dim, unsigned comps) {
+    static inline Type image(const Type* texel_type, unsigned dim, unsigned comps) {
         assert(dim <= 3);      // max of 2 bits
         assert(comps <= 4321); // max of 13 bits
-        return Type(DataType::IMAGE, (comps << 8) | dim, sampled);
+        return Type(DataType::IMAGE, (comps << 8) | dim, texel_type);
+    }
+
+    static inline Type sampler(const Type* image) {
+        return Type(DataType::SAMPLER, 0, image);
     }
 
     // Other methods:
@@ -195,7 +201,7 @@ public:
     }
 
     inline const Type& getElement() const {
-        assert(base == DataType::ARRAY || base == DataType::IMAGE);
+        assert(base == DataType::ARRAY || base == DataType::IMAGE || base == DataType::SAMPLER);
         return *subElement;
     }
     inline unsigned getSize() const {
@@ -233,6 +239,7 @@ public:
     }
 
     // TODO: deprecate or make private. The nearest valid use is operator==
+    [[deprecated]]
     inline bool sameBase(const Type& rhs) const {
         return base == rhs.base;
     }

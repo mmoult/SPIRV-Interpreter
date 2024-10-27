@@ -192,6 +192,34 @@ void Instruction::readOp(
         to_load.push_back(Type::CONST);
         optional.push_back(Type::CONST);
         break;
+    case spv::OpTypeSampledImage: // 27
+    case spv::OpTypeRuntimeArray: // 29
+    case spv::OpTranspose: // 84
+    case spv::OpConvertFToU: // 109
+    case spv::OpConvertFToS: // 110
+    case spv::OpConvertSToF: // 111
+    case spv::OpConvertUToF: // 112
+    case spv::OpBitcast: // 124
+    case spv::OpFNegate: // 127
+    case spv::OpAny: // 154
+    case spv::OpAll: // 155
+    case spv::OpIsNan: // 156
+    case spv::OpIsInf: // 157
+    case spv::OpLogicalNot: // 168
+    case spv::OpNot: // 200
+    case spv::OpBranch: // 249
+    case spv::OpReturnValue: // 254
+    //case spv::OpConvertUToAccelerationStructureKHR: // 4447
+    case spv::OpRayQueryTerminateKHR: // 4474
+    case spv::OpRayQueryConfirmIntersectionKHR: // 4476
+    case spv::OpRayQueryProceedKHR: // 4477
+    case spv::OpRayQueryGetRayTMinKHR: // 6016
+    case spv::OpRayQueryGetRayFlagsKHR: // 6017
+    case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: // 6026
+    case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
+    case spv::OpRayQueryGetWorldRayOriginKHR: // 6030
+        to_load.push_back(Type::REF);
+        break;
     case spv::OpTypeArray: // 28
     case spv::OpIAdd: // 128
     case spv::OpFAdd: // 129
@@ -264,33 +292,6 @@ void Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
-    case spv::OpTypeRuntimeArray: // 29
-    case spv::OpTranspose: // 84
-    case spv::OpConvertFToU: // 109
-    case spv::OpConvertFToS: // 110
-    case spv::OpConvertSToF: // 111
-    case spv::OpConvertUToF: // 112
-    case spv::OpBitcast: // 124
-    case spv::OpFNegate: // 127
-    case spv::OpAny: // 154
-    case spv::OpAll: // 155
-    case spv::OpIsNan: // 156
-    case spv::OpIsInf: // 157
-    case spv::OpLogicalNot: // 168
-    case spv::OpNot: // 200
-    case spv::OpBranch: // 249
-    case spv::OpReturnValue: // 254
-    //case spv::OpConvertUToAccelerationStructureKHR: // 4447
-    case spv::OpRayQueryTerminateKHR: // 4474
-    case spv::OpRayQueryConfirmIntersectionKHR: // 4476
-    case spv::OpRayQueryProceedKHR: // 4477
-    case spv::OpRayQueryGetRayTMinKHR: // 6016
-    case spv::OpRayQueryGetRayFlagsKHR: // 6017
-    case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: // 6026
-    case spv::OpRayQueryGetWorldRayDirectionKHR: // 6029
-    case spv::OpRayQueryGetWorldRayOriginKHR: // 6030
-        to_load.push_back(Type::REF);
-        break;
     case spv::OpTypeStruct: // 30
     case spv::OpTypeFunction: // 33
     case spv::OpConstantComposite: // 44
@@ -352,6 +353,7 @@ void Instruction::readOp(
         optional.push_back(Type::UINT);
         repeating = true;
         break;
+    //case spv::OpImageSampleImplicitLod: // 87
     case spv::OpImageRead: // 98
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
