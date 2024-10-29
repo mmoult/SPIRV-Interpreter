@@ -7,6 +7,7 @@ module;
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -100,6 +101,11 @@ export class Image : public Value {
         }
 
         void assertCompatible(const Component& other) {
+            if (count == 0) {  // unknown format is coerced to the other
+                *this = other;
+                return;
+            }
+
             // It is possible to copy from an image with different component order, but all active channels on one must
             // also be active in the other (bidirectional check).
             for (unsigned i = 0; i < 4; ++i) {
@@ -131,6 +137,31 @@ export class Image : public Value {
     // or a normalized negatively signed range of [-0.5, 0.5].
 
     inline static const std::vector<std::string> names {"ref", "dim", "comps", "data"};
+
+    [[nodiscard]] Array* outOfBoundsAccess() const {
+        const Type& el = type.getElement();
+        std::vector<Value*> vals(comps.count, nullptr);
+        for (unsigned i = 0; i < comps.count; ++i) {
+            auto prim = new Primitive(0);
+            prim->cast(el);
+            vals[i] = prim;
+        }
+        return new Array(vals);
+    }
+
+    /// @brief Decomposes the float value into an unsigned int base and a float ratio
+    ///
+    /// The unsigned int base is an unsigned int with the int part of val.
+    /// The ratio is how close the original value is to the next int of larger magnitude
+    ///
+    /// For example:
+    /// - decompose(1.0)  = {1, 0.0}
+    /// - decompose(3.4)  = {3, 0.4}
+    std::tuple<unsigned, float> decompose(float val) const {
+        float base;
+        float dec = std::modf(val, &base);
+        return {static_cast<unsigned>(base), dec};
+    }
 
 public:
     Image(Type t): Value(t), comps(t.getComps(), false), xx(0), yy(0), zz(0) {};
@@ -396,6 +427,21 @@ public:
         }
         return {x, y, z};
     }
+    static std::tuple<float, float, float> extractFloatCoords(bool arrayed, const Value* coords_v) {
+        float x = 0.0, y = 0.0, z = 0.0;
+        if (!arrayed)
+            x = static_cast<const Primitive*>(coords_v)->data.fp32;
+        else {
+            const auto& coords = static_cast<const Array&>(*coords_v);
+            x = static_cast<const Primitive*>(coords[0])->data.fp32;
+            if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
+                y = static_cast<const Primitive*>(coords[1])->data.fp32;
+                if (coords_size == 3)
+                    z = static_cast<const Primitive*>(coords[2])->data.fp32;
+            }
+        }
+        return {x, y, z};
+    }
 
     static void useCoords(
         const Value* coords_v,
@@ -415,14 +461,12 @@ public:
             int_fx(x, y, z);
         } else {
             assert(base == DataType::FLOAT);
-            throw std::runtime_error("Float coordinates to image read not supported yet!");
+            auto [x, y, z] = Image::extractFloatCoords(arrayed, coords_v);
+            float_fx(x, y, z);
         }
     }
 
     [[nodiscard]] Array* read(int x, int y, int z) const {
-        std::vector<Value*> vals(comps.count, nullptr);
-        // The size of the array returned is the number of components in each texel
-        const Type& el = type.getElement();
         bool oob = false;
         if (x < 0 || y < 0 || z < 0)
             oob = true;
@@ -436,25 +480,118 @@ public:
 
         // "See the client API specification for handling of coordinates outside the image."
         // For now, return black on out of bounds
-        if (oob) {
-            for (unsigned i = 0; i < comps.count; ++i) {
-                auto prim = new Primitive(0);
-                prim->cast(el);
-                vals[i] = prim;
-            }
-        } else {
-            unsigned yyy = xx * comps.count;
-            unsigned zzz = yy * yyy;
-            unsigned base = (xu * comps.count) + (yu * yyy) + (zu * zzz);
-            assert(base < data.size());  // should be checked in copying that dimensions match data count actually given
+        if (oob)
+            return outOfBoundsAccess();
 
-            // Output the channels in the same order defined by the comps
-            unsigned chan = 0;
-            for (unsigned chan = 0; chan < comps.count; ++chan) {
-                auto prim = new Primitive(data[base + chan]);
-                prim->cast(el);
-                vals[chan] = prim;
+        // The size of the array returned is the number of components in each texel
+        std::vector<Value*> vals(comps.count, nullptr);
+        const Type& el = type.getElement();
+
+        unsigned yyy = xx * comps.count;
+        unsigned zzz = yy * yyy;
+        unsigned base = (xu * comps.count) + (yu * yyy) + (zu * zzz);
+
+        // Output the channels in the same order defined by the comps
+        unsigned chan = 0;
+        for (unsigned chan = 0; chan < comps.count; ++chan) {
+            assert(base + chan < data.size());  // safety assert for what should already have been checked
+            auto prim = new Primitive(data[base + chan]);
+            prim->cast(el);
+            vals[chan] = prim;
+        }
+
+        return new Array(vals);
+    }
+    [[nodiscard]] Array* read(float x, float y, float z) const {
+        bool oob = false;
+        if (x < 0 || y < 0 || z < 0)
+            oob = true;
+        // all unsigned ints should be able to implicitly cast to a float
+        if ((x > 0 && x >= xx) || (y > 0 && y >= yy) || (z > 0 && z >= zz))
+            oob = true;
+
+        // "See the client API specification for handling of coordinates outside the image."
+        // For now, return black on out of bounds
+        if (oob)
+            return outOfBoundsAccess();
+
+        // Each coordinate's fractional value falls on a spectrum from 0.0 (inclusive) to 1.0 (exclusive)
+        // Perform interpolation for all affected values
+        float sums[] = {0.0, 0.0, 0.0, 0.0};  // cannot be any more than 4 components
+
+        auto [xBase, xRatio] = decompose(x);
+        auto [yBase, yRatio] = decompose(y);
+        auto [zBase, zRatio] = decompose(z);
+
+        std::vector<std::tuple<unsigned, float>> interps;
+        unsigned factor = comps.count;
+        if (xRatio != 0.0)
+            interps.push_back({factor, xRatio});
+        unsigned base = xBase * factor;
+        factor *= xx;
+        if (yRatio != 0.0)
+            interps.push_back({factor, yRatio});
+        base += yBase * factor;
+        factor *= yy;
+        if (zRatio != 0.0)
+            interps.push_back({factor, zRatio});
+        base += zBase * factor;
+
+        const Type& el = type.getElement();
+        const DataType el_base = el.getBase();
+
+        // We need every combo of different interps applied (either off or on), which maps perfectly onto bits counting
+        // to 2^n, where n is the maximum number of interps.
+        // Each bit in the increment variable corresponds to whether that interpolation index should be on
+        for (unsigned i = 0; i < (1 << interps.size()); ++i) {
+            unsigned total = base;
+            float weight = 1.0;
+            for (unsigned bit = 0; bit < interps.size(); ++bit) {
+                auto [delta, this_ratio] = interps[bit];
+                if ((i >> bit) & 0x1) {
+                    total += delta;
+                    weight *= this_ratio;
+                } else {
+                    weight *= (1.0 - this_ratio);
+                }
             }
+            // Now that we have determined the location and the total weight, add to sum
+            for (unsigned chan = 0; chan < comps.count; ++chan) {
+                assert(total + chan < data.size());  // safety assert for what should already have been checked
+                Primitive prim(data[total + chan]);
+                float converted;
+                if (el_base == DataType::FLOAT) {
+                    converted = prim.data.fp32;
+                } else if (el_base == DataType::INT) {
+                    converted = prim.data.i32;
+                } else {
+                    assert(el_base == DataType::UINT);
+                    converted = prim.data.u32;
+                }
+                sums[chan] += (converted * weight);
+            }
+        }
+
+        // The size of the array returned is the number of components in each texel
+        std::vector<Value*> vals(comps.count, nullptr);
+
+        // Output the channels in the same order defined by the comps
+        unsigned chan = 0;
+        for (unsigned chan = 0; chan < comps.count; ++chan) {
+            float sum = sums[chan];
+            Primitive from(0);
+            if (el_base == DataType::FLOAT) {
+                from = Primitive(sum);
+            } else if (el_base == DataType::INT) {
+                from = Primitive(static_cast<int>(sum));
+            } else {
+                assert(el_base == DataType::UINT);
+                from = Primitive(static_cast<unsigned>(sum));
+            }
+            auto* prim = new Primitive(0);
+            prim->cast(el);
+            prim->copyFrom(from);
+            vals[chan] = prim;
         }
 
         return new Array(vals);

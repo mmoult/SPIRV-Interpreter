@@ -353,7 +353,7 @@ void Instruction::readOp(
         optional.push_back(Type::UINT);
         repeating = true;
         break;
-    //case spv::OpImageSampleImplicitLod: // 87
+    case spv::OpImageSampleImplicitLod: // 87
     case spv::OpImageRead: // 98
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);

@@ -46,6 +46,12 @@ public:
                 "image provided!"
             );
         }
+        if (num_mipmaps <= defaultLod) {
+            throw std::runtime_error(
+                "The number of mipmaps provided is incompatible with the default level of detail (lod)! The lod is an "
+                "index within the mipmaps array (with first expected to be the biggest mipmaps)."
+            );
+        }
         mipmaps.clear();
         const Type& image_type = type.getElement();
         for (unsigned i = 0; i < num_mipmaps; ++i) {
@@ -94,5 +100,12 @@ public:
         arr->setElementsDirectly(mips);
         elements.push_back(arr);
         return new Struct(elements, names);
+    }
+
+    Image& sampleImplicitLod() {
+        return mipmaps[defaultLod];
+    }
+    const Image& sampleImplicitLod() const {
+        return mipmaps[defaultLod];
     }
 };

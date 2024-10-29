@@ -35,6 +35,7 @@ import value.pointer;
 import value.primitive;
 import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
+import value.sampler;
 
 template<typename T>
 Value* construct_from_vec(const std::vector<T>& vec, const Type* res_type) {
@@ -106,6 +107,30 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
                 var.setName(std::to_string(result_at));
         }
     }
+}
+
+Value* read_from_image(Type* res_type, const Image& image, const Value* coords) {
+    Value* to_ret = res_type->construct();
+    Image::useCoords(
+        coords,
+        [&](int x, int y, int z) {
+            const Array& arr = *image.read(x, y, z);
+            if (arr.getSize() == 1)
+                to_ret->copyFrom(*(arr[0]));
+            else
+                to_ret->copyFrom(arr);
+            delete &arr;
+        },
+        [&](float x, float y, float z) {
+            const Array& arr = *image.read(x, y, z);
+            if (arr.getSize() == 1)
+                to_ret->copyFrom(*(arr[0]));
+            else
+                to_ret->copyFrom(arr);
+            delete &arr;
+        }
+    );
+    return to_ret;
 }
 
 /**
@@ -1000,45 +1025,23 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpImageSampleImplicitLod: { // 87
-        Type* res_type = getType(0, data);
-        Value* to_ret = res_type->construct();
         const Value* sampler_v = getValue(2, data);
         if (sampler_v->getType().getBase() != DataType::SAMPLER)
             throw std::runtime_error("The third operand to OpImageSampleImplicitLod must be an sampler!");
-        //const auto& image = static_cast<const Image&>(*sampler_v);
+        const auto& sampler = static_cast<const Sampler&>(*sampler_v);
+        const Image& defaultLod = sampler.sampleImplicitLod();
 
-        Image::useCoords(
-            getValue(3, data),
-            [&](int x, int y, int z) {
-                throw std::runtime_error("Unsupported int coordinates!");
-            },
-            [&](float x, float y, float z) {
-                throw std::runtime_error("Unsupported float coordinates!");
-            }
-        );
+        Value* to_ret = read_from_image(getType(0, data), defaultLod, getValue(3, data));
         data[result_at].redefine(to_ret);
         break;
     }
     case spv::OpImageRead: { // 98
-        Type* res_type = getType(0, data);
-        Value* to_ret = res_type->construct();
         const Value* image_v = getValue(2, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to ImageRead must be an image!");
         const auto& image = static_cast<const Image&>(*image_v);
 
-        Image::useCoords(
-            getValue(3, data),
-            [&](int x, int y, int z) {
-                const Array* arr = image.read(x, y, z);
-                // TODO May need to decompose the result if the image has only one channel
-                to_ret->copyFrom(*arr);
-                delete arr;
-            },
-            [&](float x, float y, float z) {
-                throw std::runtime_error("Unsupported float coordinates!");
-            }
-        );
+        Value* to_ret = read_from_image(getType(0, data), image, getValue(3, data));
         data[result_at].redefine(to_ret);
         break;
     }

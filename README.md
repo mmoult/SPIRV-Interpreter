@@ -13,7 +13,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 52 test examples, and counting
+- 53 test examples, and counting
 
 ## Limitations
 
