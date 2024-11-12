@@ -28,26 +28,33 @@ export class Instruction {
     bool hasResultType;
     std::vector<Token> operands;
 
-    enum class Extension {
-        GLSL_STD,
+    enum class Extension : unsigned {
+        GLSL_STD_450 = 0,
         SPV_KHR_RAY_TRACING,
-        SPV_KHR_RAY_QUERY
+        SPV_KHR_RAY_QUERY,
+        NONSEMANTIC_SHADER_DEBUG_INFO,
+        NONSEMANTIC_DEBUG_PRINTF,
+        INVALID,
     };
 
     /// @brief Find if a given extension is supported by the interpreter
     /// @param ext_name name of the extension
     /// @return whether the extension is supported
-    static bool isSupportedExtension(const std::string& ext_name) {
+    Extension extensionFromString(const std::string& ext_name) const {
         // Contains only implemented extensions
         static const std::vector<std::string> supported_ext {
-            "GLSL.std.",
+            "GLSL.std.450",
             "SPV_KHR_ray_tracing",
-            "SPV_KHR_ray_query"
+            "SPV_KHR_ray_query",
+            "NonSemantic.Shader.DebugInfo.100",
+            "NonSemantic.DebugPrintf"
         };
 
-        // Find the extension
-        auto it = std::find(supported_ext.begin(), supported_ext.end(), ext_name);
-        return it != supported_ext.end();
+        for (unsigned i = 0; i < supported_ext.size(); ++i) {
+            if (ext_name == supported_ext[i])
+                return static_cast<Extension>(i);
+        }
+        return Extension::INVALID;
     }
 
     unsigned checkRef(unsigned idx, unsigned len) const noexcept(false) {
@@ -114,6 +121,7 @@ export class Instruction {
     }
 
     bool makeResultGlsl(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
+    bool makeResultPrintf(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
 
     static std::string printOpcode(spv::Op opcode);
 

@@ -36,6 +36,7 @@ import value.primitive;
 import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
 import value.sampler;
+import value.string;
 
 template<typename T>
 Value* construct_from_vec(const std::vector<T>& vec, const Type* res_type) {
@@ -504,21 +505,20 @@ bool Instruction::makeResult(
         throw std::runtime_error(err.str());
     }
     case spv::OpString: // 7
-        // At the moment, this is only for nonsemantic debug info which can safely be discarded.
+        assert(operands[1].type == Token::Type::STRING);
+        data[result_at].redefine(new String(std::get<std::string>(operands[1].raw)));
         break;
     case spv::OpExtInstImport: { // 11
         // Determine which extension the string represents
         assert(operands[1].type == Token::Type::STRING);
         std::string ext_name = std::get<std::string>(operands[1].raw);
-        Extension ext;
-        if (ext_name.find("GLSL.std.") == 0)
-            ext = Extension::GLSL_STD;
-        else {
+        Extension ext = extensionFromString(ext_name);
+        if (ext == Extension::INVALID) {
             std::stringstream err;
             err << "Unsupported extension: " << ext_name;
             throw std::runtime_error(err.str());
         }
-        data[result_at].redefine(new Primitive(unsigned(ext)));
+        data[result_at].redefine(new Primitive(static_cast<unsigned>(ext)));
         break;
     }
     case spv::OpExtInst: { // 12
@@ -530,11 +530,16 @@ bool Instruction::makeResult(
         const Primitive& prim = *static_cast<Primitive*>(val);
         Extension ext = static_cast<Extension>(prim.data.u32);
         switch (ext) {
-        case Extension::GLSL_STD:
-            makeResultGlsl(data, location, result_at);
-            break;
+        case Extension::GLSL_STD_450:
+            return makeResultGlsl(data, location, result_at);
+        case Extension::NONSEMANTIC_SHADER_DEBUG_INFO:
+            break; // do nothing presently. Debug info only which could be printed.
+        case Extension::NONSEMANTIC_DEBUG_PRINTF: {
+            return makeResultPrintf(data, location, result_at);
+        }
         default:
             assert(false);
+            throw std::runtime_error("Attempt to use `OpExtInst` from unsupported extension!");
         }
         break;
     }
@@ -2064,3 +2069,92 @@ bool Instruction::makeResultGlsl(
 #undef TYPICAL_E_UNARY_OP
 #undef E_SHIFT_OP
 #undef E_TERN_OP
+
+bool Instruction::makeResultPrintf(
+    DataView& data,
+    unsigned location,
+    unsigned result_at
+) const noexcept(false) {
+    // extension opcode at operand[3]
+    unsigned ext_opcode = std::get<unsigned>(operands[3].raw);
+    if (ext_opcode != 1)
+        throw std::runtime_error("Unsupported (!= 1) debug printf instruction!");
+
+    // Operand 4 should be the format string and all operands after components to that
+    // We will use the underlying printf function to match the necessary behavior
+    Value* format = getValue(4, data);
+    if (format->getType().getBase() != DataType::STRING)
+        throw std::runtime_error("Error in printf call! First argument must be the string format specifier!");
+    std::string format_string = static_cast<String*>(format)->get();
+
+    unsigned operand = 5;
+    unsigned last = 0;
+    for (unsigned i = 0; i < format_string.size(); ++i) {
+        // Look for %, which denotes the beginning of a inserted operand
+        if (format_string[i] == '%') {
+            // continue until one of the format specifiers
+            bool done = false;
+            for (unsigned j = i + 1; j < format_string.size(); ++j) {
+                char c = format_string[j];
+                done = true;
+                switch (c) {
+                case '%':
+                    // escaped percent character
+                    break;
+                // Numbers to print
+                case 'c':
+                case 'd':
+                case 'e':
+                case 'f':
+                case 'i':
+                case 'o':
+                case 'u':
+                case 'x':
+                // Print string
+                case 's': {
+                    if (operands.size() <= operand)
+                        throw std::runtime_error("Error in printf call! Format specifier seen without a value!");
+                    Value* val = getValue(operand, data);
+                    operand++;
+                    auto base = val->getType().getBase();
+                    std::string now = format_string.substr(last, j - last + 1);
+                    const char* cnow = now.c_str();
+                    if (c != 's') {
+                        if (!Primitive::isPrimitive(base))
+                            throw std::runtime_error("Could not cast value in printf call to required type!");
+                        Primitive& prim = static_cast<Primitive&>(*val);
+
+                        if (base == DataType::FLOAT)
+                            printf(cnow, prim.data.fp32);
+                        else if (base == DataType::UINT || base == DataType::BOOL)
+                            printf(cnow, prim.data.u32);
+                        else {
+                            assert(base == DataType::INT);
+                            printf(cnow, prim.data.i32);
+                        }
+                    } else {
+                        if (base != DataType::STRING)
+                            throw std::runtime_error("Could not cast value in printf call to required string!");
+                        printf(cnow, static_cast<String*>(val)->get().c_str());
+                    }
+                    last = j + 1;
+                    break;
+                }
+                default:
+                    done = false;
+                }
+
+                if (done) {
+                    i = j;
+                    break;
+                }
+            }
+            if (!done)
+                throw std::runtime_error("Malformed printf format string! Value type not found.");
+        }
+    }
+    if (last < format_string.size())
+        printf("%s", format_string.substr(last).c_str());
+
+    return true;
+}

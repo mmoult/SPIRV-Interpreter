@@ -8,5 +8,5 @@
 
 void main() {
     float myfloat = 3.1415f;
-    debugPrintfEXT("My float is %f", myfloat);
+    debugPrintfEXT("My float is %f\n", myfloat);
 }

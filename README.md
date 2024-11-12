@@ -7,13 +7,13 @@ program for given inputs.
 Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
 
 ## Features
-- Support for vertex, fragment, compute, hull, ... shaders
+- Support for vertex, fragment, compute, hull, and raytracing shaders
 - Specify inputs and print outputs in YAML or JSON
 - Textures may be read from and written to .png files
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 53 test examples, and counting
+- 54 test examples, and counting
 
 ## Limitations
 
@@ -27,14 +27,13 @@ interpretation is undefined. This is unlikely to be a problem since most SPIR-V 
 The SPIR-V specification does not explicitly define how some image operations should be done. This presents some
 challenges to the interpreter which aims to be a correct reference.
 
-Many vendors use anisotropic filtering, but these algorithms have not been open sourced. The interpreter plans to use
-trilinear interpolation instead- which should be easy to deconstruct and/or extend as needed. Image processing is still
-in development.
+Many vendors use anisotropic filtering, but these algorithms have not been open sourced. Therefore, the interpreter uses
+n-linear interpolation instead, which should be easy to deconstruct and/or extend as needed.
 
 ### Ray Tracing
 Similarly to image processing, the SPIR-V specification does not define all characteristics of ray tracing functions and
 structures. A best guess approximation is used for the interpreter, which relies on information common to all
-implementations. Ray tracing support is still in development.
+implementations.
 
 ## Building
 The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16 or `g++`

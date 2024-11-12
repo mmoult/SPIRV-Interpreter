@@ -26,18 +26,6 @@ export struct Primitive : public Value {
 
     using enum DataType;
 
-    static bool isPrimitive(DataType base) {
-        switch (base) {
-        case FLOAT:
-        case UINT:
-        case INT:
-        case BOOL:
-            return true;
-        default:
-            return false;
-        }
-    }
-
 public:
     Primitive(float fp32, unsigned size = 32): Value(Type::primitive(FLOAT, size)) {
         data.fp32 = fp32;
@@ -54,6 +42,18 @@ public:
     // Create a blank primitive from the given value
     Primitive(Type t): Value(t) {
         data.u32 = 0;
+    }
+
+    static bool isPrimitive(DataType base) {
+        switch (base) {
+        case FLOAT:
+        case UINT:
+        case INT:
+        case BOOL:
+            return true;
+        default:
+            return false;
+        }
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
