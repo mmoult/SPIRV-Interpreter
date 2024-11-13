@@ -9,7 +9,6 @@ module;
 #include <cmath>
 #include <cstdint>
 #include <functional>
-#include <iostream>
 #include <limits> // for nan
 #include <sstream>
 #include <stdexcept>
@@ -36,6 +35,7 @@ import value.primitive;
 import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
 import value.sampler;
+import value.statics;
 import value.string;
 
 template<typename T>
@@ -1081,9 +1081,9 @@ bool Instruction::makeResult(
     case spv::OpFMul: // 133
         TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 * b->data.fp32);
     case spv::OpUDiv: // 134
-        TYPICAL_E_BIN_OP(UINT, a->data.fp32 / b->data.fp32);
+        TYPICAL_E_BIN_OP(UINT, a->data.u32 / b->data.u32);
     case spv::OpSDiv: // 135
-        TYPICAL_E_BIN_OP(INT, a->data.fp32 / b->data.fp32);
+        TYPICAL_E_BIN_OP(INT, a->data.i32 / b->data.i32);
     case spv::OpFDiv: { // 136
         OpDst dst{checkRef(0, data_len), result_at};
         BinOp op = [](const Primitive* a, const Primitive* b) {
@@ -1300,7 +1300,10 @@ bool Instruction::makeResult(
             const Primitive& n1 = *static_cast<const Primitive*>((*arr[1])[i]);
             total += n0.data.fp32 * n1.data.fp32;
         }
-        data[result_at].redefine(new Primitive(total));
+        Primitive* ret = static_cast<Primitive*>(getType(0, data)->construct());
+        Primitive tot_prim(total);
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpAny: { // 154
@@ -1909,6 +1912,37 @@ bool Instruction::makeResultGlsl(
         E_TERN_OP(FLOAT, fx);
         break;
     }
+    case GLSLstd450Length: { // 66
+        // Like a sqrt of dot product with itself
+        const Value& x = *getValue(src_at, data);
+
+        const Type& vec_type = x.getType();
+        if (vec_type.getBase() != DataType::ARRAY) {
+            std::stringstream err;
+            err << "Operand to Length must be a vector!";
+            throw std::runtime_error(err.str());
+        }
+        if (vec_type.getElement().getBase() != DataType::FLOAT) {
+            std::stringstream err;
+            err << "Operand to Length must be a vector of floats!";
+            throw std::runtime_error(err.str());
+        }
+        const auto& arr = static_cast<const Array&>(x);
+
+        float total = 0;
+        for (unsigned i = 0; i < arr.getSize(); ++i) {
+            const Primitive& n = static_cast<const Primitive&>(*arr[i]);
+            total += n.data.fp32 * n.data.fp32;
+        }
+        if (total != 0)
+            total = std::sqrt(total);
+
+        Primitive* ret = static_cast<Primitive*>(getType(dst_type_at, data)->construct());
+        Primitive tot_prim(total);
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
+        break;
+    }
     case GLSLstd450Distance: { // 67
         Value* vec_1_val = getValue(4, data);
         Value* vec_2_val = getValue(5, data);
@@ -1947,6 +1981,22 @@ bool Instruction::makeResultGlsl(
         Primitive prim_single(result);
         std::vector<const Value*> pfloats {&prim_single};
         Value* res = res_type->construct(pfloats);
+        data[result_at].redefine(res);
+        break;
+    }
+    case GLSLstd450Cross: { // 68
+        std::vector<float> x = Statics::extractVec(getValue(src_at, data), "Cross Operand x", 3);
+        std::vector<float> y = Statics::extractVec(getValue(src_at + 1, data), "Cross Operand y", 3);
+        Type* res_type = getType(0, data);
+        Value* res = res_type->construct();
+
+        Array& arr = static_cast<Array&>(*res);
+        Primitive tmp(x[1] * y[2] - y[1] * x[2]);
+        arr[0]->copyFrom(tmp);
+        tmp = Primitive(x[2] * y[0] - y[2] * x[0]);
+        arr[1]->copyFrom(tmp);
+        tmp = Primitive(x[0] * y[1] - y[0] * x[1]);
+        arr[2]->copyFrom(tmp);
         data[result_at].redefine(res);
         break;
     }

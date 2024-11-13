@@ -237,7 +237,7 @@ private:
                 if (fp >= 0)
                     out << "\"Infinity\"";
                 else
-                    out << "-\"Infinity\"";
+                    out << "\"-Infinity\"";
             } else if (std::isnan(fp))
                 out << "\"NaN\"";
             else
