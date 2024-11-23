@@ -3,5 +3,6 @@ hitValue: [ 0.0, 0.0, 0.2 ]
 image:
   ref: ''
   dim: [ 1, 1 ]
+  mipmaps: 1
   comps: 1234
   data: [ 0.0, 0.0, 0.2, 0.0 ]

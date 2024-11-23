@@ -3,6 +3,9 @@ gl_FragCoord: [ 0.0, 0.1, 0.2, 0.3 ]
 uni_txtr:
     ref: ""
     dim: [ 1, 1 ]
+    # Number of mimaps, with descending level of detail (LOD). Each mimap level has 1/2 the dimensions (= 1/4 area)
+    # of the prior mipmap.
+    mipmaps: 1
     # Specifies the order (1-4) or inactivity (0) of the four possible channels: R,G,B,A (in that order)
     comps: 1234
     data:

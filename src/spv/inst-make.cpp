@@ -110,27 +110,15 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
     }
 }
 
-Value* read_from_image(Type* res_type, const Image& image, const Value* coords) {
+Value* read_from_image(Type* res_type, const Image& image, const Value* coords, float lod) {
     Value* to_ret = res_type->construct();
-    Image::useCoords(
-        coords,
-        [&](int x, int y, int z) {
-            const Array& arr = *image.read(x, y, z);
-            if (arr.getSize() == 1)
-                to_ret->copyFrom(*(arr[0]));
-            else
-                to_ret->copyFrom(arr);
-            delete &arr;
-        },
-        [&](float x, float y, float z) {
-            const Array& arr = *image.read(x, y, z);
-            if (arr.getSize() == 1)
-                to_ret->copyFrom(*(arr[0]));
-            else
-                to_ret->copyFrom(arr);
-            delete &arr;
-        }
-    );
+    auto [x, y, z] = Image::extractCoords(coords);
+    const Array& arr = *image.read(x, y, z, lod);
+    if (arr.getSize() == 1)
+        to_ret->copyFrom(*(arr[0]));
+    else
+        to_ret->copyFrom(arr);
+    delete &arr;
     return to_ret;
 }
 
@@ -1033,10 +1021,9 @@ bool Instruction::makeResult(
         const Value* sampler_v = getValue(2, data);
         if (sampler_v->getType().getBase() != DataType::SAMPLER)
             throw std::runtime_error("The third operand to OpImageSampleImplicitLod must be an sampler!");
-        const auto& sampler = static_cast<const Sampler&>(*sampler_v);
-        const Image& defaultLod = sampler.sampleImplicitLod();
+        const auto& s = static_cast<const Sampler&>(*sampler_v);
 
-        Value* to_ret = read_from_image(getType(0, data), defaultLod, getValue(3, data));
+        Value* to_ret = read_from_image(getType(0, data), s.getImage(), getValue(3, data), s.getImplicitLod());
         data[result_at].redefine(to_ret);
         break;
     }
@@ -1046,7 +1033,7 @@ bool Instruction::makeResult(
             throw std::runtime_error("The third operand to ImageRead must be an image!");
         const auto& image = static_cast<const Image&>(*image_v);
 
-        Value* to_ret = read_from_image(getType(0, data), image, getValue(3, data));
+        Value* to_ret = read_from_image(getType(0, data), image, getValue(3, data), 0.0);
         data[result_at].redefine(to_ret);
         break;
     }

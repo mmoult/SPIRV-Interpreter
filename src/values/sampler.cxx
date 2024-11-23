@@ -16,12 +16,12 @@ import value.string;
 
 export class Sampler : public Value {
     unsigned defaultLod;
-    std::vector<Image> mipmaps;
+    Image image;
 
-    inline static const std::vector<std::string> names {"lod", "mipmaps"};
+    inline static const std::vector<std::string> names {"lod", "image"};
 
 public:
-    Sampler(Type t): Value(t), defaultLod(0) {};
+    Sampler(Type t): Value(t), defaultLod(0), image(t.getElement()) {};
 
     void copyReinterp(const Value& other) noexcept(false) override {
         if (!tryCopyFrom(other))
@@ -34,30 +34,11 @@ public:
         const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "sampler", names);
         const std::vector<std::string>& type_names = other.getType().getNames();
 
-        // lod: uint
+        // lod: <uint>
         defaultLod = Statics::extractUint(other[0], names[0]);
 
-        // mipmaps: [images, ...]
-        const Array& arr = Statics::extractArray(other[1], names[1]);
-        unsigned num_mipmaps = arr.getSize();
-        if (num_mipmaps == 0) {
-            throw std::runtime_error(
-                "Attempting to copy struct into sampler, but the mipmap array is empty! There must be at least one "
-                "image provided!"
-            );
-        }
-        if (num_mipmaps <= defaultLod) {
-            throw std::runtime_error(
-                "The number of mipmaps provided is incompatible with the default level of detail (lod)! The lod is an "
-                "index within the mipmaps array (with first expected to be the biggest mipmaps)."
-            );
-        }
-        mipmaps.clear();
-        const Type& image_type = type.getElement();
-        for (unsigned i = 0; i < num_mipmaps; ++i) {
-            mipmaps.emplace_back(image_type);
-            mipmaps.back().copyFrom(*arr[i]);
-        }
+        // image: <image>
+        image.copyFrom(*other[1]);
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
@@ -70,42 +51,30 @@ public:
         Value::copyFrom(new_val);  // verifies matching types
         const auto& other = static_cast<const Sampler&>(new_val);
         this->defaultLod = other.defaultLod;
-
-        this->mipmaps.clear();
-        const Type& image_type = type.getElement();
-        for (unsigned i = 0; i < other.mipmaps.size(); ++i) {
-            mipmaps.emplace_back(image_type);
-            mipmaps.back().copyFrom(other.mipmaps[i]);
-        }
+        this->image.copyFrom(other.image);
     }
 
     // Here is what a sampler looks like in YAML:
     // sampler :
     //   lod : <uint>
-    //   mipmaps :
-    //   - <image>
-    //   - <...>
+    //   image :
+    //     <image>
     Struct* toStruct() const {
         std::vector<Value*> elements;
         elements.reserve(2);
         elements.push_back(new Primitive(defaultLod));
-        unsigned num_mips = mipmaps.size();
-        Array* arr = new Array(type.getElement(), num_mips);
-
-        std::vector<Value*> mips;
-        mips.reserve(num_mips);
-        for (unsigned i = 0; i < num_mips; ++i)
-            mips.push_back(mipmaps[i].toStruct());
-
-        arr->setElementsDirectly(mips);
-        elements.push_back(arr);
+        elements.push_back(image.toStruct());
         return new Struct(elements, names);
     }
 
-    Image& sampleImplicitLod() {
-        return mipmaps[defaultLod];
+    const unsigned getImplicitLod() const {
+        return defaultLod;
     }
-    const Image& sampleImplicitLod() const {
-        return mipmaps[defaultLod];
+
+    Image& getImage() {
+        return image;
+    }
+    const Image& getImage() const {
+        return image;
     }
 };

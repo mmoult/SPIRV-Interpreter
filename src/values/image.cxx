@@ -23,10 +23,27 @@ import value.statics;
 import value.string;
 
 export class Image : public Value {
-    /// @brief a path to an image file (if any). If none, the string must be empty
-    std::string reference;
+    /// Dimensions of the image. xx is the length of x, yy the length of y, zz the len of z
+    unsigned xx, yy, zz;
 
-    /// @brief the format of how components of pixels are stored and the count
+    /// @brief The number of mipmap levels, which decrease in level of detail (LOD).
+    /// Each mipmap has half the dimensions of the prior (truncating as needed except when dividing 1). Fields xx, yy,
+    /// and zz determine the dimensions of the mimap with the most detail (index 0). The number of mipmaps must not be
+    /// less than 1, nor should it exceed the value of `log2(max(dim.xyz)) + 1`.
+    unsigned mipmaps;
+
+    /// @brief condensed image data, where typically a set of four elements is a single pixel.
+    /// The format determines the type of the image data, so we don't need/want to store that info for each component
+    /// of every pixel (which is needlessly wasteful). However, this means that we must reinterpret cast the data for
+    /// every use.
+    /// Image provides two options to provide texel data:
+    /// 1) an image file
+    /// 2) a data array
+    /// Only one may be provided at a time. Where one is provided, the other must be empty. Internally, both resolve to
+    /// this flat data vector.
+    std::vector<uint32_t> data;
+
+    /// @brief A definition for how flat data and pixels correspond to each other
     /// Each of the first four members must be some value 0-4, with no repeats, excepting 0, which indicates disablement
     /// The last member, count, must be the number of elements previous which are nonzero
     struct Component {
@@ -119,16 +136,43 @@ export class Image : public Value {
             }
         }
     };
+    /// @brief the format of how pixel components are represented in `data`
     Component comps;
-    /// Dimensions of the image. xx is the length of x, yy the length of y, zz the len of z
-    unsigned xx;
-    unsigned yy;
-    unsigned zz;
-    /// @brief condensed image data, where typically a set of four elements is a single pixel.
-    /// The format determines the type of the image data, so we don't need/want to store that info for each component
-    /// of every pixel (which is needlessly wasteful). However, this means that we must reinterpret cast the data for
-    /// every use.
-    std::vector<uint32_t> data;
+
+    /// @brief a path to an image file or the empty string.
+    /// An image can have up to three dimensions. Below, a data encoding pattern is described for each dimensionality:
+    /// 1D) Pixels in a single mipmap are expected from left to right. The left side of each mipmap is placed at the
+    /// next available corner closest to the top-left image corner. For example, with 4 mipmaps of a size 8 image:
+    /// (0)              -> +x
+    ///   0 0 0 0 0 0 0 0
+    ///   1 1 1 1 2 2 3 -
+    ///
+    /// 2D) The top-left corner of each mipmap level is placed at the next available corner closest to the top-left
+    /// image corner. For example, with 4 mipmaps of an 8x8 image:
+    /// (0, 0)                    -> +x
+    ///   0 0 0 0 0 0 0 0 1 1 1 1
+    ///   0 0 0 0 0 0 0 0 1 1 1 1
+    ///   0 0 0 0 0 0 0 0 1 1 1 1
+    ///   0 0 0 0 0 0 0 0 1 1 1 1
+    ///   0 0 0 0 0 0 0 0 2 2 3 -
+    ///   0 0 0 0 0 0 0 0 2 2 - -
+    ///   0 0 0 0 0 0 0 0 - - - -
+    ///   0 0 0 0 0 0 0 0 - - - -
+    /// |
+    /// v +y
+    ///
+    /// 3D) xy layers are placed horizontally in ascending z order. The top-left corner of each mipmap level is placed
+    /// at the next available corner closest to the top-left image corner. For example, consider a 4x4x4 image with 3
+    /// mipmaps, where each pixel is denoted [mipmap level][z index]:
+    /// (0, 0, 0)                                                    -> +x, +z
+    ///   00 00 00 00 01 01 01 01 02 02 02 02 03 03 03 03 10 10 11 11
+    ///   00 00 00 00 01 01 01 01 02 02 02 02 03 03 03 03 10 10 11 11
+    ///   00 00 00 00 01 01 01 01 02 02 02 02 03 03 03 03 20 -- -- --
+    ///   00 00 00 00 01 01 01 01 02 02 02 02 03 03 03 03 -- -- -- --
+    /// |
+    /// v +y
+    std::string reference;
+
     // TODO I suspect that there are a couple extra fields which need to be encoded in the type. As far as I can tell,
     // these only really apply to floats, but we probably need to track them to get correct output
     // 1) Normalization: whether the range spans 255 or 1
@@ -136,8 +180,10 @@ export class Image : public Value {
     // Of course, the two options are orthogonal. We can have a non-normalized, positively signed range of [0.0, 255.0]
     // or a normalized negatively signed range of [-0.5, 0.5].
 
-    inline static const std::vector<std::string> names {"ref", "dim", "comps", "data"};
+    inline static const std::vector<std::string> names {"ref", "dim", "mipmaps", "comps", "data"};
 
+    /// @brief Returns a value corresponding to an out-of-bounds image access.
+    /// This value is vendor-specific, ie, not defined by the spec. All zeros is common in practice.
     [[nodiscard]] Array* outOfBoundsAccess() const {
         const Type& el = type.getElement();
         std::vector<Value*> vals(comps.count, nullptr);
@@ -160,6 +206,10 @@ export class Image : public Value {
     std::tuple<unsigned, float> decompose(float val) const {
         float base;
         float dec = std::modf(val, &base);
+        // We will be subtracting the decimal component from 1.0 later, and if the subtraction doesn't even register,
+        // it is close enough to 0.0 to flatten it.
+        if (1.0 - dec == 1.0)
+            dec = 0.0;
         return {static_cast<unsigned>(base), dec};
     }
 
@@ -185,8 +235,10 @@ public:
         }
 
         // Do a data analysis
+        // In theory, the data of all mipmaps should be synchronized. Therefore, we can compare only the mimaps with
+        // most data (mipmap 0)
         const Type& subelement = type.getElement();
-        for (unsigned i = 0; i < data.size(); i += comps.count) {
+        for (unsigned i = 0; i < (xx * yy * zz); i += comps.count) {
             for (unsigned j = 0; j < 4; ++j) {
                 if (comps[j] == 0)
                     continue;
@@ -222,7 +274,7 @@ public:
             throw std::runtime_error(
                 "Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive."
             );
-        std::vector<unsigned> dims = Statics::extractUvec(other[1], "dim", dim_size);
+        std::vector<unsigned> dims = Statics::extractUvec(other[1], names[1], dim_size);
         xx = dims[0];
         if (dim_size > 1) {
             yy = dims[1];
@@ -230,7 +282,6 @@ public:
                 zz = dims[2];
         }
 
-        //const Type& element = this->type.getElement();
         // Now that we have the expected dimensions, fetch data (if any) from the reference path
         if (!reference.empty()) {
             int width, height, channels;
@@ -277,11 +328,14 @@ public:
             // example write: stbi_write_png("sky.png", width, height, channels, img, width * channels);
         }
 
+        // mipmaps: <uint>
+        mipmaps = Statics::extractUint(other[2], names[2]);
+
         // comps: <uint>
-        const Value& comps_v = *other[2];
+        const Value& comps_v = *other[3];
         if (comps_v.getType().getBase() != DataType::UINT)
             throw std::runtime_error(
-                "The third image field, \"comps\", must be an unsigned int specifying the presence and order of the "
+                "The fourth image field, \"comps\", must be an unsigned int specifying the presence and order of the "
                 "pixel components: Red, Green, Blue, Alpha (in that order). For example: \"1234\" indicates all four "
                 "channels are present in their default order; \"0010\" indicates only blue is present; \"2341\" means "
                 "that all four channels are present in the order ARGB."
@@ -293,7 +347,7 @@ public:
 
         // data : array<float> or array<uint> or array<int>
         // TODO: differentiate between float [0, 255] and float normal [0.0, 1.0]
-        const Value& data_v = *other[3];
+        const Value& data_v = *other[4];
         if (data_v.getType().getBase() != DataType::ARRAY)
             throw std::runtime_error(
                 "The fourth image field, \"data\", must be an array of uint, int, or float values."
@@ -354,12 +408,13 @@ public:
         this->xx = other.xx;
         this->yy = other.yy;
         this->zz = other.zz;
+        this->mipmaps = other.mipmaps;
 
         // Now, copy over the data:
         // If a string reference is defined in the other, load data from file TODO
         // Otherwise, do a copy of the other's data array
         data.resize(other.data.size());
-        // TODO actually cannot do this in case the data elements have different type :/
+        // TODO actually cannot do this in case the data elements may have different type :/
         for (unsigned i = 0; i < data.size(); i += comps.count) {
             for (unsigned j = 0; j < 4; ++j) {
                 if (comps[j] == 0)
@@ -377,14 +432,15 @@ public:
     // Here is what an image looks like in YAML:
     // img :
     //   ref : <string>
-    //   dim : uvec3, uvec2, or uint
+    //   dim : <uvec3, uvec2, or uint>
+    //   mipmaps : <uint>
     //   comps : <uint>
     //   data :
     //   - float, int, or uint, as long as it is consistent
     //   - <...>
     Struct* toStruct() const {
         std::vector<Value*> elements;
-        elements.reserve(4);
+        elements.reserve(names.size());
         elements.push_back(new String(reference));
         std::vector<Value*> dims;
         unsigned num_dims = type.getDim();
@@ -396,6 +452,7 @@ public:
                 dims.push_back(new Primitive(zz));
         }
         elements.push_back(new Array(dims));
+        elements.push_back(new Primitive(mipmaps));
         // Reconstruct the components uint from the actual components breakdown
         elements.push_back(new Primitive(comps.r * 1000 + comps.g * 100 + comps.b * 10 + comps.a));
         Array* dat = new Array(type.getElement(), 0);
@@ -412,43 +469,7 @@ public:
         return new Struct(elements, names);
     }
 
-    static std::tuple<int, int, int> extractIntCoords(bool arrayed, const Value* coords_v) {
-        int x = 0, y = 0, z = 0;
-        if (!arrayed)
-            x = static_cast<const Primitive*>(coords_v)->data.i32;
-        else {
-            const auto& coords = static_cast<const Array&>(*coords_v);
-            x = static_cast<const Primitive*>(coords[0])->data.i32;
-            if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
-                y = static_cast<const Primitive*>(coords[1])->data.i32;
-                if (coords_size == 3)
-                    z = static_cast<const Primitive*>(coords[2])->data.i32;
-            }
-        }
-        return {x, y, z};
-    }
-    static std::tuple<float, float, float> extractFloatCoords(bool arrayed, const Value* coords_v) {
-        float x = 0.0, y = 0.0, z = 0.0;
-        if (!arrayed)
-            x = static_cast<const Primitive*>(coords_v)->data.fp32;
-        else {
-            const auto& coords = static_cast<const Array&>(*coords_v);
-            x = static_cast<const Primitive*>(coords[0])->data.fp32;
-            if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
-                y = static_cast<const Primitive*>(coords[1])->data.fp32;
-                if (coords_size == 3)
-                    z = static_cast<const Primitive*>(coords[2])->data.fp32;
-            }
-        }
-        return {x, y, z};
-    }
-
-    static void useCoords(
-        const Value* coords_v,
-        std::function<void(int, int, int)> int_fx,
-        std::function<void(float, float, float)> float_fx
-    ) {
-        // coords can be a scalar or vector of int or float type
+    static std::tuple<float, float, float> extractCoords(const Value* coords_v) {
         const Type* coord_type = &coords_v->getType();
         bool arrayed = false;
         if (coord_type->getBase() == DataType::ARRAY) {
@@ -456,26 +477,38 @@ public:
             arrayed = true;
         }
         DataType base = coord_type->getBase();
-        if (base == DataType::INT) {
-            auto [x, y, z] = Image::extractIntCoords(arrayed, coords_v);
-            int_fx(x, y, z);
-        } else {
+        float x = 0.0, y = 0.0, z = 0.0;
+
+        auto get = [](const Value* val, DataType base) {
+            const auto& prim = static_cast<const Primitive&>(*val);
+            if (base == DataType::INT)
+                return static_cast<float>(prim.data.i32);
             assert(base == DataType::FLOAT);
-            auto [x, y, z] = Image::extractFloatCoords(arrayed, coords_v);
-            float_fx(x, y, z);
+            return prim.data.fp32;
+        };
+
+        if (!arrayed) {
+            x = get(coords_v, base);
+        } else {
+            const auto& coords = static_cast<const Array&>(*coords_v);
+            x = get(coords[0], base);
+            if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
+                y = get(coords[1], base);
+                if (coords_size == 3)
+                    z = get(coords[2], base);
+            }
         }
+        return {x, y, z};
     }
 
-    [[nodiscard]] Array* read(int x, int y, int z) const {
+    [[nodiscard]] Array* read(int x, int y, int z, int lod) const {
         bool oob = false;
-        if (x < 0 || y < 0 || z < 0)
+        if (x < 0 || y < 0 || z < 0 || lod < 0)
             oob = true;
-        unsigned xu = static_cast<unsigned>(x);
-        unsigned yu = static_cast<unsigned>(y);
-        unsigned zu = static_cast<unsigned>(z);
+
         // If the coordinate specified matches or exceeds the maximum (exclusive), then we are out of bounds.
         // However, there is some special behavior for 0, since coordinate matching is appropriate there.
-        if ((xu > 0 && xu >= xx) || (yu > 0 && yu >= yy) || (zu > 0 && zu >= zz))
+        if ((x > 0 && x >= xx) || (y > 0 && y >= yy) || (z > 0 && z >= zz) || (lod > 0 && lod >= mipmaps))
             oob = true;
 
         // "See the client API specification for handling of coordinates outside the image."
@@ -489,7 +522,8 @@ public:
 
         unsigned yyy = xx * comps.count;
         unsigned zzz = yy * yyy;
-        unsigned base = (xu * comps.count) + (yu * yyy) + (zu * zzz);
+        unsigned lll = mipmaps * zzz;
+        unsigned base = (x * comps.count) + (y * yyy) + (z * zzz) + (lod * lll);
 
         // Output the channels in the same order defined by the comps
         unsigned chan = 0;
@@ -502,12 +536,21 @@ public:
 
         return new Array(vals);
     }
-    [[nodiscard]] Array* read(float x, float y, float z) const {
+    [[nodiscard]] Array* read(float x, float y, float z, float lod) const {
         bool oob = false;
-        if (x < 0 || y < 0 || z < 0)
+        if (x < 0 || y < 0 || z < 0 || lod < 0)
             oob = true;
+
+        auto [xBase, xRatio] = decompose(x);
+        auto [yBase, yRatio] = decompose(y);
+        auto [zBase, zRatio] = decompose(z);
+        auto [lBase, lRatio] = decompose(lod);
+
         // all unsigned ints should be able to implicitly cast to a float
-        if ((x > 0 && x >= xx) || (y > 0 && y >= yy) || (z > 0 && z >= zz))
+        if ((xBase > xx || (xBase == xx && xRatio > 0.0)) ||
+        (yBase > yy || (yBase == yy && yRatio > 0.0)) ||
+        (zBase > zz || (zBase == zz && zRatio > 0.0)) ||
+        (lBase > mipmaps || (lBase == mipmaps && lRatio > 0.0)))
             oob = true;
 
         // "See the client API specification for handling of coordinates outside the image."
@@ -519,23 +562,23 @@ public:
         // Perform interpolation for all affected values
         float sums[] = {0.0, 0.0, 0.0, 0.0};  // cannot be any more than 4 components
 
-        auto [xBase, xRatio] = decompose(x);
-        auto [yBase, yRatio] = decompose(y);
-        auto [zBase, zRatio] = decompose(z);
-
         std::vector<std::tuple<unsigned, float>> interps;
         unsigned factor = comps.count;
-        if (xRatio != 0.0)
+        if (xRatio > 0.0)
             interps.push_back({factor, xRatio});
         unsigned base = xBase * factor;
         factor *= xx;
-        if (yRatio != 0.0)
+        if (yRatio > 0.0)
             interps.push_back({factor, yRatio});
         base += yBase * factor;
         factor *= yy;
-        if (zRatio != 0.0)
+        if (zRatio > 0.0)
             interps.push_back({factor, zRatio});
         base += zBase * factor;
+        factor *= zz;
+        if (lRatio > 0.0)
+            interps.push_back({factor, lRatio});
+        base += lBase * factor;
 
         const Type& el = type.getElement();
         const DataType el_base = el.getBase();
@@ -616,6 +659,8 @@ public:
         unsigned zzz = yy * yyy;
         unsigned base = (xu * comps.count) + (yu * yyy) + (zu * zzz);
         assert(base < data.size());  // should be checked in copying that dimensions match data count actually given
+
+        // TODO: write at the same location to all mipmaps
 
         // fetch the values out of the texel presented
         const Type& el = type.getElement();

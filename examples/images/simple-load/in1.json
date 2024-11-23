@@ -4,6 +4,7 @@
 	"uni_txtr" : {
 		"ref" : "",
 		"dim" : [ 3, 3 ],
+		"mipmaps" : 1,
 		"comps" : 2341, // The shader dictates we must have rgba8, but not the order. Use ARGB here
 		"data" : [
 		//  Alp  Red  Grn  Blu

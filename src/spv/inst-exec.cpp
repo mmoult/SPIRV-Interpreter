@@ -222,7 +222,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     case spv::OpImageWrite: { // 99
         Value* image_v = getValue(0, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
-            throw std::runtime_error("The third operand to ImageRead must be an image!");
+            throw std::runtime_error("The third operand to ImageWrite must be an image!");
         auto& image = static_cast<Image&>(*image_v);
         const Value* texel = getValue(2, data);
         // If the texel is a single value, we need to compose it in a temporary array
@@ -234,15 +234,14 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             throw std::runtime_error("Unimplemented ImageWrite variant!");
         }
 
-        Image::useCoords(
-            getValue(1, data),
-            [&](int x, int y, int z) {
-                image.write(x, y, z, *composed);
-            },
-            [&](float x, float y, float z) {
-                throw std::runtime_error("Unsupported float coordinates!");
-            }
-        );
+        auto [x, y, z] = Image::extractCoords(getValue(1, data));
+        // We only support int coordinates currently
+        auto get = [](float x) {
+            if ((1.0 - (std::ceil(x) - x)) != 1.0)
+                throw std::runtime_error("Unsupported float coordinates to Image Write!");
+            return static_cast<int>(x);
+        };
+        image.write(get(x), get(y), get(z), *composed);
         break;
     }
     case spv::OpControlBarrier: { // 224

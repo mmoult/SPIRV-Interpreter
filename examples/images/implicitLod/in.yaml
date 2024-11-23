@@ -1,9 +1,9 @@
 fontSampler:
   lod: 0
-  mipmaps:
-  -
+  image:
     ref: ""
     dim: [ 2, 2 ]
+    mipmaps: 1
     comps: 1234
     data: [
       1.0, 0.0, 0.0, 1.0, # (0, 0) = red
