@@ -78,13 +78,17 @@ void Instruction::readOp(
 
     // Create token operands from the words available and for the given opcode
     using Type = Token::Type;
+    // The result and result type will be handled by default (as needed), so do NOT include them in to_load!
     std::vector<Type> to_load;
     std::vector<Type> optional;
 
-    // The result and result type will be handled by default (as needed), so do NOT include them in to_load!
-    bool repeating = false; //  whether the last optional type may be repeated
-    // whether the the repeat type may be ommitted (false / a*) or must be used at least once (a+)
-    bool repeating_least_once = true;
+    enum Repeat : unsigned {
+        NONE = 0,  // Do not repeat values in optional
+        WHOLE = 1, // optional may be present 0 or more times
+        LAST = 2, // the last token in optional may be repeated 0 or more times
+    };
+    Repeat repeating = Repeat::NONE;
+
     switch (op) {
     default: {
         // Unsupported op
@@ -148,7 +152,7 @@ void Instruction::readOp(
     case spv::OpSpecConstantOp: // 52
         to_load.push_back(Type::CONST);
         optional.push_back(Type::REF);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpMemoryModel: // 14
         to_load.push_back(Type::CONST);
@@ -159,13 +163,13 @@ void Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::STRING);
         optional.push_back(Type::REF);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpExecutionMode: // 16
         to_load.push_back(Type::REF);
         to_load.push_back(Type::CONST);
         optional.push_back(Type::UINT);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpCapability: // 17
         to_load.push_back(Type::CONST);
@@ -195,6 +199,7 @@ void Instruction::readOp(
     case spv::OpTypeSampledImage: // 27
     case spv::OpTypeRuntimeArray: // 29
     case spv::OpTranspose: // 84
+    case spv::OpImage: // 100
     case spv::OpConvertFToU: // 109
     case spv::OpConvertFToS: // 110
     case spv::OpConvertSToF: // 111
@@ -300,7 +305,7 @@ void Instruction::readOp(
     case spv::OpCompositeConstruct: // 80
         to_load.push_back(Type::REF);
         optional.push_back(Type::REF);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpTypePointer: // 32
     case spv::OpFunction: // 54
@@ -324,20 +329,20 @@ void Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         optional.push_back(Type::REF);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpDecorate: // 71
         to_load.push_back(Type::REF);
         to_load.push_back(Type::CONST);
         optional.push_back(Type::UINT);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpMemberDecorate: // 72
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
         to_load.push_back(Type::CONST);
         optional.push_back(Type::UINT);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpVectorShuffle: // 79
     case spv::OpCompositeInsert: // 82
@@ -345,30 +350,26 @@ void Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
         optional.push_back(Type::UINT);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpCompositeExtract: // 81
         to_load.push_back(Type::REF);
         to_load.push_back(Type::UINT);
         optional.push_back(Type::UINT);
-        repeating = true;
-        break;
-    case spv::OpImageSampleImplicitLod: // 87
-    case spv::OpImageRead: // 98
-        to_load.push_back(Type::REF);
-        to_load.push_back(Type::REF);
-        optional.push_back(Type::CONST);
-        optional.push_back(Type::REF);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpImageWrite: // 99
         to_load.push_back(Type::REF);
+        [[fallthrough]];
+    case spv::OpImageSampleImplicitLod: // 87
+    case spv::OpImageSampleExplicitLod: // 88
+    case spv::OpImageRead: // 98
+    case spv::OpImageFetch: // 95
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         optional.push_back(Type::CONST);
         optional.push_back(Type::REF);
-        repeating = true;
-        repeating_least_once = false;
+        repeating = Repeat::LAST;
         break;
     case spv::OpSelect: // 169
     case spv::OpControlBarrier: // 224
@@ -381,14 +382,14 @@ void Instruction::readOp(
         to_load.push_back(Type::REF); // block
         optional.push_back(Type::REF);
         optional.push_back(Type::REF);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpLoopMerge: // 246
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::CONST);
         optional.push_back(Type::UINT);
-        repeating = true;
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpSelectionMerge: // 247
         to_load.push_back(Type::REF);
@@ -401,11 +402,18 @@ void Instruction::readOp(
         optional.push_back(Type::UINT);
         optional.push_back(Type::UINT);
         break;
+    case spv::OpSwitch: // 251
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        optional.push_back(Type::UINT);
+        optional.push_back(Type::REF);
+        repeating = Repeat::WHOLE;
+        break;
     case spv::OpExecutionModeId: // 331
         to_load.push_back(Type::REF);
         to_load.push_back(Type::CONST);
         optional.push_back(Type::REF);
-        repeating = true;
+        repeating = Repeat::WHOLE;
     case spv::OpTraceRayKHR: // 4445
         for (int i = 0; i < 11; ++i)
             to_load.push_back(Type::REF);
@@ -446,23 +454,28 @@ void Instruction::readOp(
 
     if (!optional.empty()) {
         // Try optional.
-        // If any in optional are present, all in list must exist (except the last if repeating_least_once is false)
-        // The list may be repeated if "repeating" is true
+        // The list may be repeated if "repeating" is not NONE
         do {
+            // Can safely break out of a check if at the beginning of an optional iteration
             if (i >= words.size())
                 break;
 
             for (unsigned j = 0; j < optional.size(); ++j) {
-                // Early break because the repeating term doesn't have to appear
-                if (!repeating_least_once && j == optional.size() - 1) {
-                    repeating = false;
-                    break;
-                }
                 auto opt_type = optional[j];
-                check_limit("");
-                handle_type(opt_type, inst.operands, words, i);
+
+                // For WHOLE repeating mode, if any in optional in present, all in the list must exist
+                // For LAST repeating mode, the last token is independent- appearing multiple times or not at all
+                if ((j == (optional.size() - 1)) && (repeating == Repeat::LAST)) {
+                    while (i < words.size())
+                        handle_type(opt_type, inst.operands, words, i);
+                    // Done
+                    repeating = Repeat::NONE;
+                } else {
+                    check_limit("");
+                    handle_type(opt_type, inst.operands, words, i);
+                }
             }
-        } while (repeating);
+        } while (repeating > 0);
     }
 
     // Verify that there are no extra words

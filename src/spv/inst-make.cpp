@@ -110,10 +110,53 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
     }
 }
 
-Value* read_from_image(Type* res_type, const Image& image, const Value* coords, float lod) {
+Value* Instruction::handleImage(DataView& data, const Value& img, const Value* coords, unsigned img_qualifier) const {
+    Type* res_type =  getType(0, data);
     Value* to_ret = res_type->construct();
     auto [x, y, z] = Image::extractCoords(coords);
-    const Array& arr = *image.read(x, y, z, lod);
+    float lod = 0.0;
+    const Image* image;
+    if (img.getType().getBase() == DataType::SAMPLER) {
+        const Sampler& sampler = static_cast<const Sampler&>(img);
+        image = &sampler.getImage();
+        lod = sampler.getImplicitLod();
+    } else {
+        image = static_cast<const Image*>(&img);
+    }
+
+    if (img_qualifier < operands.size()) {
+        assert(operands[img_qualifier].type == Token::Type::UINT);
+        auto descriptors = std::get<unsigned>(operands[img_qualifier].raw);
+        unsigned next = descriptors + 1;
+        for (uint32_t i = 0; (i < spv::ImageOperandsMax) && (descriptors != 0); i <<= 1) {
+            if ((descriptors & i) == 0)
+                continue;
+            descriptors &= ~i;
+#define CASE(SHIFT) case 1 << spv::SHIFT
+            switch (i) {
+            CASE(ImageOperandsBiasShift): {
+                const Value* bias = getValue(next++, data);
+                // bias must be a float per the spec
+                assert(bias->getType().getBase() == DataType::FLOAT);
+                lod += static_cast<const Primitive*>(bias)->data.fp32;
+                break;
+            }
+            CASE(ImageOperandsLodShift): {
+                const Value* lodv = getValue(next++, data);
+                const auto& lodp = static_cast<const Primitive&>(*lodv);
+                Primitive prim(0.0f);
+                prim.copyFrom(lodp);
+                lod = prim.data.fp32;
+                break;
+            }
+            default:
+                throw std::runtime_error("Cannot handle unsupported image qualifier operand!");
+            }
+#undef CASE
+        }
+    }
+
+    const Array& arr = *image->read(x, y, z, lod);
     if (arr.getSize() == 1)
         to_ret->copyFrom(*(arr[0]));
     else
@@ -1021,9 +1064,8 @@ bool Instruction::makeResult(
         const Value* sampler_v = getValue(2, data);
         if (sampler_v->getType().getBase() != DataType::SAMPLER)
             throw std::runtime_error("The third operand to OpImageSampleImplicitLod must be an sampler!");
-        const auto& s = static_cast<const Sampler&>(*sampler_v);
 
-        Value* to_ret = read_from_image(getType(0, data), s.getImage(), getValue(3, data), s.getImplicitLod());
+        Value* to_ret = handleImage(data, *sampler_v, getValue(3, data), 4);
         data[result_at].redefine(to_ret);
         break;
     }
@@ -1031,10 +1073,16 @@ bool Instruction::makeResult(
         const Value* image_v = getValue(2, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to ImageRead must be an image!");
-        const auto& image = static_cast<const Image&>(*image_v);
 
-        Value* to_ret = read_from_image(getType(0, data), image, getValue(3, data), 0.0);
+        Value* to_ret = handleImage(data, *image_v, getValue(3, data), 4);
         data[result_at].redefine(to_ret);
+        break;
+    }
+    case spv::OpImage: { // 100
+        Value* sampler_v = getValue(2, data);
+        Image& image = static_cast<Sampler&>(*sampler_v).getImage();
+        Data weak = Data::weak(&image);
+        data[result_at].redefine(weak);
         break;
     }
     case spv::OpConvertFToU: // 109

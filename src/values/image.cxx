@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>  // for std::max
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -185,6 +186,8 @@ export class Image : public Value {
     /// @brief Returns a value corresponding to an out-of-bounds image access.
     /// This value is vendor-specific, ie, not defined by the spec. All zeros is common in practice.
     [[nodiscard]] Array* outOfBoundsAccess() const {
+        // "See the client API specification for handling of coordinates outside the image."
+        // For now, return black on out of bounds
         const Type& el = type.getElement();
         std::vector<Value*> vals(comps.count, nullptr);
         for (unsigned i = 0; i < comps.count; ++i) {
@@ -203,7 +206,7 @@ export class Image : public Value {
     /// For example:
     /// - decompose(1.0)  = {1, 0.0}
     /// - decompose(3.4)  = {3, 0.4}
-    std::tuple<unsigned, float> decompose(float val) const {
+    static std::tuple<unsigned, float> decompose(float val) {
         float base;
         float dec = std::modf(val, &base);
         // We will be subtracting the decimal component from 1.0 later, and if the subtraction doesn't even register,
@@ -283,6 +286,7 @@ public:
         }
 
         // Now that we have the expected dimensions, fetch data (if any) from the reference path
+        // TODO: handle dimensions besides 2D and add support for mipmaps
         if (!reference.empty()) {
             int width, height, channels;
             unsigned char *img = stbi_load(reference.c_str(), &width, &height, &channels, 0);
@@ -303,8 +307,6 @@ public:
                 err << " for the image dimensions required: " << xx << " x " << yy << " x " << zz;
                 throw std::runtime_error(err.str());
             }
-            // TODO: also handle the third dimension. Obviously, images in png files cannot be 3D, so we will have to
-            // think of a reasonable way they can/should be represented
 
             // Now, transfer the data from img to our "data" field
             // Data has been loaded in as a sequence of RGBA bytes (values 0-255) from left -> right, top -> bottom.
@@ -367,11 +369,14 @@ public:
                 throw std::runtime_error("The image field \"data\" must have elements of type: uint, int, or float!");
             unsigned size = data_a.getSize();
             // Verify that the data matches expected from the given dimensions
-            unsigned total = xx * comps.count;
-            if (yy > 0)
-                total *= yy;
-            if (zz > 0)
-                total *= zz;
+            unsigned total = 0;
+            for (unsigned i = 0; i < mipmaps; ++i) {
+                unsigned div = std::max(2 * i, 1u);
+                unsigned xxx = std::max(xx / div, 1u);
+                unsigned yyy = std::max(yy / div, 1u);
+                unsigned zzz = std::max(zz / div, 1u);
+                total += comps.count * xxx * yyy * zzz;
+            }
             if (total != size) {
                 std::stringstream err;
                 err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
@@ -379,7 +384,6 @@ public:
                 err << total << " values, however, " << size << " were provided.";
                 throw std::runtime_error(err.str());
             }
-            // TODO: there can actually be more data entries provided if they are mipmaps... implement
             // Now copy the data over
             data.resize(size);
             // TODO actually cannot do this in case the data elements have different type :/
@@ -501,117 +505,138 @@ public:
         return {x, y, z};
     }
 
-    [[nodiscard]] Array* read(int x, int y, int z, int lod) const {
-        bool oob = false;
+    [[nodiscard]] Array* read(float x, float y, float z, float lod) const {
         if (x < 0 || y < 0 || z < 0 || lod < 0)
-            oob = true;
-
-        // If the coordinate specified matches or exceeds the maximum (exclusive), then we are out of bounds.
-        // However, there is some special behavior for 0, since coordinate matching is appropriate there.
-        if ((x > 0 && x >= xx) || (y > 0 && y >= yy) || (z > 0 && z >= zz) || (lod > 0 && lod >= mipmaps))
-            oob = true;
-
-        // "See the client API specification for handling of coordinates outside the image."
-        // For now, return black on out of bounds
-        if (oob)
             return outOfBoundsAccess();
 
-        // The size of the array returned is the number of components in each texel
-        std::vector<Value*> vals(comps.count, nullptr);
-        const Type& el = type.getElement();
+        // coordinates are given in the scale of lod=0, regardless of the actual lod to use
+        auto [lBase, lRatio] = decompose(lod);
+        { // put this test in its own scope because we don't want the decomposed (besides lod) leaking out accidentally
+            auto [xBase, xRatio] = decompose(x);
+            auto [yBase, yRatio] = decompose(y);
+            auto [zBase, zRatio] = decompose(z);
 
-        unsigned yyy = xx * comps.count;
-        unsigned zzz = yy * yyy;
-        unsigned lll = mipmaps * zzz;
-        unsigned base = (x * comps.count) + (y * yyy) + (z * zzz) + (lod * lll);
-
-        // Output the channels in the same order defined by the comps
-        unsigned chan = 0;
-        for (unsigned chan = 0; chan < comps.count; ++chan) {
-            assert(base + chan < data.size());  // safety assert for what should already have been checked
-            auto prim = new Primitive(data[base + chan]);
-            prim->cast(el);
-            vals[chan] = prim;
+            if ((xBase > xx || (xBase == xx && xRatio > 0.0)) ||
+            (yBase > yy || (yBase == yy && yRatio > 0.0)) ||
+            (zBase > zz || (zBase == zz && zRatio > 0.0)) ||
+            (lBase > mipmaps || (lBase == mipmaps && lRatio > 0.0)))
+                return outOfBoundsAccess();
         }
 
-        return new Array(vals);
-    }
-    [[nodiscard]] Array* read(float x, float y, float z, float lod) const {
-        bool oob = false;
-        if (x < 0 || y < 0 || z < 0 || lod < 0)
-            oob = true;
+        auto for_lod = [](float coord, unsigned size, unsigned lod) {
+            if (lod == 0)
+                return decompose(coord);
 
-        auto [xBase, xRatio] = decompose(x);
-        auto [yBase, yRatio] = decompose(y);
-        auto [zBase, zRatio] = decompose(z);
-        auto [lBase, lRatio] = decompose(lod);
+            // we divide each dimension by 2 times the lod. For example, 0 is full size, 1 is half-size, etc
+            unsigned divide = lod * 2;
+            unsigned trunc = std::max(size / divide, 1u);
+            // The integral division truncates, which means the actual divisor may exceed divide
+            float actual_div = float(size) / float(trunc);
+            float actual_rat = float(trunc) / float(size);
 
-        // all unsigned ints should be able to implicitly cast to a float
-        if ((xBase > xx || (xBase == xx && xRatio > 0.0)) ||
-        (yBase > yy || (yBase == yy && yRatio > 0.0)) ||
-        (zBase > zz || (zBase == zz && zRatio > 0.0)) ||
-        (lBase > mipmaps || (lBase == mipmaps && lRatio > 0.0)))
-            oob = true;
+            // If the coord was between pixels which got consolidated, any decimal part it had should be erased.
+            // Consider this example:
+            // - coord 0.2 is 1/5 of the way between 0 and 1. In the mipmap, 0-1 is represented fully by the new 0. We
+            // should not get *any* blending with the new 1, which represents the top-level 2-3.
+            // However, if the coord was between pixels of different groups, the decimal part should be undisturbed.
+            // Consider another example:
+            // - coord 1.75 is 3/4 the way between 1 and 2. In the mimap, 0-1 is represented by the new 0, and 2-3 is
+            // represented by the new 1. This scaling did *not* affect the ratio of the original coord's representation
+            // by the now pixel 0 and 1.
 
-        // "See the client API specification for handling of coordinates outside the image."
-        // For now, return black on out of bounds
-        if (oob)
-            return outOfBoundsAccess();
+            // This is complicated by the fact that pixel boundaries are not even if actual_div != divide.
+            // Compute the coordinate with the correct scale
+            float lowered = coord * actual_rat;
+            unsigned integral = static_cast<unsigned>(std::floor(lowered));
+            float offset = std::fmod(lowered, actual_div);
+            float pix_size = actual_div / float(divide);
+            float dec = 0.0;
+            if (offset >= actual_div - pix_size) {
+                dec = (actual_div - offset) / pix_size;
+                if (1.0 - dec == 1.0)
+                    dec = 0.0;
+            }
 
-        // Each coordinate's fractional value falls on a spectrum from 0.0 (inclusive) to 1.0 (exclusive)
-        // Perform interpolation for all affected values
-        float sums[] = {0.0, 0.0, 0.0, 0.0};  // cannot be any more than 4 components
-
-        std::vector<std::tuple<unsigned, float>> interps;
-        unsigned factor = comps.count;
-        if (xRatio > 0.0)
-            interps.push_back({factor, xRatio});
-        unsigned base = xBase * factor;
-        factor *= xx;
-        if (yRatio > 0.0)
-            interps.push_back({factor, yRatio});
-        base += yBase * factor;
-        factor *= yy;
-        if (zRatio > 0.0)
-            interps.push_back({factor, zRatio});
-        base += zBase * factor;
-        factor *= zz;
-        if (lRatio > 0.0)
-            interps.push_back({factor, lRatio});
-        base += lBase * factor;
+            return std::tuple<unsigned, float>(integral, dec);
+        };
 
         const Type& el = type.getElement();
         const DataType el_base = el.getBase();
 
-        // We need every combo of different interps applied (either off or on), which maps perfectly onto bits counting
-        // to 2^n, where n is the maximum number of interps.
-        // Each bit in the increment variable corresponds to whether that interpolation index should be on
-        for (unsigned i = 0; i < (1 << interps.size()); ++i) {
-            unsigned total = base;
-            float weight = 1.0;
-            for (unsigned bit = 0; bit < interps.size(); ++bit) {
-                auto [delta, this_ratio] = interps[bit];
-                if ((i >> bit) & 0x1) {
-                    total += delta;
-                    weight *= this_ratio;
-                } else {
-                    weight *= (1.0 - this_ratio);
-                }
+        // Perform interpolation for all affected values. A single texel cannot have more than 4 components.
+        float sums[] = {0.0, 0.0, 0.0, 0.0};
+        unsigned lod_offs = 0;  // the first index where data of this lod is stored
+        for (unsigned which_lod = 0; which_lod < 2; ++which_lod) {
+            unsigned use_lod = lBase + which_lod;
+            float lod_weight = (which_lod == 0)? (1.0 - lRatio) : lRatio;
+            if (lod_weight == 0.0)
+                break;
+
+            std::vector<std::tuple<unsigned, float>> interps;
+            // Recompute the base and ratio for the given level of detail
+            auto [bx, rx] = for_lod(x, xx, use_lod);
+            auto [by, ry] = for_lod(y, yy, use_lod);
+            auto [bz, rz] = for_lod(z, zz, use_lod);
+
+            // Determine the "anchor", which is the data index which points to (bx, by, bz) for this lod.
+            // We add some factor to the anchor to calculate the location of the alternate texel (ie, `b + 1`), for each
+            // coordinate with nonzero ratio.
+
+            // To get the anchor, we must first determine where the data for this lod starts. For the second iteration
+            // of the for loop, we can use the data calculated from the previous iteration
+            unsigned xxx = xx, yyy = yy, zzz = zz;
+            for (unsigned lod_start = (which_lod == 0)? 0 : lBase; lod_start < use_lod; ++lod_start) {
+                unsigned div = std::max(2 * lod_start, 1u);
+                xxx = std::max(xx / div, 1u);
+                yyy = std::max(yy / div, 1u);
+                zzz = std::max(zz / div, 1u);
+                lod_offs += comps.count * xxx * yyy * zzz;
             }
-            // Now that we have determined the location and the total weight, add to sum
-            for (unsigned chan = 0; chan < comps.count; ++chan) {
-                assert(total + chan < data.size());  // safety assert for what should already have been checked
-                Primitive prim(data[total + chan]);
-                float converted;
-                if (el_base == DataType::FLOAT) {
-                    converted = prim.data.fp32;
-                } else if (el_base == DataType::INT) {
-                    converted = prim.data.i32;
-                } else {
-                    assert(el_base == DataType::UINT);
-                    converted = prim.data.u32;
+            unsigned anchor = lod_offs;
+
+            unsigned factor = comps.count;
+            if (rx > 0.0)
+                interps.push_back({factor, rx});
+            anchor += bx * factor;
+            factor *= xxx;
+            if (ry > 0.0)
+                interps.push_back({factor, ry});
+            anchor += by * factor;
+            factor *= yyy;
+            if (rz > 0.0)
+                interps.push_back({factor, rz});
+            anchor += bz * factor;
+
+            // We need every combo of different interps applied (either off or on), which maps perfectly onto bits
+            // counting to 2^n, where n is the maximum number of interps.
+            // Each bit in the increment variable corresponds to whether that interpolation index should be on
+            for (unsigned i = 0; i < (1 << interps.size()); ++i) {
+                unsigned total = anchor;
+                float weight = lod_weight;
+                for (unsigned bit = 0; bit < interps.size(); ++bit) {
+                    auto [delta, this_ratio] = interps[bit];
+                    if ((i >> bit) & 0x1) {
+                        total += delta;
+                        weight *= this_ratio;
+                    } else {
+                        weight *= (1.0 - this_ratio);
+                    }
                 }
-                sums[chan] += (converted * weight);
+                // Now that we have determined the location and the total weight, add to sum
+                for (unsigned chan = 0; chan < comps.count; ++chan) {
+                    assert(total + chan < data.size());  // safety assert for what should already have been checked
+                    Primitive prim(data[total + chan]);
+                    float converted;
+                    if (el_base == DataType::FLOAT) {
+                        converted = prim.data.fp32;
+                    } else if (el_base == DataType::INT) {
+                        converted = prim.data.i32;
+                    } else {
+                        assert(el_base == DataType::UINT);
+                        converted = prim.data.u32;
+                    }
+                    sums[chan] += (converted * weight);
+                }
             }
         }
 

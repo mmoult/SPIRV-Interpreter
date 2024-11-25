@@ -36,7 +36,7 @@ fails = 0
 total = 0
 ionames = ["in", "out"]
 import subprocess
-for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True): 
+for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True):
     iopairs = {}
     program = None
     for file in files:

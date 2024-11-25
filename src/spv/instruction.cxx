@@ -123,7 +123,12 @@ export class Instruction {
     bool makeResultGlsl(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
     bool makeResultPrintf(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
 
-    static std::string printOpcode(spv::Op opcode);
+    [[nodiscard]] Value* handleImage(
+        DataView& data,
+        const Value& img,
+        const Value* coords,
+        unsigned img_qualifier
+    ) const;
 
 public:
     Instruction(spv::Op opcode, bool has_result, bool has_result_type)

@@ -297,6 +297,26 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         terminate_invocation();
         break;
     }
+    case spv::OpSwitch: { // 251
+        Value* selectorv = getValue(0, data);
+        int selector = static_cast<Primitive*>(selectorv)->data.i32;
+        unsigned i = 2;
+        for (; i < operands.size(); i += 2) {
+            assert(operands[i].type == Token::Type::CONST);
+            int to_match = std::get<int>(operands[i].raw);
+            if (to_match == selector) {
+                ++i;
+                break;
+            }
+        }
+        if (i >= operands.size())
+            i = 1;  // use default case
+        Value* dstv = getValue(i, data);
+        Primitive* dst = static_cast<Primitive*>(dstv);
+        frame.setPC(dst->data.u32);
+        inc_pc = false;
+        break;
+    }
     case spv::OpReturn: // 253
         // verify that the stack didn't expect a return value
         if (frame.hasReturn())
