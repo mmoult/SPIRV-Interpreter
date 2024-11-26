@@ -1846,6 +1846,12 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_UNARY_OP(FLOAT, std::floor(a->data.fp32));
     case GLSLstd450Ceil: // 9
         TYPICAL_E_UNARY_OP(FLOAT, std::ceil(a->data.fp32));
+    case GLSLstd450Fract: // 10
+        TYPICAL_E_UNARY_OP(FLOAT, a->data.fp32 - std::floor(a->data.fp32));
+    case GLSLstd450Radians: // 11
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * M_PI / 180.0));
+    case GLSLstd450Degrees: // 12
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * 180.0 / M_PI));
     case GLSLstd450Sin: // 13
         TYPICAL_E_UNARY_OP(FLOAT, std::sin(a->data.fp32));
     case GLSLstd450Cos: // 14
@@ -1915,15 +1921,15 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450FMin: // 37
         TYPICAL_E_BIN_OP(FLOAT, std::min(a->data.fp32, b->data.fp32));
     case GLSLstd450UMin: // 38
-        TYPICAL_E_BIN_OP(FLOAT, std::min(a->data.u32, b->data.u32));
+        TYPICAL_E_BIN_OP(UINT, std::min(a->data.u32, b->data.u32));
     case GLSLstd450SMin: // 39
-        TYPICAL_E_BIN_OP(FLOAT, std::min(a->data.i32, b->data.i32));
+        TYPICAL_E_BIN_OP(INT, std::min(a->data.i32, b->data.i32));
     case GLSLstd450FMax: // 40
         TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.fp32, b->data.fp32));
     case GLSLstd450UMax: // 41
-        TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.u32, b->data.u32));
+        TYPICAL_E_BIN_OP(UINT, std::max(a->data.u32, b->data.u32));
     case GLSLstd450SMax: // 42
-        TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.i32, b->data.i32));
+        TYPICAL_E_BIN_OP(INT, std::max(a->data.i32, b->data.i32));
     case GLSLstd450FClamp: { // 43
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
             assert(minVal->data.fp32 <= maxVal->data.fp32);

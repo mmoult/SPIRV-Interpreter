@@ -405,7 +405,7 @@ void Instruction::readOp(
     case spv::OpSwitch: // 251
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
-        optional.push_back(Type::UINT);
+        optional.push_back(Type::INT);
         optional.push_back(Type::REF);
         repeating = Repeat::WHOLE;
         break;

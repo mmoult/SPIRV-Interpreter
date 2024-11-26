@@ -302,7 +302,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         int selector = static_cast<Primitive*>(selectorv)->data.i32;
         unsigned i = 2;
         for (; i < operands.size(); i += 2) {
-            assert(operands[i].type == Token::Type::CONST);
+            assert(operands[i].type == Token::Type::INT);
             int to_match = std::get<int>(operands[i].raw);
             if (to_match == selector) {
                 ++i;
