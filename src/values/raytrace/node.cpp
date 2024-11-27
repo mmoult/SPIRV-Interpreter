@@ -102,7 +102,8 @@ const Type& InstanceNode::getType() {
         return type;
     Statics statics;
     statics.init();
-    mat4x3Type = Type::array(3, Statics::vec4Type);
+    // matrix with 4 columns and 3 rows. This is confusing because columns are stored horizontally
+    mat4x3Type = Type::array(4, Statics::vec3Type);
     const std::vector<const Type*> sub_list{
         &mat4x3Type,
         &Statics::uvec2Type,
@@ -141,13 +142,13 @@ Ternary InstanceNode::step(Trace* trace_p) const {
 [[nodiscard]] InstanceNode* InstanceNode::fromVal(const Value* val) {
     const Struct& str = Statics::extractStruct(val, "InstanceNode", names);
     const Array& transform = Statics::extractArray(str[0], names[0]);
-    if (transform.getSize() != 3)
+    if (transform.getSize() != 4)
         throw std::runtime_error("InstanceNode field \"transformation\" must be a mat4x3!");
     glm::mat4x3 transformation;
-    for (unsigned i = 0; i < 3; ++i) {
-        std::vector<float> row = Statics::extractVec(transform[i], "transformation", 4);
-        for (unsigned j = 0; j < 4; ++j)
-            transformation[j][i] = row[j];
+    for (unsigned i = 0; i < 4; ++i) {
+        std::vector<float> row = Statics::extractVec(transform[i], "transformation", 3);
+        for (unsigned j = 0; j < 3; ++j)
+            transformation[i][j] = row[j];
     }
 
     std::vector<unsigned> ref = Statics::extractUvec(str[1], names[1], 2);
@@ -160,11 +161,11 @@ Ternary InstanceNode::step(Trace* trace_p) const {
 }
 
 [[nodiscard]] Struct* InstanceNode::toStruct() const {
-    std::vector<Value*> cols(3, nullptr);
-    for (unsigned i = 0; i < 3; ++i) {
-        std::vector<Value*> row(4, nullptr);
-        for (unsigned j = 0; j < 4; ++j)
-            row[j] = new Primitive(transformation[j][i]);
+    std::vector<Value*> cols(4, nullptr);
+    for (unsigned i = 0; i < 4; ++i) {
+        std::vector<Value*> row(3, nullptr);
+        for (unsigned j = 0; j < 3; ++j)
+            row[j] = new Primitive(transformation[i][j]);
         cols[i] = new Array(row);
     }
     std::vector<Value*> fields{
