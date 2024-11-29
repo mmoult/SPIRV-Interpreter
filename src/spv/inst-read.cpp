@@ -363,8 +363,8 @@ void Instruction::readOp(
         [[fallthrough]];
     case spv::OpImageSampleImplicitLod: // 87
     case spv::OpImageSampleExplicitLod: // 88
-    case spv::OpImageRead: // 98
     case spv::OpImageFetch: // 95
+    case spv::OpImageRead: // 98
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         optional.push_back(Type::CONST);

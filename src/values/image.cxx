@@ -524,6 +524,8 @@ public:
         }
 
         auto for_lod = [](float coord, unsigned size, unsigned lod) {
+            if (coord == 0.0)
+                return std::tuple<unsigned, float>(0, 0.0);
             if (lod == 0)
                 return decompose(coord);
 
@@ -546,17 +548,17 @@ public:
 
             // This is complicated by the fact that pixel boundaries are not even if actual_div != divide.
             // Compute the coordinate with the correct scale
-            float lowered = coord * actual_rat;
-            unsigned integral = static_cast<unsigned>(std::floor(lowered));
-            float offset = std::fmod(lowered, actual_div);
+            float offset = std::fmod(coord, actual_div);
             float pix_size = actual_div / float(divide);
             float dec = 0.0;
-            if (offset >= actual_div - pix_size) {
-                dec = (actual_div - offset) / pix_size;
+            if (offset > actual_div - pix_size) {
+                dec = 1.0 - (actual_div - offset) / pix_size;
                 if (1.0 - dec == 1.0)
                     dec = 0.0;
             }
 
+            float lowered = coord * actual_rat;
+            unsigned integral = static_cast<unsigned>(std::floor(lowered));
             return std::tuple<unsigned, float>(integral, dec);
         };
 
@@ -584,13 +586,15 @@ public:
 
             // To get the anchor, we must first determine where the data for this lod starts. For the second iteration
             // of the for loop, we can use the data calculated from the previous iteration
-            unsigned xxx = xx, yyy = yy, zzz = zz;
-            for (unsigned lod_start = (which_lod == 0)? 0 : lBase; lod_start < use_lod; ++lod_start) {
+            unsigned xxx = std::max(xx, 1u);
+            unsigned yyy = std::max(yy, 1u);
+            unsigned zzz = std::max(zz, 1u);
+            for (unsigned lod_start = (which_lod == 0)? 1 : use_lod; lod_start <= use_lod; ++lod_start) {
+                lod_offs += comps.count * xxx * yyy * zzz;
                 unsigned div = std::max(2 * lod_start, 1u);
                 xxx = std::max(xx / div, 1u);
                 yyy = std::max(yy / div, 1u);
                 zzz = std::max(zz / div, 1u);
-                lod_offs += comps.count * xxx * yyy * zzz;
             }
             unsigned anchor = lod_offs;
 

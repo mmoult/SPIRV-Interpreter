@@ -125,24 +125,29 @@ Value* Instruction::handleImage(DataView& data, const Value& img, const Value* c
     }
 
     if (img_qualifier < operands.size()) {
-        assert(operands[img_qualifier].type == Token::Type::UINT);
+        assert(operands[img_qualifier].type == Token::Type::CONST);
         auto descriptors = std::get<unsigned>(operands[img_qualifier].raw);
-        unsigned next = descriptors + 1;
-        for (uint32_t i = 0; (i < spv::ImageOperandsMax) && (descriptors != 0); i <<= 1) {
+        unsigned next = img_qualifier;
+        auto getNext = [&]() {
+            if (++next >= operands.size())
+                throw std::runtime_error("Missing necessary operand(s) for image qualifiers!");
+            return getValue(next, data);
+        };
+        for (uint32_t i = 1; (i < spv::ImageOperandsMax) && (descriptors != 0); i <<= 1) {
             if ((descriptors & i) == 0)
                 continue;
             descriptors &= ~i;
 #define CASE(SHIFT) case 1 << spv::SHIFT
             switch (i) {
             CASE(ImageOperandsBiasShift): {
-                const Value* bias = getValue(next++, data);
+                const Value* bias = getNext();
                 // bias must be a float per the spec
                 assert(bias->getType().getBase() == DataType::FLOAT);
                 lod += static_cast<const Primitive*>(bias)->data.fp32;
                 break;
             }
             CASE(ImageOperandsLodShift): {
-                const Value* lodv = getValue(next++, data);
+                const Value* lodv = getNext();
                 const auto& lodp = static_cast<const Primitive&>(*lodv);
                 Primitive prim(0.0f);
                 prim.copyFrom(lodp);
@@ -154,6 +159,8 @@ Value* Instruction::handleImage(DataView& data, const Value& img, const Value* c
             }
 #undef CASE
         }
+        if (++next < operands.size())
+            throw std::runtime_error("Unused image qualifier operands!");
     }
 
     const Array& arr = *image->read(x, y, z, lod);
@@ -1060,19 +1067,21 @@ bool Instruction::makeResult(
         data[result_at].redefine(to_ret);
         break;
     }
-    case spv::OpImageSampleImplicitLod: { // 87
+    case spv::OpImageSampleImplicitLod:
+    case spv::OpImageSampleExplicitLod: { // 87
         const Value* sampler_v = getValue(2, data);
         if (sampler_v->getType().getBase() != DataType::SAMPLER)
-            throw std::runtime_error("The third operand to OpImageSampleImplicitLod must be an sampler!");
+            throw std::runtime_error("The third operand to OpImageSample* must be an sampler!");
 
         Value* to_ret = handleImage(data, *sampler_v, getValue(3, data), 4);
         data[result_at].redefine(to_ret);
         break;
     }
+    case spv::OpImageFetch: // 95
     case spv::OpImageRead: { // 98
         const Value* image_v = getValue(2, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
-            throw std::runtime_error("The third operand to ImageRead must be an image!");
+            throw std::runtime_error("The third operand to OpImage* must be an image!");
 
         Value* to_ret = handleImage(data, *image_v, getValue(3, data), 4);
         data[result_at].redefine(to_ret);
