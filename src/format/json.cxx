@@ -332,6 +332,7 @@ private:
             break;
         }
         case DataType::POINTER: {
+            assert(!templatize);
             const auto& pointer = static_cast<const Pointer&>(value);
             out << "[" << pointer.getHead();
             for (unsigned idx : pointer.getIndices())
@@ -340,8 +341,12 @@ private:
             break;
         }
         case DataType::STRING: {
-            const auto& strv = static_cast<const String&>(value);
-            printKey(out, strv.get());
+            if (templatize) {
+                out << "<string>";
+            } else {
+                const auto& strv = static_cast<const String&>(value);
+                printKey(out, strv.get());
+            }
             break;
         }
         case DataType::ACCEL_STRUCT: {

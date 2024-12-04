@@ -442,6 +442,7 @@ private:
             break;
         }
         case DataType::POINTER: {
+            assert(!templatize);
             const auto& pointer = static_cast<const Pointer&>(value);
             out << " [" << pointer.getHead();
             for (unsigned idx : pointer.getIndices())
