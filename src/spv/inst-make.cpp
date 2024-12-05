@@ -542,6 +542,12 @@ bool Instruction::makeResult(
         err << "Cannot make result for unsupported instruction " << spv::OpToString(opcode) << "!";
         throw std::runtime_error(err.str());
     }
+    case spv::OpUndef: // 3
+    case spv::OpConstantNull: { // 46
+        const Type* ret_type = getType(dst_type_at, data);
+        data[result_at].redefine(ret_type->construct());
+        break;
+    }
     case spv::OpString: // 7
         assert(operands[1].type == Token::Type::STRING);
         data[result_at].redefine(new String(std::get<std::string>(operands[1].raw)));
@@ -781,7 +787,7 @@ bool Instruction::makeResult(
         break;
     case spv::OpConstant: { // 43
         // integer or floating point constant
-        Type* ret = getType(0, data);
+        Type* ret = getType(dst_type_at, data);
         assert(operands[2].type == Token::Type::UINT);
         Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
         prim->cast(*ret);
@@ -792,7 +798,7 @@ bool Instruction::makeResult(
     case spv::OpSpecConstantComposite: // 51
     case spv::OpCompositeConstruct: { // 80
         // Can create struct, array/vector, or matrix
-        Type* ret = getType(0, data);
+        Type* ret = getType(dst_type_at, data);
         std::vector<const Value*> values;
         // operands 2+ are refs to components
         for (unsigned i = 2; i < operands.size(); ++i) {
@@ -810,12 +816,6 @@ bool Instruction::makeResult(
         }
         break;
     }
-    case spv::OpConstantNull: { // 46
-        Type* ret = getType(0, data);
-        auto* val = ret->construct();
-        data[result_at].redefine(val);
-        break;
-    }
     case spv::OpSpecConstantTrue: // 48
     case spv::OpSpecConstantFalse: { // 49
         // Specialization constants should be constant at compile time. They may have defaults, but their value does not
@@ -830,7 +830,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpSpecConstant: { // 50
-        Type* ret = getType(0, data);
+        Type* ret = getType(dst_type_at, data);
         assert(operands[2].type == Token::Type::UINT);
         Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
         prim->cast(*ret);
@@ -944,7 +944,7 @@ bool Instruction::makeResult(
     }
     case spv::OpVariable: { // 59
         assert(hasResultType);
-        Type* var_type = getType(0, data);
+        Type* var_type = getType(dst_type_at, data);
         assert(operands[2].type == Token::Type::CONST);
         unsigned storage = std::get<unsigned>(operands[2].raw);
 
@@ -972,7 +972,7 @@ bool Instruction::makeResult(
             const Primitive& pat = *static_cast<const Primitive*>(at);
             indices.push_back(pat.data.u32);
         }
-        Type* point_to = getType(0, data);
+        Type* point_to = getType(dst_type_at, data);
         assert(point_to != nullptr);
         data[result_at].redefine(new Pointer(head, indices, *point_to));
         break;
@@ -1005,12 +1005,12 @@ bool Instruction::makeResult(
             error << "VectorShuffle index " << (i - 4) << " is beyond the bounds of source arrays!";
             throw std::runtime_error(error.str());
         }
-        Type* retType = getType(0, data);
+        Type* retType = getType(dst_type_at, data);
         data[result_at].redefine(retType->construct(vals));
         break;
     }
     case spv::OpCompositeExtract: { // 81
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Value* to_ret = res_type->construct();
         Value* composite = getValue(2, data);
         const Value* extracted = composite_extract(composite, 3, operands);
@@ -1019,7 +1019,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpCompositeInsert: { // 82
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Value* to_ret = res_type->construct();
         const Value* composite = getValue(3, data);
         to_ret->copyFrom(*composite);
@@ -1030,7 +1030,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpTranspose: { // 84
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Value* to_ret = res_type->construct();
         const Value* input = getValue(2, data);
 
@@ -1103,7 +1103,7 @@ bool Instruction::makeResult(
     case spv::OpConvertUToF: // 112
         TYPICAL_E_UNARY_OP(UINT, static_cast<float>(a->data.u32));
     case spv::OpBitcast: { // 124
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Value* to_ret = res_type->construct();
         const Value* from = getValue(2, data);
         to_ret->copyReinterp(*from);
@@ -1180,13 +1180,13 @@ bool Instruction::makeResult(
             pfloats.push_back(&floats[i]);
         }
 
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Value* res = res_type->construct(pfloats);
         data[result_at].redefine(res);
         break;
     }
     case spv::OpMatrixTimesScalar: { // 143
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Value* res = res_type->construct();
         Array& mres = *static_cast<Array*>(res);
         const Array& mat = *static_cast<Array*>(getValue(2, data));
@@ -1207,7 +1207,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpVectorTimesMatrix: { // 144
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         // V * M
         // (1xA) * (AxB) = (1xB)
         // Vector's "number of components must equal the number of components in each column in Matrix."
@@ -1240,7 +1240,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpMatrixTimesVector: { // 145
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         // M * V
         // (AxB) * (Bx1) = (Ax1)
         // Vector's "number of components must equal the number of columns in Matrix."
@@ -1274,7 +1274,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpMatrixTimesMatrix: { // 146
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         // (AxB) * (BxC) = (AxC)
         // RightMatrix's "number of columns must equal the number of columns in Result Type. Its columns must have the
         // same number of components as the number of columns in LeftMatrix."
@@ -1344,7 +1344,7 @@ bool Instruction::makeResult(
             const Primitive& n1 = *static_cast<const Primitive*>((*arr[1])[i]);
             total += n0.data.fp32 * n1.data.fp32;
         }
-        Primitive* ret = static_cast<Primitive*>(getType(0, data)->construct());
+        Primitive* ret = static_cast<Primitive*>(getType(dst_type_at, data)->construct());
         Primitive tot_prim(total);
         ret->copyFrom(tot_prim);
         data[result_at].redefine(ret);
@@ -1449,7 +1449,7 @@ bool Instruction::makeResult(
                 es.push_back(cond_bool.data.b32? first_agg[i]: second_agg[i]);
             }
 
-            Type* res_type = getType(0, data);
+            Type* res_type = getType(dst_type_at, data);
             Aggregate* result = (res_type->getBase() == DataType::ARRAY)?
                 static_cast<Aggregate*>(new Array(res_type->getElement(), cond_size)):
                 static_cast<Aggregate*>(new Struct(*res_type));
@@ -1587,7 +1587,7 @@ bool Instruction::makeResult(
 
         throw std::runtime_error("OpConvertUToAccelerationStructureKHR not implemented.");
 
-        //Type* res_type = getType(0, data);
+        //Type* res_type = getType(dst_type_at, data);
         // AccelStruct res; // update me; set the acceleration structure
         // std::vector<const Value*> values {&res};
         // data[result_at].redefine(res_type->construct(values));
@@ -1624,7 +1624,7 @@ bool Instruction::makeResult(
     }
     case spv::OpRayQueryGetRayTMinKHR: { // 6016
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getTrace().rayTMin);
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1632,7 +1632,7 @@ bool Instruction::makeResult(
     }
     case spv::OpRayQueryGetRayFlagsKHR: { // 6017
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getTrace().rayFlags.get());
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1641,7 +1641,7 @@ bool Instruction::makeResult(
     case spv::OpRayQueryGetIntersectionTKHR: { // 6018
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getIntersectionT(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1650,7 +1650,7 @@ bool Instruction::makeResult(
     case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: { // 6019
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getIntersectionInstanceCustomIndex(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1659,7 +1659,7 @@ bool Instruction::makeResult(
     case spv::OpRayQueryGetIntersectionInstanceIdKHR: { // 6020
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getIntersectionInstanceId(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1668,7 +1668,7 @@ bool Instruction::makeResult(
     case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: { // 6021
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getIntersectionInstanceShaderBindingTableRecordOffset(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1677,7 +1677,7 @@ bool Instruction::makeResult(
     case spv::OpRayQueryGetIntersectionGeometryIndexKHR: { // 6022
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getIntersectionGeometryIndex(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1686,7 +1686,7 @@ bool Instruction::makeResult(
     case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: { // 6023
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getIntersectionPrimitiveIndex(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1696,14 +1696,14 @@ bool Instruction::makeResult(
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
         std::vector<Primitive> barycentrics = ray_query.getIntersectionBarycentrics(intersection);
-        const Type* res_type = getType(0, data);
+        const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(barycentrics, res_type));
         break;
     }
     case spv::OpRayQueryGetIntersectionFrontFaceKHR: { // 6025
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getIntersectionFrontFace(intersection));
         std::vector<const Value*> values {&res};
         data[result_at].redefine(res_type->construct(values));
@@ -1718,7 +1718,7 @@ bool Instruction::makeResult(
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
         std::vector<Primitive> direction = ray_query.getIntersectionObjectRayDirection(intersection);
-        const Type* res_type = getType(0, data);
+        const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(direction, res_type));
         break;
     }
@@ -1726,21 +1726,21 @@ bool Instruction::makeResult(
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
         std::vector<Primitive> origin = ray_query.getIntersectionObjectRayOrigin(intersection);
-        const Type* res_type = getType(0, data);
+        const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(origin, res_type));
         break;
     }
     case spv::OpRayQueryGetWorldRayDirectionKHR: { // 6029
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         std::vector<Primitive> direction = ray_query.getAccelStruct().getWorldRayDirection();
-        const Type* res_type = getType(0, data);
+        const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(direction, res_type));
         break;
     }
     case spv::OpRayQueryGetWorldRayOriginKHR: { // 6030
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         std::vector<Primitive> origin = ray_query.getAccelStruct().getWorldRayOrigin();
-        const Type* res_type = getType(0, data);
+        const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(origin, res_type));
         break;
     }
@@ -1748,7 +1748,7 @@ bool Instruction::makeResult(
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
 
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Array& result = static_cast<Array&>(*res_type->construct());
         assert(result.getSize() == 4); // Expecting 4 columns
 
@@ -1769,7 +1769,7 @@ bool Instruction::makeResult(
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         const bool intersection = static_cast<Primitive&>(*getValue(3, data)).data.u32 == 1;
 
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Array& result = static_cast<Array&>(*res_type->construct());
         assert(result.getSize() == 4); // Expecting 4 columns
 
@@ -1902,7 +1902,7 @@ bool Instruction::makeResultGlsl(
             whole_val = whole_ptr.dereference(*head_val);
         }
 
-        Type* dst_type = getType(0, data);
+        Type* dst_type = getType(dst_type_at, data);
         int comp = -1;
         if (dst_type->getBase() == DataType::ARRAY) {
             // verify that whole is also an array type
@@ -1945,6 +1945,22 @@ bool Instruction::makeResultGlsl(
             return std::clamp(x->data.fp32, minVal->data.fp32, maxVal->data.fp32);
         };
         E_TERN_OP(FLOAT, fx);
+        break;
+    }
+    case GLSLstd450UClamp: { // 44
+        TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
+            assert(minVal->data.u32 <= maxVal->data.u32);
+            return std::clamp(x->data.u32, minVal->data.u32, maxVal->data.u32);
+        };
+        E_TERN_OP(UINT, fx);
+        break;
+    }
+    case GLSLstd450SClamp: { // 45
+        TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
+            assert(minVal->data.i32 <= maxVal->data.i32);
+            return std::clamp(x->data.i32, minVal->data.i32, maxVal->data.i32);
+        };
+        E_TERN_OP(INT, fx);
         break;
     }
     case GLSLstd450FMix: { // 46
@@ -1998,7 +2014,7 @@ bool Instruction::makeResultGlsl(
         Value* vec_2_val = getValue(5, data);
         assert(vec_1_val->getType() == vec_2_val->getType());
 
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
 
         const Type& vec_type = vec_1_val->getType();
         if (vec_type.getBase() != DataType::ARRAY) {
@@ -2037,7 +2053,7 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450Cross: { // 68
         std::vector<float> x = Statics::extractVec(getValue(src_at, data), "Cross Operand x", 3);
         std::vector<float> y = Statics::extractVec(getValue(src_at + 1, data), "Cross Operand y", 3);
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         Value* res = res_type->construct();
 
         Array& arr = static_cast<Array&>(*res);
@@ -2053,7 +2069,7 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450Normalize: { // 69
         Value* vec_val = getValue(4, data);
         const Type& vec_type = vec_val->getType();
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
         if (vec_type.getBase() != DataType::ARRAY) {
             // "Normalize" a scalar value
             assert(vec_type.getBase() == DataType::FLOAT);
@@ -2101,7 +2117,7 @@ bool Instruction::makeResultGlsl(
         Value* normal_val = getValue(5, data);
         assert(incident_val->getType() == normal_val->getType());
 
-        Type* res_type = getType(0, data);
+        Type* res_type = getType(dst_type_at, data);
 
         const Type& vec_type = incident_val->getType();
         if (vec_type.getBase() != DataType::ARRAY) {

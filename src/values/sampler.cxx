@@ -32,7 +32,6 @@ public:
     /// @param other the struct to copy from
     void copyFrom(const Struct& str) noexcept(false) {
         const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "sampler", names);
-        const std::vector<std::string>& type_names = other.getType().getNames();
 
         // lod: <uint>
         defaultLod = Statics::extractUint(other[0], names[0]);
@@ -61,7 +60,7 @@ public:
     //     <image>
     Struct* toStruct() const {
         std::vector<Value*> elements;
-        elements.reserve(2);
+        elements.reserve(names.size());
         elements.push_back(new Primitive(defaultLod));
         elements.push_back(image.toStruct());
         return new Struct(elements, names);

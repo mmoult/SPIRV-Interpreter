@@ -97,6 +97,7 @@ void Instruction::readOp(
         throw std::invalid_argument(err.str());
     }
     case spv::OpNop: // 1
+    case spv::OpUndef: // 3
     case spv::OpTypeVoid: // 19
     case spv::OpTypeBool: // 20
     case spv::OpConstantTrue: // 41

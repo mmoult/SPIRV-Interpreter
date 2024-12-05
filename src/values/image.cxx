@@ -261,7 +261,6 @@ public:
     /// @param other the struct to copy from
     void copyFrom(const Struct& str) noexcept(false) {
         const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "image", names);
-        const std::vector<std::string>& type_names = other.getType().getNames();
 
         // ref: <string>
         const Value* ref = other[0];

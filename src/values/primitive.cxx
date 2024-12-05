@@ -39,8 +39,9 @@ public:
     Primitive(bool b32): Value(Type::primitive(BOOL)) {
         data.b32 = b32;
     }
-    // Create a blank primitive from the given value
+    // Create a blank primitive for the given type
     Primitive(Type t): Value(t) {
+        assert(isPrimitive(t.getBase()));
         data.u32 = 0;
     }
 
@@ -149,8 +150,6 @@ public:
             return data.i32 == other.data.i32;
         case BOOL:
             return data.b32 == other.data.b32;
-        case VOID:
-            return true; // I don't know why this would happen, but just in case...
         default:
             assert(false);
             return false;
