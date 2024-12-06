@@ -53,7 +53,7 @@ export class Frame {
     // OpFunctionParameter
     // ...
     // OpLabel
-    std::vector<const Value*> args;
+    std::vector<Data*> args;
     /// Where to store the return value, if any. Should be 0 if no return expected
     unsigned retAt;
 
@@ -80,7 +80,7 @@ export class Frame {
     } rt;
 
 public:
-    Frame(unsigned pc, std::vector<const Value*>& args, unsigned ret_at, DataView& data) :
+    Frame(unsigned pc, std::vector<Data*>& args, unsigned ret_at, DataView& data) :
         pc(pc),
         curLabel(0),
         lastLabel(0),
@@ -92,8 +92,6 @@ public:
     Frame(const Frame&) = delete;
     Frame& operator=(const Frame&) = delete;
     ~Frame() {
-        while (argCount < args.size())
-            delete getArg();
         if (view != nullptr) {
             view->getSource()->destroyView(view);
             view = nullptr;  // to prevent double deletion or after-deletion use
@@ -108,11 +106,11 @@ public:
         return pc;
     }
 
-    const Value* getArg() noexcept(false) {
+    Data& getArg() noexcept(false) {
         if (argCount >= args.size())
             throw std::runtime_error("No more args to use!");
         ++pc;
-        return args[argCount++];
+        return *args[argCount++];
     }
 
     void incPC() noexcept(false) {

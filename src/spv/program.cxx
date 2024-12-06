@@ -295,7 +295,7 @@ if (!(COND)) \
         }
         // Load from the extra input file
         const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
-        std::vector<const Value*> entry_args;  // no formal arguments to the substage's main
+        std::vector<Data*> entry_args;  // no formal arguments to the substage's main
 
         // Note: a frame assumes that it owns its data (and will therefore delete it upons deconstruction). We avoid
         // this problem by making a change to instruction's execute and preventing data delete if the frame before has
@@ -520,7 +520,7 @@ public:
         std::set<unsigned> active_threads;
         std::set<unsigned> live_threads;
         // afaik, the entry point never takes any arguments
-        std::vector<const Value*> entry_args;
+        std::vector<Data*> entry_args;
 
         Variable* local_invoc_idx = nullptr;
         Variable* local_invoc_id  = nullptr;

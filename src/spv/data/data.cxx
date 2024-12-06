@@ -184,8 +184,8 @@ export struct EntryPoint : public Function {
 };
 
 export class Data {
-    // The Data owns but does not manage the raw.
     void* raw;
+    bool own = true;
 
     enum class DType {
         UNDEFINED,
@@ -194,7 +194,6 @@ export class Data {
         ENTRY,
         VALUE,
         TYPE,
-        WEAK
     };
     DType type;
 
@@ -205,12 +204,6 @@ public:
     Data(EntryPoint* entry): raw(entry), type(DType::ENTRY) {};
     Data(Value* val): raw(val), type(DType::VALUE) {};
     Data(Type* type): raw(type), type(DType::TYPE) {};
-
-    static Data weak(Value* val) {
-        Data ret(val);
-        ret.type = DType::WEAK;
-        return ret;
-    }
 
     Data& operator=(Data& other) = delete;
 
@@ -236,7 +229,7 @@ public:
     // Fetching of Values must be able to fetch spec constants, which are saved as program inputs but also need to be
     // usable like regular values.
     Value* getValue() {
-        if (type == DType::VALUE || type == DType::WEAK)
+        if (type == DType::VALUE)
             return static_cast<Value*>(raw);
         if (type == DType::VARIABLE) {
             auto var = static_cast<Variable*>(raw);
@@ -246,7 +239,7 @@ public:
         return nullptr;
     }
     const Value* getValue() const {
-        if (type == DType::VALUE || type == DType::WEAK)
+        if (type == DType::VALUE)
             return static_cast<const Value*>(raw);
         if (type == DType::VARIABLE) {
             auto var = static_cast<Variable*>(raw);
@@ -258,77 +251,75 @@ public:
 
     // Convenience function to not need to define the Data for each use
     template<typename T>
-    void redefine(T* var) {
-        redefine(Data(var));
+    void redefine(T* var, bool own = true) {
+        redefine(Data(var), own);
     }
 
     void redefine(const Data& other) noexcept(false) {
         clear();
         raw = other.raw;
         type = other.type;
+        own = other.own;
+    }
+    void redefine(const Data& other, bool own) noexcept(false) {
+        redefine(other);
+        this->own = own;
     }
 
     void clear() {
-        switch (type) {
-        default:
-            assert(false);
-            break;
-        case DType::UNDEFINED:
-            // do nothing since there is no data to delete
-            break;
-        case DType::VARIABLE:
-            delete static_cast<Variable*>(raw);
-            break;
-        case DType::FUNCTION:
-            delete static_cast<Function*>(raw);
-            break;
-        case DType::ENTRY:
-            delete static_cast<EntryPoint*>(raw);
-            break;
-        case DType::VALUE:
-            delete static_cast<Value*>(raw);
-            break;
-        case DType::TYPE:
-            delete static_cast<Type*>(raw);
-            break;
-        case DType::WEAK:
-            break;  // the whole point of weak is to avoid deletion- that is someone else's responsibility
+        if (own) {
+            switch (type) {
+            default:
+                assert(false);
+                break;
+            case DType::UNDEFINED:
+                // do nothing since there is no data to delete
+                break;
+            case DType::VARIABLE:
+                delete static_cast<Variable*>(raw);
+                break;
+            case DType::FUNCTION:
+                delete static_cast<Function*>(raw);
+                break;
+            case DType::ENTRY:
+                delete static_cast<EntryPoint*>(raw);
+                break;
+            case DType::VALUE:
+                delete static_cast<Value*>(raw);
+                break;
+            case DType::TYPE:
+                delete static_cast<Type*>(raw);
+                break;
+            }
         }
+
         type = DType::UNDEFINED;
     }
 
     Data clone() const {
+        if (!own)
+            throw std::runtime_error("Cannot clone weak data!");
+
         switch (type) {
         default:
             assert(false);
             return Data();
         case DType::UNDEFINED:
             return Data();
-        case DType::VARIABLE: {
-            auto& before = *static_cast<Variable*>(raw);
-            return Data(new Variable(before));
-        }
-        case DType::FUNCTION: {
-            auto& before = *static_cast<Function*>(raw);
-            return Data(new Function(before));
-        }
-        case DType::ENTRY: {
-            auto& before = *static_cast<EntryPoint*>(raw);
-            return Data(new EntryPoint(before));
-        }
+        case DType::VARIABLE:
+            return Data(new Variable(*static_cast<Variable*>(raw)));
+        case DType::FUNCTION:
+            return Data(new Function(*static_cast<Function*>(raw)));
+        case DType::ENTRY:
+            return Data(new EntryPoint(*static_cast<EntryPoint*>(raw)));
         case DType::VALUE: {
             Value* before = static_cast<Value*>(raw);
             Value* after = before->getType().construct();
             after->copyFrom(*before);
             return Data(after);
         }
-        case DType::TYPE: {
-            auto& before = *static_cast<Type*>(raw);
-            return Data(new Type(before));
-        }
-        case DType::WEAK:
-            throw std::runtime_error("Cannot clone weak data!");
-            return Data();
+        case DType::TYPE:
+            return Data(new Type(*static_cast<Type*>(raw)));
         }
     }
 };

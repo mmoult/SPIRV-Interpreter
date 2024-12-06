@@ -149,32 +149,20 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
     case spv::OpLoopMerge: // 246
     case spv::OpSelectionMerge: // 247
         break;  // should print for verbose
-    case spv::OpFunctionParameter: { // 55
+    case spv::OpFunctionParameter: // 55
         inc_pc = false;  // get arg increments PC for us
-        spv::StorageClass storage = spv::StorageClass::StorageClassFunction;
-        Type* var_type = getType(0, data);
-        Variable* var = Variable::makeVariable(storage, *var_type);
-        const Value* arg = frame.getArg();
-        // No need to clone the arg since we only delete from the data, not the arg list
-        var->setVal(*arg);
-        data[result_at].redefine(var);
+        // Function parameters get a weak copy of the data passed in. If a pointer is passed (such as a Variable), then
+        // changes to the pointed data in-function should remain after the function exits.
+        data[result_at].redefine(frame.getArg(), false);
         break;
-    }
     case spv::OpFunctionEnd: // 56
         throw std::runtime_error("Missing return before function end!");
     case spv::OpFunctionCall: { // 57
         // Note: cannot call an entry point, right?
         Function* fx = getFunction(2, data);
-        std::vector<const Value*> args;
-        for (unsigned i = 3; i < operands.size(); ++i) {
-            const Variable* var = getVariable(i, data);
-            if (var == nullptr) {
-                std::stringstream err;
-                err << "Each argument to OpFunctionCall must be a variable! Operand " << (i - 3) << " is not.";
-                throw std::runtime_error(err.str());
-            }
-            args.push_back(var->getVal());
-        }
+        std::vector<Data*> args;
+        for (unsigned i = 3; i < operands.size(); ++i)
+            args.push_back(&getData(i, data));
 
         // If the result has void type, pass in 0 instead of result_at
         const Type* return_type = getType(0, data);
@@ -203,8 +191,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             // Unlike aggregates which own their data, images have metadata and a non-owning reference to the texels.
             // Due to this, each load from a variable will share the same texels. Since the metadata is constant, we can
             // simulate this by reusing the same image object
-            Data weak = Data::weak(from_val);
-            data[result_at].redefine(weak);
+            data[result_at].redefine(from_val, false);
         } else {
             // Construct a new value to serve as result, then copy the result val to it
             dst_val = ret_type->construct();

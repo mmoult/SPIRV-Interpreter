@@ -1,3 +1,8 @@
+/* © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 #version 450
 layout(vertices = 3) out;
 
@@ -14,7 +19,7 @@ layout(location = 2) out vec3 oNorm[3];
 layout(location = 1) in vec3 worldPos[];
 layout(location = 6) patch out vec3 center;
 
-float screen_factor(inout vec3 a, inout vec3 b)
+float screen_factor(vec3 a, vec3 b)
 {
     vec2 factor = vec2(12.5, 8.2);
     vec2 acomp = a.xy * factor;

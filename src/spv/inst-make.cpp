@@ -1090,8 +1090,7 @@ bool Instruction::makeResult(
     case spv::OpImage: { // 100
         Value* sampler_v = getValue(2, data);
         Image& image = static_cast<Sampler&>(*sampler_v).getImage();
-        Data weak = Data::weak(&image);
-        data[result_at].redefine(weak);
+        data[result_at].redefine(&image, false);
         break;
     }
     case spv::OpConvertFToU: // 109
