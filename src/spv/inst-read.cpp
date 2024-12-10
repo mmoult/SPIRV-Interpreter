@@ -206,6 +206,7 @@ void Instruction::readOp(
     case spv::OpConvertSToF: // 111
     case spv::OpConvertUToF: // 112
     case spv::OpBitcast: // 124
+    case spv::OpSNegate: // 126
     case spv::OpFNegate: // 127
     case spv::OpAny: // 154
     case spv::OpAll: // 155
@@ -244,6 +245,7 @@ void Instruction::readOp(
     case spv::OpVectorTimesMatrix: // 144
     case spv::OpMatrixTimesVector: // 145
     case spv::OpMatrixTimesMatrix: // 146
+    case spv::OpOuterProduct: // 147
     case spv::OpDot: // 148
     case spv::OpLogicalEqual: // 164
     case spv::OpLogicalNotEqual: // 165
@@ -373,6 +375,8 @@ void Instruction::readOp(
         repeating = Repeat::LAST;
         break;
     case spv::OpSelect: // 169
+    case spv::OpBitFieldSExtract: // 202
+    case spv::OpBitFieldUExtract: // 203
     case spv::OpControlBarrier: // 224
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
