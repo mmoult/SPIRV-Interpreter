@@ -221,7 +221,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             throw std::runtime_error("Unimplemented ImageWrite variant!");
         }
 
-        auto [x, y, z] = Image::extractCoords(getValue(1, data));
+        auto [x, y, z, q] = Image::extractCoords(getValue(1, data), image.getDimensionality(), false);
         // We only support int coordinates currently
         auto get = [](float x) {
             if ((1.0 - (std::ceil(x) - x)) != 1.0)

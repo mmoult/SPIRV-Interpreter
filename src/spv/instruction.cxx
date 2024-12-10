@@ -127,7 +127,8 @@ export class Instruction {
         DataView& data,
         const Value& img,
         const Value* coords,
-        unsigned img_qualifier
+        unsigned img_qualifier,
+        bool proj = false
     ) const;
 
 public:

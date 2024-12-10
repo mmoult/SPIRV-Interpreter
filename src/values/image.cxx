@@ -472,7 +472,11 @@ public:
         return new Struct(elements, names);
     }
 
-    static std::tuple<float, float, float> extractCoords(const Value* coords_v) {
+    unsigned getDimensionality() const {
+        return type.getDim();
+    }
+
+    static std::tuple<float, float, float, float> extractCoords(const Value* coords_v, unsigned dim, bool proj) {
         const Type* coord_type = &coords_v->getType();
         bool arrayed = false;
         if (coord_type->getBase() == DataType::ARRAY) {
@@ -480,7 +484,7 @@ public:
             arrayed = true;
         }
         DataType base = coord_type->getBase();
-        float x = 0.0, y = 0.0, z = 0.0;
+        float x = 0.0, y = 0.0, z = 0.0, q = 0.0;
 
         auto get = [](const Value* val, DataType base) {
             const auto& prim = static_cast<const Primitive&>(*val);
@@ -491,17 +495,21 @@ public:
         };
 
         if (!arrayed) {
+            assert(dim == 1 && !proj);
             x = get(coords_v, base);
         } else {
             const auto& coords = static_cast<const Array&>(*coords_v);
+            assert(coords.getSize() >= dim + proj? 1: 0);
             x = get(coords[0], base);
-            if (unsigned coords_size = coords.getSize(); coords_size >= 2) {
+            if (dim >= 2) {
                 y = get(coords[1], base);
-                if (coords_size == 3)
+                if (dim >= 3)
                     z = get(coords[2], base);
             }
+            if (proj)
+                q = get(coords[dim], base);
         }
-        return {x, y, z};
+        return {x, y, z, q};
     }
 
     [[nodiscard]] Array* read(float x, float y, float z, float lod) const {

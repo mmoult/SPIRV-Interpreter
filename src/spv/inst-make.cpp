@@ -111,10 +111,15 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
     }
 }
 
-Value* Instruction::handleImage(DataView& data, const Value& img, const Value* coords, unsigned img_qualifier) const {
+Value* Instruction::handleImage(
+    DataView& data,
+    const Value& img,
+    const Value* coords,
+    unsigned img_qualifier,
+    bool proj
+) const {
     Type* res_type =  getType(0, data);
     Value* to_ret = res_type->construct();
-    auto [x, y, z] = Image::extractCoords(coords);
     float lod = 0.0;
     const Image* image;
     if (img.getType().getBase() == DataType::SAMPLER) {
@@ -123,6 +128,14 @@ Value* Instruction::handleImage(DataView& data, const Value& img, const Value* c
         lod = sampler.getImplicitLod();
     } else {
         image = static_cast<const Image*>(&img);
+    }
+    auto [x, y, z, q] = Image::extractCoords(coords, image->getDimensionality(), proj);
+    if (proj) {
+        if (q == 0.0)
+            throw std::runtime_error("Invalid projection value (0.0) in image access!");
+        x /= q;
+        y /= q;
+        z /= q;
     }
 
     if (img_qualifier < operands.size()) {
@@ -134,6 +147,7 @@ Value* Instruction::handleImage(DataView& data, const Value& img, const Value* c
                 throw std::runtime_error("Missing necessary operand(s) for image qualifiers!");
             return getValue(next, data);
         };
+        // https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Image_Operands
         for (uint32_t i = 1; (i < spv::ImageOperandsMax) && (descriptors != 0); i <<= 1) {
             if ((descriptors & i) == 0)
                 continue;
@@ -154,6 +168,12 @@ Value* Instruction::handleImage(DataView& data, const Value& img, const Value* c
                 prim.copyFrom(lodp);
                 lod = prim.data.fp32;
                 break;
+            }
+            CASE(ImageOperandsMinLodShift): {
+                const Value* min_lodv = getNext();
+                assert(min_lodv->getType().getBase() == DataType::FLOAT);
+                // spec explicitly requires it to be a floating point scalar
+                lod = std::max(lod, static_cast<const Primitive&>(*min_lodv).data.fp32);
             }
             default:
                 throw std::runtime_error("Cannot handle unsupported image qualifier operand!");
@@ -1095,13 +1115,16 @@ bool Instruction::makeResult(
         data[result_at].redefine(to_ret);
         break;
     }
-    case spv::OpImageSampleImplicitLod:
-    case spv::OpImageSampleExplicitLod: { // 87
+    case spv::OpImageSampleImplicitLod: // 87
+    case spv::OpImageSampleExplicitLod: // 88
+    case spv::OpImageSampleProjImplicitLod: // 91
+    case spv::OpImageSampleProjExplicitLod: { // 92
         const Value* sampler_v = getValue(2, data);
         if (sampler_v->getType().getBase() != DataType::SAMPLER)
             throw std::runtime_error("The third operand to OpImageSample* must be an sampler!");
 
-        Value* to_ret = handleImage(data, *sampler_v, getValue(3, data), 4);
+        bool proj = (opcode == spv::OpImageSampleProjImplicitLod) || (opcode == spv::OpImageSampleProjExplicitLod);
+        Value* to_ret = handleImage(data, *sampler_v, getValue(3, data), 4, proj);
         data[result_at].redefine(to_ret);
         break;
     }
