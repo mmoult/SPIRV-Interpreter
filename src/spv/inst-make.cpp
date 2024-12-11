@@ -1179,7 +1179,7 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpSNegate: // 126
-        TYPICAL_E_UNARY_OP(INT, -a->data.i32);
+        INT_E_UNARY_OP(-);
     case spv::OpFNegate: // 127
         TYPICAL_E_UNARY_OP(FLOAT, -a->data.fp32);
     case spv::OpIAdd: // 128
@@ -1400,42 +1400,19 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpDot: { // 148
-        Value* ops[2];
-        ops[0] = getValue(2, data);
-        ops[1] = getValue(3, data);
-        const Array* arr[2];
-        // Operands 2 and 3 must be float arrays of the same size
-        for (unsigned i = 0; i < 2; ++i) {
-            const Type& vec_type = ops[i]->getType();
-            if (vec_type.getBase() != DataType::ARRAY) {
-                std::stringstream err;
-                err << "Operand " << i << " to OpDot must be a vector!";
-                throw std::runtime_error(err.str());
-            }
-            if (vec_type.getElement().getBase() != DataType::FLOAT) {
-                std::stringstream err;
-                err << "Operand " << i << " to OpDot must be a vector of floats!";
-                throw std::runtime_error(err.str());
-            }
-            arr[i] = static_cast<Array*>(ops[i]);
-        }
-        // Verify that both arrays have the same size
-        unsigned size = arr[0]->getSize();
-        if (unsigned osize = arr[1]->getSize(); osize != size) {
-            std::stringstream err;
-            err << "Cannot perform OpDot on vectors of different sizes! Found sizes " << size;
-            err << " and " << osize << ".";
-            throw std::runtime_error(err.str());
-        }
+        const auto& op0 = static_cast<const Array&>(*getValue(src_at, data));
+        const auto& op1 = static_cast<const Array&>(*getValue(src_at + 1, data));
+        assert(op0.getType().getBase() == DataType::ARRAY && "The first operand to OpDot must be an array!");
+        assert(op1.getType().getBase() == DataType::ARRAY && "The second operand to OpDot must be an array!");
+        assert(op0.getType().getElement().getBase() == DataType::FLOAT &&
+               "The first operand to OpDot must be a float array!");
+        assert(op1.getType().getElement().getBase() == DataType::FLOAT &&
+               "The second operand to OpDot must be a float array!");
+        assert(op0.getSize() == op1.getSize() && "The operands to OpDot must have matching sizes!");
 
-        float total = 0;
-        for (unsigned i = 0; i < size; ++i) {
-            const Primitive& n0 = *static_cast<const Primitive*>((*arr[0])[i]);
-            const Primitive& n1 = *static_cast<const Primitive*>((*arr[1])[i]);
-            total += n0.data.fp32 * n1.data.fp32;
-        }
-        Primitive* ret = static_cast<Primitive*>(getType(dst_type_at, data)->construct());
-        Primitive tot_prim(total);
+        double product = op0.dot(op1);
+        Primitive tot_prim(static_cast<float>(product));
+        Value* ret = getType(dst_type_at, data)->construct();
         ret->copyFrom(tot_prim);
         data[result_at].redefine(ret);
         break;
@@ -1520,22 +1497,13 @@ bool Instruction::makeResult(
                 throw std::runtime_error("Second option in Select with vector condition must be either vector, array, "
                                          "or struct!");
             const auto& first_agg = *static_cast<Aggregate*>(first);
-            if (unsigned size = first_agg.getSize(); size != cond_size) {
-                std::stringstream err;
-                err << "Size of first option in Select does not match condition! " << size << " vs " << cond_size;
-                throw std::runtime_error(err.str());
-            }
+            assert(first_agg.getSize() == cond_size && "Size of second Select argument must match condition's size!");
             const auto& second_agg = *static_cast<Aggregate*>(second);
-            if (unsigned size = second_agg.getSize(); size != cond_size) {
-                std::stringstream err;
-                err << "Size of second option in Select does not match condition! " << size << " vs " << cond_size;
-                throw std::runtime_error(err.str());
-            }
+            assert(second_agg.getSize() == cond_size && "Size of second Select argument must match condition's size!");
 
             std::vector<const Value*> es;
             for (unsigned i = 0; i < cond_size; ++i) {
-                const Value* cond_i = cond_arr[i];
-                const Primitive& cond_bool = static_cast<const Primitive*>(cond_i);
+                const auto& cond_bool = static_cast<const Primitive&>(*cond_arr[i]);
                 es.push_back(cond_bool.data.b32? first_agg[i]: second_agg[i]);
             }
 
@@ -2006,6 +1974,20 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_UNARY_OP(FLOAT, std::acos(a->data.fp32));
     case GLSLstd450Atan: // 18
         TYPICAL_E_UNARY_OP(FLOAT, std::atan(a->data.fp32));
+    case GLSLstd450Sinh: // 19
+        TYPICAL_E_UNARY_OP(FLOAT, std::sinh(a->data.fp32));
+    case GLSLstd450Cosh: // 20
+        TYPICAL_E_UNARY_OP(FLOAT, std::cosh(a->data.fp32));
+    case GLSLstd450Tanh: // 21
+        TYPICAL_E_UNARY_OP(FLOAT, std::tanh(a->data.fp32));
+    case GLSLstd450Asinh: // 22
+        TYPICAL_E_UNARY_OP(FLOAT, std::asinh(a->data.fp32));
+    case GLSLstd450Acosh: // 23
+        TYPICAL_E_UNARY_OP(FLOAT, std::acosh(a->data.fp32));
+    case GLSLstd450Atanh: // 24
+        TYPICAL_E_UNARY_OP(FLOAT, std::atanh(a->data.fp32));
+    case GLSLstd450Atan2: // 25
+        TYPICAL_E_BIN_OP(FLOAT, std::atan2(a->data.fp32, b->data.fp32));
     case GLSLstd450Pow: // 26
         TYPICAL_E_BIN_OP(FLOAT, std::pow(a->data.fp32, b->data.fp32));
     case GLSLstd450Exp: // 27
@@ -2130,30 +2112,27 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450Length: { // 66
         // Like a sqrt of dot product with itself
         const Value& x = *getValue(src_at, data);
+        Value* ret = getType(dst_type_at, data)->construct();
 
         const Type& vec_type = x.getType();
-        if (vec_type.getBase() != DataType::ARRAY) {
-            std::stringstream err;
-            err << "Operand to Length must be a vector!";
-            throw std::runtime_error(err.str());
+        if (auto base = vec_type.getBase(); base != DataType::ARRAY) {
+            assert(base == DataType::FLOAT && "If the operand to Length is scalar, it must be a float!");
+            ret->copyFrom(x);
+            data[result_at].redefine(ret);
+            break;
         }
-        if (vec_type.getElement().getBase() != DataType::FLOAT) {
-            std::stringstream err;
-            err << "Operand to Length must be a vector of floats!";
-            throw std::runtime_error(err.str());
-        }
+        assert(vec_type.getElement().getBase() == DataType::FLOAT && "Operand to Length must be a vector of floats!");
         const auto& arr = static_cast<const Array&>(x);
 
-        float total = 0;
+        double total = 0;
         for (unsigned i = 0; i < arr.getSize(); ++i) {
-            const Primitive& n = static_cast<const Primitive&>(*arr[i]);
-            total += n.data.fp32 * n.data.fp32;
+            auto n = static_cast<const Primitive*>(arr[i])->data.fp32;
+            total += n * n;
         }
         if (total != 0)
             total = std::sqrt(total);
 
-        Primitive* ret = static_cast<Primitive*>(getType(dst_type_at, data)->construct());
-        Primitive tot_prim(total);
+        Primitive tot_prim(static_cast<float>(total));
         ret->copyFrom(tot_prim);
         data[result_at].redefine(ret);
         break;
@@ -2284,39 +2263,31 @@ bool Instruction::makeResultGlsl(
             throw std::runtime_error("Vector (in reflect calculation) element must have float type!");
 
         // Calculate: I - 2 * dot(N, I) * N
-        const Array& incident = *static_cast<Array*>(incident_val);
         const Array& normal = *static_cast<Array*>(normal_val);
-        assert(incident.getSize() == normal.getSize());
+        const Array& incident = *static_cast<Array*>(incident_val);
+        double dot_product = normal.dot(incident);
 
-        // dot(N, I)
-        float dot_product = 0.0;
-        for (unsigned i = 0; i < incident.getSize(); ++i) {
-            const float normal_elem = static_cast<const Primitive*>(normal[i])->data.fp32;
-            const float incident_elem = static_cast<const Primitive*>(incident[i])->data.fp32;
-            dot_product += normal_elem * incident_elem;
-        }
-
-        // 2 * dot(N, I) * N
-        std::vector<float> second_term;
-        const float scaled_dot_product = 2.0f * dot_product;
+        //   2 * dot(N, I) * N
+        std::vector<double> second_term;
+        const double scaled_dot_product = 2.0f * dot_product;
         for (unsigned i = 0; i < normal.getSize(); ++i) {
-            const float normal_elem = static_cast<const Primitive*>(normal[i])->data.fp32;
+            const double normal_elem = static_cast<const Primitive*>(normal[i])->data.fp32;
             second_term.push_back(scaled_dot_product * normal_elem);
         }
 
-        // I - 2 * dot(N, I) * N
-        std::vector<float> result;
+        //   I - (2 * dot(N, I) * N)
+        std::vector<double> result;
         for (unsigned i = 0; i < incident.getSize(); ++i) {
-            const float incident_elem = static_cast<const Primitive*>(incident[i])->data.fp32;
+            const double incident_elem = static_cast<const Primitive*>(incident[i])->data.fp32;
             result.push_back(incident_elem - second_term[i]);
         }
 
         // Finished calculations; now store them
         assert(result.size() == incident.getSize());
         std::vector<const Value*> pfloats;
-        for (unsigned i = 0; i < result.size(); ++i) {
-            pfloats.push_back(new Primitive(result[i]));
-        }
+        for (unsigned i = 0; i < result.size(); ++i)
+            pfloats.push_back(new Primitive(static_cast<float>(result[i])));
+
         Value* res = res_type->construct(pfloats);
         data[result_at].redefine(res);
 

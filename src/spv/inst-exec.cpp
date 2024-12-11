@@ -324,6 +324,10 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         frame_stack.back()->getData()[ret_at].redefine(ret);
         break;
     }
+    case spv::OpUnreachable: // 255
+        // Illegal code path reached- signal to user
+        throw std::runtime_error("Unreachable code path executed!");
+        break;
     case spv::OpTraceRayKHR: { // 4445
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(0, data));
 

@@ -110,6 +110,7 @@ void Instruction::readOp(
     case spv::OpLabel: // 248
     case spv::OpKill: // 252
     case spv::OpReturn: // 253
+    case spv::OpUnreachable: // 255
     case spv::OpNoLine: // 317
     case spv::OpTerminateInvocation: // 4416
     case spv::OpIgnoreIntersectionKHR: // 4448
