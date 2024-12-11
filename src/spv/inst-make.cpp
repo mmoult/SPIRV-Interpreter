@@ -161,6 +161,36 @@ Value* Instruction::handleImage(
                 lod += static_cast<const Primitive*>(bias)->data.fp32;
                 break;
             }
+            CASE(ImageOperandsConstOffsetShift):
+            CASE(ImageOperandsOffsetShift): {
+                const Value* shifts = getNext();
+                // Per the spec, these must be of integer type and match the number of coordinates
+                auto shift_type = shifts->getType().getBase();
+                if (shift_type == DataType::ARRAY) {
+                    assert(shifts->getType().getElement().getBase() == DataType::INT);
+                    const auto& sh = static_cast<const Array&>(*shifts);
+                    for (unsigned j = 0; j < sh.getSize(); ++j) {
+                        const auto& shp = static_cast<const Primitive&>(*(sh[j]));
+                        switch (j) {
+                        case 0:
+                            x += shp.data.i32;
+                            break;
+                        case 1:
+                            y += shp.data.i32;
+                            break;
+                        case 2:
+                            z += shp.data.i32;
+                            break;
+                        default:
+                            throw std::runtime_error("Offset coordinate count exceeds components usable!");
+                        }
+                    }
+                } else {
+                    assert(shift_type == DataType::INT);
+                    x += static_cast<const Primitive&>(*shifts).data.i32;
+                }
+                break;
+            }
             CASE(ImageOperandsLodShift): {
                 const Value* lodv = getNext();
                 const auto& lodp = static_cast<const Primitive&>(*lodv);
@@ -250,6 +280,14 @@ Value* composite_extract(Value* composite, unsigned index_start, const std::vect
     return composite;
 }
 
+DataType element_base(const Value& operand) {
+    const Type& type = operand.getType();
+    auto base = type.getBase();
+    if (base == DataType::ARRAY)
+        base = type.getElement().getBase();
+    return base;
+}
+
 struct OpDst {
     unsigned type;
     unsigned at;
@@ -279,18 +317,16 @@ void element_bin_op(
     // Operate on two primitive arrays or two primitive scalars
     const Type& type1 = src1->getType();
     const Type& type2 = src2->getType();
-    if (type != DataType::VOID && type1.getBase() != type2.getBase())
-        throw std::runtime_error("Cannot use operands of different bases!");
+    assert(type == DataType::VOID || ((element_base(*src1) == element_base(*src2)) &&
+                                      "Cannot perform element-wise operation on operands of different bases!"));
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
 
     if (type1.getBase() == DataType::ARRAY) {
-        if (type != DataType::VOID && type1.getElement().getBase() != type)
-            throw std::runtime_error("Cannot do binary operation on other-typed arrays!");
+        assert(type2.getBase() == DataType::ARRAY);
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
-        if (op1.getSize() != op2.getSize())
-            throw std::runtime_error("Cannot do binary operation on arrays of different size!");
+        assert((op1.getSize() == op2.getSize()) && "Cannot do binary operation on arrays of different size!");
         unsigned asize = op1.getSize();
         prims.reserve(asize);
         pprims.reserve(asize);
@@ -303,8 +339,7 @@ void element_bin_op(
             pprims.push_back(&prims[i]);
         }
     } else {
-        if (type != DataType::VOID && type1.getBase() != type)
-            throw std::runtime_error("Cannot do binary operation on other-typed elements!");
+        assert(type2.getBase() != DataType::ARRAY);
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         auto result = op(op1, op2);
@@ -328,13 +363,9 @@ void element_int_bin_op(
     BinOp& ii_op
 ) {
     auto is_uint = [&](unsigned loc) {
-        Value* val = data[loc].getValue();
-        const Type& type = val->getType();
-        DataType base = type.getBase();
-        if (base == DataType::ARRAY)
-            base = type.getElement().getBase();
-        if (base != DataType::INT && base != DataType::UINT)
-            throw std::runtime_error("Cannot perform integer-typed binary operation on non-integer base operands!");
+        auto base = element_base(*data[loc].getValue());
+        assert((base == DataType::INT || base == DataType::UINT) &&
+               "Cannot perform integer-typed binary operation on non-integer base operands!");
         return base == DataType::UINT;
     };
 
@@ -357,18 +388,16 @@ void element_shift_op(
     const Type& dst_type = *data[dst.type].getType();
 
     // Operate on two primitive arrays or two primitive scalars
-    const Type& tbase = src1->getType();
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
+    const Type& tbase = src1->getType();
+    auto tb = element_base(*src1);
+    assert((tb == DataType::UINT || tb == DataType::INT) && "Cannot perform shift operation on non-integral element!");
 
     if (tbase.getBase() == DataType::ARRAY) {
-        auto tbase2 = tbase.getElement().getBase();
-        if (tbase2 != DataType::UINT && tbase2 != DataType::INT)
-            throw std::runtime_error("Cannot perform shift operation on array of non-integral type!");
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
-        if (op1.getSize() != op2.getSize())
-            throw std::runtime_error("Cannot do shift operation on arrays of different size!");
+        assert((op1.getSize() == op2.getSize()) && "Cannot do shift operation on arrays of different size!");
         unsigned asize = op1.getSize();
         const auto& dbase = dst_type.getElement();
 
@@ -384,9 +413,6 @@ void element_shift_op(
             pprims.push_back(&prims[i]);
         }
     } else {
-        auto tbase2 = tbase.getBase();
-        if (tbase2 != DataType::UINT && tbase2 != DataType::INT)
-            throw std::runtime_error("Cannot perform shift operation on non-integral value!");
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         unsigned result = op(op1, op2);
@@ -408,10 +434,9 @@ void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataVie
     const Type& type = src1->getType();
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
+    assert(element_base(*src1) == chtype && "Cannot do unary operation on other-typed element!");
 
     if (type.getBase() == DataType::ARRAY) {
-        if (type.getElement().getBase() != chtype)
-            throw std::runtime_error("Cannot do unary operation on other-typed array!");
         const Array& operand = *static_cast<const Array*>(src1);
         unsigned asize = operand.getSize();
         prims.reserve(asize);
@@ -422,8 +447,6 @@ void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataVie
             pprims.push_back(&prims[i]);
         }
     } else {
-        if (type.getBase() != chtype)
-            throw std::runtime_error("Cannot do unary operation on other-typed value!");
         const Primitive* operand = static_cast<const Primitive*>(src1);
         auto result = op(operand);
         prims.emplace_back(result);
@@ -442,13 +465,9 @@ void element_int_unary_op(
     UnOp& u_op,
     UnOp& i_op
 ) {
-    Value* first = data[unary].getValue();
-    const Type& first_type = first->getType();
-    DataType dt = first_type.getBase();
-    if (dt == DataType::ARRAY)
-        dt = first_type.getElement().getBase();
-    if (dt != DataType::INT && dt != DataType::UINT)
-        throw std::runtime_error("Cannot perform integer-typed unary operation on non-integer base operand!");
+    DataType dt = element_base(*data[unary].getValue());
+    assert((dt == DataType::INT || dt == DataType::UINT) &&
+           "Cannot perform integer-typed unary operation on non-integer base operand!");
 
     element_unary_op(dt, unary, dst, data, (dt == DataType::UINT)? u_op : i_op);
 }
@@ -472,19 +491,19 @@ void element_tern_op(
     const Type& type1 = src1->getType();
     const Type& type2 = src2->getType();
     const Type& type3 = src3->getType();
-    if (type1.getBase() != type2.getBase() || type2.getBase() != type3.getBase())
-        throw std::runtime_error("Cannot use operands of different bases!");
+    assert(type == DataType::VOID ||
+           (element_base(*src1) == element_base(*src2) && element_base(*src2) == element_base(*src3) &&
+           "Cannot use operands of different bases!"));
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
 
     if (type1.getBase() == DataType::ARRAY) {
-        if (type1.getElement().getBase() != type)
-            throw std::runtime_error("Cannot do binary operation on other-typed arrays!");
+        assert(type2.getBase() == DataType::ARRAY && type3.getBase() == DataType::ARRAY);
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         const Array& op3 = *static_cast<const Array*>(src3);
-        if ((op1.getSize() != op2.getSize()) || (op2.getSize() != op3.getSize()))
-            throw std::runtime_error("Cannot do binary operation on arrays of different size!");
+        assert((op1.getSize() == op2.getSize()) && (op2.getSize() == op3.getSize()) &&
+               "Cannot do binary operation on arrays of different size!");
         unsigned asize = op1.getSize();
         prims.reserve(asize);
         pprims.reserve(asize);
@@ -498,8 +517,7 @@ void element_tern_op(
             pprims.push_back(&prims[i]);
         }
     } else {
-        if (type1.getBase() != type)
-            throw std::runtime_error("Cannot do binary operation on other-typed elements!");
+        assert(type2.getBase() != DataType::ARRAY && type3.getBase() != DataType::ARRAY);
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         const Primitive* op3 = static_cast<const Primitive*>(src3);
