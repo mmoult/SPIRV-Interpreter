@@ -30,42 +30,68 @@ def extract_num(name, prefix):
         return 0
     return int(name[pref_len:dot])
 
+def check_file(root, out_file, stdout):
+    if out_file is None:
+        return True
+    with open(os.path.join(root, out_file), 'rb') as f:
+        seen = f.read()
+    return seen == stdout
+
 # Read through passlist.txt:
 # Each line is the path of a test to run
 fails = 0
 total = 0
-ionames = ["in", "out"]
 import subprocess
+# All but "in" are types of output files. There must be a run for each distinct number. Multiple types can use the same
+# run if they share the same number. Input is expected, but optional.
+file_types = ["in", "out", "print"]
 for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True):
-    iopairs = {}
     program = None
+    configs = dict()
+    error = False
     for file in files:
-        for i in range(len(ionames)):
-            prefix = ionames[i]
+        for i in range(len(file_types)):
+            prefix = file_types[i]
             if file.startswith(prefix):
                 num = extract_num(file, prefix)
-                if not (num in iopairs):
-                    iopairs[num] = [None, None]
-                if iopairs[num][i] is not None:
-                    print("Run configuration ", i, " has more than one ", "input" if i == 0 else "output", "!", sep='')
-                iopairs[num][i] = file
-                break
+                if not num in configs:
+                    configs[num] = [None] * len(file_types)
+                if configs[num][i] is not None:
+                    print("Run configuration ", i, " has more than one ", file_types[i], "!", sep='')
+                    error = True
+                    break
+                configs[num][i] = file
         else:
             if file.endswith(".spv"):
                 program = file
+        if error:
+            break
 
     if program is not None:
-        for num, pair in iopairs.items():
-            input = pair[0]
-            output = pair[1]
-            if input is not None and output is not None:
+        for num, files in configs.items():
+            cmd = [interp_path, program]
+            output = False
+            out_file = None
+
+            for i, file in enumerate(files):
+                if file is None:
+                    continue
+                match i:
+                    case 0:  # in
+                        cmd += ["-i", file]
+                    case 1:  # out
+                        output = True
+                        cmd += ["-c", file]
+                    case 2:  # print
+                        output = True
+                        out_file = file
+            if output:
                 total += 1
-                res = subprocess.run([interp_path, "-i", input, "-c", output, program],
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
-                if res.returncode != 0:
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
+                if res.returncode != 0 or not check_file(root, out_file, res.stdout):
                     fails += 1
                     print("X", os.path.relpath(os.path.join(root, program), launch_dir), end=' ')
-                    if len(iopairs) > 1:
+                    if len(configs) > 1:
                         print("#", num, sep='', end='')
                     print()
                 continue
