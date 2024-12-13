@@ -12,7 +12,6 @@ module;
 #include "type.hpp"
 #include "value.hpp"
 export module value.aggregate;
-import value.primitive;
 
 /// Array or Struct
 export class Aggregate : public Value {
@@ -189,17 +188,6 @@ public:
         for (const auto& e : elements)
             delete e;
         this->elements = vals;
-    }
-
-    double dot(const Array& other) const {
-        assert(this->getSize() == other.getSize());
-        double dot_product = 0.0;
-        for (unsigned i = 0; i < this->getSize(); ++i) {
-            const float other_elem = static_cast<const Primitive*>(other[i])->data.fp32;
-            const float this_elem = static_cast<const Primitive*>(operator[](i))->data.fp32;
-            dot_product += other_elem * this_elem;
-        }
-        return dot_product;
     }
 };
 

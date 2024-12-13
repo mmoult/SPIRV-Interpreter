@@ -24,6 +24,7 @@ target_sources(spv-interp
       spv/ray-flags.cxx
       spv/ray-substage.cxx
       spv/token.cxx
+      util/array-math.cxx
       util/compare.cxx
       util/intersection.cxx
       util/string.cxx

@@ -29,6 +29,7 @@ import spv.data.data;
 import spv.frame;
 import spv.rayFlags;
 import spv.token;
+import util.arraymath;
 import value.aggregate;
 import value.image;
 import value.pointer;
@@ -1410,7 +1411,7 @@ bool Instruction::makeResult(
                "The second operand to OpDot must be a float array!");
         assert(op0.getSize() == op1.getSize() && "The operands to OpDot must have matching sizes!");
 
-        double product = op0.dot(op1);
+        double product = ArrayMath::dot(op0, op1);
         Primitive tot_prim(static_cast<float>(product));
         Value* ret = getType(dst_type_at, data)->construct();
         ret->copyFrom(tot_prim);
@@ -2002,6 +2003,16 @@ bool Instruction::makeResultGlsl(
         TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.fp32));
     case GLSLstd450InverseSqrt: // 32
         TYPICAL_E_UNARY_OP(FLOAT, 1.0f / std::sqrt(a->data.fp32));
+    case GLSLstd450Determinant: { // 33
+        const Type* res_type = getType(dst_type_at, data);
+        Value* ret = res_type->construct();
+        const Value* matrix = getValue(src_at, data);
+        auto result = ArrayMath::determinant(static_cast<const Array&>(*matrix));
+        Primitive prim(static_cast<float>(result));
+        ret->copyFrom(prim);
+        data[result_at].redefine(ret);
+        break;
+    }
     case GLSLstd450Modf: { // 35
         // fraction = modf(input, whole_pointer);
         // OpExtInst %float %23 = %1 Modf %20 %22
@@ -2265,7 +2276,7 @@ bool Instruction::makeResultGlsl(
         // Calculate: I - 2 * dot(N, I) * N
         const Array& normal = *static_cast<Array*>(normal_val);
         const Array& incident = *static_cast<Array*>(incident_val);
-        double dot_product = normal.dot(incident);
+        double dot_product = ArrayMath::dot(normal, incident);
 
         //   2 * dot(N, I) * N
         std::vector<double> second_term;
