@@ -206,6 +206,9 @@ void Instruction::readOp(
     case spv::OpConvertFToS: // 110
     case spv::OpConvertSToF: // 111
     case spv::OpConvertUToF: // 112
+    case spv::OpUConvert: // 113
+    case spv::OpSConvert: // 114
+    case spv::OpFConvert: // 115
     case spv::OpBitcast: // 124
     case spv::OpSNegate: // 126
     case spv::OpFNegate: // 127
@@ -215,6 +218,7 @@ void Instruction::readOp(
     case spv::OpIsInf: // 157
     case spv::OpLogicalNot: // 168
     case spv::OpNot: // 200
+    case spv::OpBitReverse: // 204
     case spv::OpBranch: // 249
     case spv::OpReturnValue: // 254
     //case spv::OpConvertUToAccelerationStructureKHR: // 4447

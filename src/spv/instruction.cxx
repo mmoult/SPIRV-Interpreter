@@ -58,6 +58,7 @@ export class Instruction {
     }
 
     unsigned checkRef(unsigned idx, unsigned len) const noexcept(false) {
+        assert(idx < operands.size());
         assert(operands[idx].type == Token::Type::REF);
         auto result_at = std::get<unsigned>(operands[idx].raw);
         if (result_at >= len) {
