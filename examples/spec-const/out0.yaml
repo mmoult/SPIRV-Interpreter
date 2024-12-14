@@ -1,5 +1,5 @@
 gl_PerVertex:
   gl_Position: [ 7.7, 7.7, 7.7, 7.7 ]
-  gl_PointSize: 0.0
-  gl_ClipDistance: [ 0.0 ]
-  gl_CullDistance: [ 0.0 ]
+  gl_PointSize: .NAN
+  gl_ClipDistance: [ .NAN ]
+  gl_CullDistance: [ .NAN ]

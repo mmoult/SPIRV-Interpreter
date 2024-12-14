@@ -5,6 +5,7 @@
  */
 module;
 #include <cassert>
+#include <cmath>
 #include <cstdint> // for uint32_t and int32_t
 #include <sstream>
 #include <stdexcept>
@@ -42,7 +43,14 @@ public:
     // Create a blank primitive for the given type
     Primitive(Type t): Value(t) {
         assert(isPrimitive(t.getBase()));
-        data.u32 = 0;
+        // Initialize to dummy values (instead of 0 to indicate visibility and help user catch errors)
+        if (t.getBase() == FLOAT)
+            data.fp32 = std::nanf("1");
+        else
+            // Although undefined values should not appear in outputs, they may be used in intermediate calculations
+            // where the result is not used. Assuming 32 and 16 are the two most common precisions, avoid the
+            // circumstance where the dummy value triggers an assert for being too large to fit in a signed integer.
+            data.u32 = 0x1ABC2DEF;
     }
 
     static bool isPrimitive(DataType base) {
