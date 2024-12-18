@@ -14,6 +14,7 @@
 
 #include "../value.hpp"
 #include "trace.hpp"
+import util.arraymath;
 import util.intersection;
 import util.ternary;
 import value.aggregate;
@@ -145,11 +146,7 @@ Ternary InstanceNode::step(Trace* trace_p) const {
     if (transform.getSize() != 4)
         throw std::runtime_error("InstanceNode field \"transformation\" must be a mat4x3!");
     glm::mat4x3 transformation;
-    for (unsigned i = 0; i < 4; ++i) {
-        std::vector<float> row = Statics::extractVec(transform[i], "transformation", 3);
-        for (unsigned j = 0; j < 3; ++j)
-            transformation[i][j] = row[j];
-    }
+    ArrayMath::value_to_glm<glm::mat4x3, 4, 3>(transform, transformation, true);
 
     std::vector<unsigned> ref = Statics::extractUvec(str[1], names[1], 2);
     uint32_t id = Statics::extractUint(str[2], names[2]);

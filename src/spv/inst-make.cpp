@@ -2051,6 +2051,34 @@ bool Instruction::makeResultGlsl(
         data[result_at].redefine(ret);
         break;
     }
+    case GLSLstd450MatrixInverse: { // 34
+        const Type* res_type = getType(dst_type_at, data);
+        Array& ret = static_cast<Array&>(*res_type->construct());
+        const auto& matrix = static_cast<const Array&>(*getValue(src_at, data));
+        unsigned size = matrix.getSize();
+
+        // Can provide limited support using glm (for 2x2, 3x3, and 4x4). Should cover most cases
+        if (size == 2) {
+            glm::mat2 mat;
+            ArrayMath::value_to_glm<decltype(mat), 2, 2>(matrix, mat);
+            decltype(mat) inv = glm::inverse(mat);
+            ArrayMath::glm_to_value<decltype(mat), 2, 2>(inv, ret);
+        } else if (size == 3) {
+            glm::mat3 mat;
+            ArrayMath::value_to_glm<decltype(mat), 3, 3>(matrix, mat);
+            decltype(mat) inv = glm::inverse(mat);
+            ArrayMath::glm_to_value<decltype(mat), 3, 3>(inv, ret);
+        } else if (size == 4) {
+            glm::mat4 mat;
+            ArrayMath::value_to_glm<decltype(mat), 4, 4>(matrix, mat);
+            decltype(mat) inv = glm::inverse(mat);
+            ArrayMath::glm_to_value<decltype(mat), 4, 4>(inv, ret);
+        } else
+            throw std::runtime_error("Inverse for matrix sizes other than 2, 3, or 4 currently unsupported!");
+
+        data[result_at].redefine(&ret);
+        break;
+    }
     case GLSLstd450Modf: { // 35
         // fraction = modf(input, whole_pointer);
         // OpExtInst %float %23 = %1 Modf %20 %22
@@ -2156,6 +2184,70 @@ bool Instruction::makeResultGlsl(
             return (a->data.fp32 * b->data.fp32) + c->data.fp32;
         };
         E_TERN_OP(FLOAT, fx);
+        break;
+    }
+    case GLSLstd450UnpackSnorm2x16: // 60
+    case GLSLstd450UnpackUnorm2x16: { // 61
+        const Type* res_type = getType(dst_type_at, data);
+        Array& ret = static_cast<Array&>(*res_type->construct());
+        const auto& input = static_cast<const Primitive&>(*getValue(src_at, data));
+        const bool SIGN = (ext_opcode == GLSLstd450UnpackSnorm2x16);
+        constexpr unsigned SIZE = 2;
+
+        uint16_t u[SIZE] = {0};
+        uint32_t p = input.data.fp32;
+        for (unsigned i = 0; (i < SIZE) && (p > 0); ++i, p >>= 16)
+            u[i] = p & 0xFFFF;
+
+        float f[SIZE];
+        for (unsigned i = 0; i < SIZE; ++i) {
+            if (SIGN) {
+                int16_t num = *reinterpret_cast<int16_t*>(&u[i]);
+                float tmp = static_cast<float>(num);
+                f[i] = std::clamp(tmp / 32767.0, -1.0, 1.0);
+            } else {
+                float tmp = static_cast<float>(u[i]);
+                f[i] = tmp / 65535.0;
+            }
+        }
+
+        for (unsigned i = 0; i < SIZE; ++i) {
+            Primitive prim(f[i]);
+            ret[i]->copyFrom(prim);
+        }
+        data[result_at].redefine(&ret);
+        break;
+    }
+    case GLSLstd450UnpackSnorm4x8: // 63
+    case GLSLstd450UnpackUnorm4x8: { // 64
+        const Type* res_type = getType(dst_type_at, data);
+        Array& ret = static_cast<Array&>(*res_type->construct());
+        const auto& input = static_cast<const Primitive&>(*getValue(src_at, data));
+        bool SIGN = (ext_opcode == GLSLstd450UnpackSnorm4x8);
+        constexpr unsigned SIZE = 4;
+
+        uint8_t u[SIZE] = {0};
+        uint32_t p = input.data.fp32;
+        for (unsigned i = 0; (i < SIZE) && (p > 0); ++i, p >>= 8)
+            u[i] = p & 0xFF;
+
+        float f[SIZE];
+        for (unsigned i = 0; i < SIZE; ++i) {
+            if (SIGN) {
+                int8_t num = *reinterpret_cast<int8_t*>(&u[i]);
+                float tmp = static_cast<float>(num);
+                f[i] = std::clamp(tmp / 127.0, -1.0, 1.0);
+            } else {
+                float tmp = static_cast<float>(u[i]);
+                f[i] = tmp / 255.0;
+            }
+        }
+
+        for (unsigned i = 0; i < SIZE; ++i) {
+            Primitive prim(f[i]);
+            ret[i]->copyFrom(prim);
+        }
+        data[result_at].redefine(&ret);
         break;
     }
     case GLSLstd450Length: { // 66
@@ -2289,6 +2381,46 @@ bool Instruction::makeResultGlsl(
         data[result_at].redefine(res);
         break;
     }
+    case GLSLstd450FaceForward: { // 70
+        const Type* res_type = getType(dst_type_at, data);
+        Value* ret = res_type->construct();
+
+        Value* n_val = getValue(src_at, data);
+        Value* i_val = getValue(src_at + 1, data);
+        Value* nref_val = getValue(src_at + 2, data);
+
+        // N * (dot(Nref, I) < 0)? +1 : -1
+        auto dot_result = ArrayMath::dot(nref_val, i_val);
+        float mult = std::signbit(dot_result)? 1.0 : -1.0;
+
+        if (res_type->getBase() == DataType::FLOAT) {
+            // All must be the same type
+            assert(n_val->getType().getBase() == DataType::FLOAT);
+            assert(i_val->getType().getBase() == DataType::FLOAT);
+            assert(nref_val->getType().getBase() == DataType::FLOAT);
+
+            Primitive prim(static_cast<const Primitive*>(n_val)->data.fp32 * mult);
+            ret->copyFrom(prim);
+        } else {
+            assert(n_val->getType().getBase() == DataType::ARRAY);
+            assert(i_val->getType().getBase() == DataType::ARRAY);
+            assert(nref_val->getType().getBase() == DataType::ARRAY);
+            assert(element_base(*n_val) == DataType::FLOAT);
+            assert(element_base(*i_val) == DataType::FLOAT);
+            assert(element_base(*nref_val) == DataType::FLOAT);
+
+            Array& res = static_cast<Array&>(*ret);
+            const auto& n = static_cast<const Array&>(*n_val);
+
+            for (unsigned i = 0; i < res.getSize(); ++i) {
+                Primitive prim(static_cast<float>(static_cast<const Primitive*>(n[i])->data.fp32 * mult));
+                res[i]->copyFrom(prim);
+            }
+        }
+
+        data[result_at].redefine(ret);
+        break;
+    }
     case GLSLstd450Reflect: { // 71
         Value* incident_val = getValue(src_at, data);
         Value* normal_val = getValue(src_at + 1, data);
@@ -2333,17 +2465,64 @@ bool Instruction::makeResultGlsl(
 
         // Finished calculations; now store them
         assert(result.size() == incident.getSize());
+        std::vector<Primitive> floats;
+        floats.reserve(result.size());
         std::vector<const Value*> pfloats;
-        for (unsigned i = 0; i < result.size(); ++i)
-            pfloats.push_back(new Primitive(static_cast<float>(result[i])));
+        pfloats.reserve(result.size());
+        for (unsigned i = 0; i < result.size(); ++i) {
+            floats.push_back(Primitive(static_cast<float>(result[i])));
+            pfloats.push_back(&floats[i]);
+        }
 
         Value* res = res_type->construct(pfloats);
         data[result_at].redefine(res);
+        break;
+    }
+    case GLSLstd450Refract: { // 72
+        const Type* res_type = getType(dst_type_at, data);
+        Value* ret = res_type->construct();
 
-        // Clean up
-        for (const auto& val : pfloats)
-            delete val;
+        Value* i_val = getValue(src_at, data);
+        Value* n_val = getValue(src_at + 1, data);
+        Value* eta_val = getValue(src_at + 2, data);
 
+        // k = 1.0 - eta * eta * (1.0 - dot(N, I) * dot(N, I))
+        // if k < 0.0: 0.0 in all components.
+        // else: eta * I - (eta * dot(N, I) + sqrt(k)) * N
+
+        double dotni = ArrayMath::dot(n_val, i_val);
+        assert(eta_val->getType().getBase() == DataType::FLOAT && "Eta in Refract operation must be a scalar float!");
+        double eta = static_cast<const Primitive*>(eta_val)->data.fp32;
+        double k = 1.0 - eta * eta * (1.0 - dotni * dotni);
+        double etadotsqrtk = (k < 0.0)? 0.0 : (eta * dotni + std::sqrt(k));
+
+        if (res_type->getBase() == DataType::ARRAY) {
+            Array& res = static_cast<Array&>(*ret);
+            const auto& i_arr = static_cast<const Array&>(*i_val);
+            const auto& n_arr = static_cast<const Array&>(*n_val);
+
+            for (unsigned i = 0; i < res.getSize(); ++i) {
+                double element = 0.0;
+                if (k >= 0.0) {
+                    double first = static_cast<const Primitive*>(i_arr[i])->data.fp32;
+                    double second = static_cast<const Primitive*>(n_arr[i])->data.fp32;
+                    element = (first * eta) - (second * etadotsqrtk);
+                }
+                Primitive prim(static_cast<float>(element));
+                res[i]->copyFrom(prim);
+            }
+        } else {
+            double res = 0.0;
+            if (k >= 0.0) {
+                double first = static_cast<const Primitive*>(i_val)->data.fp32;
+                double second = static_cast<const Primitive*>(n_val)->data.fp32;
+                res = (first * eta) - (second * etadotsqrtk);
+            }
+            Primitive prim(static_cast<float>(res));
+            ret->copyFrom(prim);
+        }
+
+        data[result_at].redefine(ret);
         break;
     }
     case GLSLstd450FindILsb: { // 73

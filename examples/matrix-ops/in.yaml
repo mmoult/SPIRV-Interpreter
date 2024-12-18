@@ -1,0 +1,14 @@
+gl_VertexIndex: 3
+
+bounds: [ 0.8, -9.3, -5.1, 0.2 ]
+
+transform: [ 0.12, 0.34, 0.56, 0.78 ]
+
+offset: [ 1.2, 6.4 ]
+
+# Two integers packed into a single uint:
+# Normalize by division with 32767
+#   0xB6B3 = -18765 => -0.572679830317
+#   0x2F0B =  12043 =>  0.367534409619
+# 0xB6B3'2F0B = 3065196299
+packed: 3065196299

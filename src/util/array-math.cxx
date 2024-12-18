@@ -14,6 +14,7 @@ module;
 export module util.arraymath;
 import value.aggregate;
 import value.primitive;
+import value.statics;
 
 export namespace ArrayMath {
 
@@ -26,6 +27,24 @@ double dot(const Array& first, const Array& second) {
         dot_product += second_elem * this_elem;
     }
     return dot_product;
+}
+
+double dot(const Value* first, const Value* second) {
+    const Value& v0 = *first;
+    const Value& v1 = *second;
+
+    const Type& v0t = v0.getType();
+    const Type& v1t = v1.getType();
+
+    if (v0t.getBase() == DataType::FLOAT) {
+        assert(v1t.getBase() == DataType::FLOAT);
+        double d = static_cast<const Primitive&>(v0).data.fp32;
+        return d * static_cast<double>(static_cast<const Primitive&>(v1).data.fp32);
+    }
+
+    assert(v0t.getBase() == DataType::ARRAY && v1t.getBase() == DataType::ARRAY);
+    assert(v0t.getElement().getBase() == DataType::FLOAT && v1t.getElement().getBase() == DataType::FLOAT);
+    return dot(static_cast<const Array&>(v0), static_cast<const Array&>(v1));
 }
 
 double determinant(const Array& arr) {
@@ -106,6 +125,32 @@ double determinant(const Array& arr) {
 
     std::set<unsigned> no_skips;
     return determinant_rec(no_skips);
+}
+
+template<typename Mat, unsigned Cols, unsigned Rows>
+void value_to_glm(const Array& val, Mat& out, bool extract = false) {
+    for (unsigned i = 0; i < Cols; ++i) {
+        if (!extract) {
+            auto& col = static_cast<const Array&>(*val[i]);
+            for (unsigned j = 0; j < Rows; ++j)
+                out[i][j] = static_cast<const Primitive*>(col[j])->data.fp32;
+        } else {
+            std::vector<float> col = Statics::extractVec(val[i], "matrix", Rows);
+            for (unsigned j = 0; j < 3; ++j)
+                out[i][j] = col[j];
+        }
+    }
+}
+
+template<typename Mat, unsigned Cols, unsigned Rows>
+void glm_to_value(const Mat& mat, Array& out) {
+    for (unsigned i = 0; i < Cols; ++i) {
+        auto& col = static_cast<Array&>(*out[i]);
+        for (unsigned j = 0; j < Rows; ++j) {
+            Primitive prim(static_cast<float>(mat[i][j]));
+            col[j]->copyFrom(prim);
+        }
+    }
 }
 
 }; // namespace ArrayMath
