@@ -18,19 +18,21 @@ import front.console;
 export namespace ArgParse {
 
 struct Option {
+    virtual ~Option() = default;
     virtual unsigned getNumArgs() = 0;
-    virtual bool handle(std::string arg) = 0;
+    virtual bool handle(const std::string& arg) = 0;
     virtual std::string getArgNames() = 0;
 };
 
 struct Flag : public Option {
     bool enabled = false;
 
+    virtual ~Flag() = default;
     virtual unsigned getNumArgs() override {
         enabled = true;
         return 0;
     }
-    virtual bool handle(std::string arg) override {
+    virtual bool handle(const std::string& arg) override {
         assert(false);
         return false; // flags may not use arguments!
     }
@@ -49,10 +51,11 @@ protected:
     virtual std::optional<T> isValid(std::string str) = 0;
 
 public:
-    UnaryOption(std::string arg_name): argName(arg_name) {}
-    UnaryOption(std::string arg_name, const T& def_value): argName(arg_name) {
+    UnaryOption(const std::string& arg_name): argName(arg_name) {}
+    UnaryOption(const std::string& arg_name, const T& def_value): argName(arg_name) {
         values.push_back(def_value);
     }
+    virtual ~UnaryOption() = default;
 
     const T& getValue() {
         assert(!values.empty());
@@ -69,7 +72,7 @@ public:
     virtual unsigned getNumArgs() override {
         return 1;
     }
-    virtual bool handle(std::string arg) override {
+    virtual bool handle(const std::string& arg) override {
         if (const auto topt = isValid(arg); topt.has_value()) {
             setValue(*topt);
             return true;
@@ -98,8 +101,8 @@ protected:
     }
 
 public:
-    StringOption(std::string arg_name): UnaryOption(arg_name) {}
-    StringOption(std::string arg_name, std::string def_value): UnaryOption(arg_name, def_value) {}
+    explicit StringOption(const std::string& arg_name): UnaryOption(arg_name) {}
+    StringOption(const std::string& arg_name, const std::string& def_value): UnaryOption(arg_name, def_value) {}
 };
 
 class UintOption : public UnaryOption<unsigned> {
@@ -119,8 +122,9 @@ protected:
     }
 
 public:
-    UintOption(std::string arg_name): UnaryOption(arg_name) {}
-    UintOption(std::string arg_name, unsigned def_value): UnaryOption(arg_name, def_value) {}
+    explicit UintOption(const std::string& arg_name): UnaryOption(arg_name) {}
+    UintOption(const std::string& arg_name, unsigned def_value): UnaryOption(arg_name, def_value) {}
+    virtual ~UintOption() = default;
 };
 
 class Parser {
@@ -131,8 +135,12 @@ class Parser {
         std::string description;
         std::string single;
 
-        OptionData(Option* option, std::string full_word, std::string description, std::string single):
-            option(option), fullWord(full_word), description(description), single(single) {}
+        OptionData(
+            Option* option,
+            const std::string& full_word,
+            const std::string& description,
+            const std::string& single
+        ): option(option), fullWord(full_word), description(description), single(single) {}
     };
 
     /// @brief list of all added options
@@ -144,7 +152,7 @@ class Parser {
         std::string description;
         bool mandatory;
 
-        PositionalData(Option* option, std::string description, bool mandatory):
+        PositionalData(Option* option, const std::string& description, bool mandatory):
             option(option),
             description(description),
             mandatory(mandatory) {}
@@ -156,7 +164,15 @@ class Parser {
     Trie fullWords;
 
     bool posOnly;
-    bool handleOption(std::string option, Option& opt, std::string initial, int* i, char* argv[], int argc) {
+
+    bool handleOption(
+        const std::string& option,
+        Option& opt,
+        const std::string& initial,
+        int* i,
+        char* argv[],
+        int argc
+    ) {
         unsigned args = opt.getNumArgs();
         if (args == 0) {
             if (!initial.empty()) {
@@ -178,7 +194,7 @@ class Parser {
             // - arg.empty(): precondition for next. Cannot check content if length is 0
             // - args[0] == '-': if the argument begins with a -, it is likely a flag, not an argument
             // - arg.length() != 1: however, "-" by itself can be an argument, tested by length == 1
-            if (!posOnly && arg.empty() || (arg[0] == '-' && arg.length() != 1))
+            if ((!posOnly && arg.empty()) || (arg[0] == '-' && arg.length() != 1))
                 return false;
             return true;
         };
@@ -198,7 +214,7 @@ class Parser {
 
 public:
 
-    void addOption(Option* opt, std::string full_word, std::string description, std::string single = "") {
+    void addOption(Option* opt, std::string full_word, const std::string& description, const std::string& single = "") {
         options.emplace_back(opt, full_word, description, single);
         unsigned i = options.size() - 1;
         if (!single.empty())
@@ -206,7 +222,7 @@ public:
         fullWords.insert(full_word, i);
     }
 
-    void addPositional(StringOption* opt, std::string description, bool mandatory = true) {
+    void addPositional(StringOption* opt, const std::string& description, bool mandatory = true) {
         positionals.emplace_back(opt, description, mandatory);
     }
 
@@ -232,7 +248,6 @@ public:
                         arg = arg.substr(2);
 
                         // full word option, which may include = for arguments
-                        unsigned end = arg_len;
                         if (std::size_t eq = arg.find('='); eq != std::string::npos) {
                             connected = arg.substr(eq + 1);
                             arg = arg.substr(0, eq);

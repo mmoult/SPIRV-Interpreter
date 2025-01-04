@@ -10,6 +10,8 @@ class Value;
 
 class Valuable {
 public:
+    virtual ~Valuable() = default;
+
     ///@brief Used to display data requested during debug mode
     [[nodiscard]] virtual Value* asValue() const = 0;
 };

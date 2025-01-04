@@ -18,9 +18,9 @@ class Trie {
     bool valued;
     unsigned value;
 
-    Trie(std::string key, bool valued, unsigned value = 0): key(key), valued(valued), value(value) {}
+    Trie(const std::string& key, bool valued, unsigned value = 0): key(key), valued(valued), value(value) {}
 
-    inline void reset(std::string key, bool valued, unsigned value = 0) {
+    inline void reset(const std::string& key, bool valued, unsigned value = 0) {
         this->key = key;
         children.clear();
         this->valued = valued;
@@ -32,7 +32,7 @@ class Trie {
     /// @return <index in children vector, exact match>
     std::tuple<unsigned, bool> index(char key) const;
 
-    void enumerate(std::string prefix, std::vector<std::string>& options) const;
+    void enumerate(const std::string& prefix, std::vector<std::string>& options) const;
 
     void toString(
         unsigned& id,
@@ -52,13 +52,13 @@ public:
     /// @param key the key which identifies the value
     /// @param value the value of the key
     /// @return the trie created / overwritten with the value
-    Trie& insert(std::string key, unsigned value);
+    Trie& insert(const std::string& key, unsigned value);
 
     /// @brief Try to find the trie node, the key for which, is formed from the search key plus some amount
     ///        (including none). This can best be conceptualized as the trie which the key is an abbreviation for.
     /// @param key the key to find the trie node for
     /// @return <trie found, where null may be returned (in which case, the key exceeds all nodes), string missing>
-    std::tuple<const Trie*, std::string> next(std::string key) const;
+    std::tuple<const Trie*, std::string> next(const std::string& key) const;
 
     inline bool hasValue() const {
         return valued;

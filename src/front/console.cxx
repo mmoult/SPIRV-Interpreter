@@ -9,7 +9,7 @@ module;
     #include <windows.h>
 #else
     #include <sys/ioctl.h>
-    #include <stdio.h>
+    #include <cstdio>
     #include <unistd.h>
 #endif
 
@@ -24,7 +24,7 @@ export class Console {
     unsigned headerWidth;
 
 public:
-    Console(unsigned header_width) {
+    explicit Console(unsigned header_width) {
         refresh(header_width);
     }
 
@@ -41,7 +41,7 @@ public:
 #endif
     }
 
-    void print(std::string msg, std::string header = "") {
+    void print(std::string msg, const std::string& header = "") {
         unsigned len = 0;
         bool use_header = !header.empty();
         bool crunched = headerWidth + 10 >= width;

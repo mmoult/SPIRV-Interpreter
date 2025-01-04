@@ -24,7 +24,7 @@ protected:
     virtual const Type& getTypeAt(unsigned idx) const = 0;
 
 public:
-    Aggregate(Type t): Value(t) {}
+    Aggregate(const Type& t): Value(t) {}
 
     virtual ~Aggregate() {
         for (const auto& e : elements)
@@ -141,7 +141,7 @@ public:
     /// Also, this may never be used with an empty array.
     /// @param elements a pointer of value elements to pull types from in constructing this's type. When this
     /// constructor is used, the struct takes ownership of all elements given (and will delete them on destruction).
-    Array(std::vector<Value*>& elements)
+    explicit Array(std::vector<Value*>& elements)
         : Aggregate(Type::array(elements.size(), elements[0]->getType())) {
         this->elements = elements;
     }
@@ -209,7 +209,7 @@ protected:
     }
 
 public:
-    Struct(Type t): Aggregate(t) {}
+    Struct(const Type& t): Aggregate(t) {}
 
     /// @brief Constructs a structure from elements and names.
     ///

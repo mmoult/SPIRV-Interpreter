@@ -2202,7 +2202,7 @@ bool Instruction::makeResultGlsl(
         float f[SIZE];
         for (unsigned i = 0; i < SIZE; ++i) {
             if (SIGN) {
-                int16_t num = *reinterpret_cast<int16_t*>(&u[i]);
+                int16_t num = int16_t(u[i]);
                 float tmp = static_cast<float>(num);
                 f[i] = std::clamp(tmp / 32767.0, -1.0, 1.0);
             } else {
@@ -2234,7 +2234,7 @@ bool Instruction::makeResultGlsl(
         float f[SIZE];
         for (unsigned i = 0; i < SIZE; ++i) {
             if (SIGN) {
-                int8_t num = *reinterpret_cast<int8_t*>(&u[i]);
+                int8_t num = int8_t(u[i]);
                 float tmp = static_cast<float>(num);
                 f[i] = std::clamp(tmp / 127.0, -1.0, 1.0);
             } else {

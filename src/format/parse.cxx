@@ -432,6 +432,8 @@ protected:
     virtual void verifyBlank(LineHandler& handle) = 0;
 
 public:
+    virtual ~ValueFormat() = default;
+
     void setTemplate(bool print_template) {
         templatize = print_template;
     }
@@ -451,7 +453,7 @@ public:
     /// @param vars the map of pre-existing variables. Also the map new values are saved to
     /// @param key the name of the value to parse
     /// @param val the string to parse the value from
-    void parseVariable(ValueMap& vars, std::string keyval) noexcept(false) {
+    void parseVariable(ValueMap& vars, const std::string& keyval) noexcept(false) {
         const std::string* pstr = &keyval; // need an r-value pointer even though the value should not change
         LineHandler handle(pstr, 0, nullptr);
         auto [key, value] = parseVariable(handle);

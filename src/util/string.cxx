@@ -26,13 +26,13 @@ export std::string repeated_string(const unsigned num, const std::string& str) {
 /// algorithm.
 /// @param out where to print the string representation of float, fp
 /// @param fp the float to print. Should not be NaN or Inf!
-export void print_float(std::stringstream& out, float fp) {
+export void print_float(std::stringstream& out, double fp) {
     if (std::signbit(fp)) {
         fp = std::abs(fp);
         out << "-";
     }
 
-    float digit = 1e-4;
+    double digit = 1e-4;
     unsigned scientific = (fp <= digit && fp > 0.0)? 4 : 0;
     if (scientific == 0) {
         digit = 1.0;

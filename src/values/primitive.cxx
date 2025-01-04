@@ -41,7 +41,7 @@ public:
         data.b32 = b32;
     }
     // Create a blank primitive for the given type
-    Primitive(Type t): Value(t) {
+    Primitive(const Type& t): Value(t) {
         assert(isPrimitive(t.getBase()));
         // Initialize to dummy values (instead of 0 to indicate visibility and help user catch errors)
         if (t.getBase() == FLOAT)

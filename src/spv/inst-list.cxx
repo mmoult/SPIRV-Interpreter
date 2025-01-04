@@ -14,7 +14,7 @@ struct FileBreak {
     unsigned instNum;
     std::string filePath;
 
-    FileBreak(unsigned inst_num, std::string file_path): instNum(inst_num), filePath(file_path) {}
+    FileBreak(unsigned inst_num, const std::string& file_path): instNum(inst_num), filePath(file_path) {}
 };
 
 export class InstList {
@@ -44,7 +44,7 @@ public:
         }
         return nullptr;
     }
-    void addBreak(unsigned index, std::string file_path) {
+    void addBreak(unsigned index, const std::string& file_path) {
         breaks.emplace_back(index, file_path);
     }
 

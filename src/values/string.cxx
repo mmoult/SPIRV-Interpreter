@@ -17,7 +17,7 @@ export class String : public Value {
     std::string internal;
 
 public:
-    String(std::string str): Value(Type::string()), internal(str) {}
+    explicit String(const std::string& str): Value(Type::string()), internal(str) {}
 
     void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);

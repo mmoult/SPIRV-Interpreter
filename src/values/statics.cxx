@@ -35,7 +35,7 @@ export struct Statics {
         }
     }
 
-    static const Array& extractArray(const Value* field, std::string name) {
+    static const Array& extractArray(const Value* field, const std::string& name) {
         if (field == nullptr) {
             std::stringstream err;
             err << "Cannot extract vec from \"" << name << "\" because it is null!";
@@ -50,7 +50,7 @@ export struct Statics {
         return static_cast<const Array&>(*field);
     }
 
-    static std::vector<float> extractVec(const Value* field, std::string name, unsigned size) {
+    static std::vector<float> extractVec(const Value* field, const std::string& name, unsigned size) {
         const Array& arr = extractArray(field, name);
         if (arr.getType().getElement().getBase() != DataType::FLOAT) {
             std::stringstream err;
@@ -69,7 +69,7 @@ export struct Statics {
         return output;
     }
 
-    static std::vector<uint32_t> extractUvec(const Value* field, std::string name, unsigned size) {
+    static std::vector<uint32_t> extractUvec(const Value* field, const std::string& name, unsigned size) {
         const Array& arr = extractArray(field, name);
         if (arr.getType().getElement().getBase() != DataType::UINT) {
             std::stringstream err;
@@ -88,7 +88,7 @@ export struct Statics {
         return output;
     }
 
-    static std::string extractString(const Value* field, std::string name) {
+    static std::string extractString(const Value* field, const std::string& name) {
         if (field == nullptr) {
             std::stringstream err;
             err << "Cannot extract string from \"" << name << "\" because it is null!";
@@ -101,7 +101,7 @@ export struct Statics {
         return static_cast<const String&>(*field).get();
     }
 
-    static uint32_t extractUint(const Value* field, std::string name) {
+    static uint32_t extractUint(const Value* field, const std::string& name) {
         if (field == nullptr) {
             std::stringstream err;
             err << "Cannot extract uint from \"" << name << "\" because it is null!";
@@ -114,7 +114,11 @@ export struct Statics {
         return static_cast<const Primitive&>(*field).data.u32;
     }
 
-    static const Struct& extractStruct(const Value* field, std::string name, const std::vector<std::string>& fields) {
+    static const Struct& extractStruct(
+        const Value* field,
+        const std::string& name,
+        const std::vector<std::string>& fields
+    ) {
         if (field == nullptr) {
             std::stringstream err;
             err << "Cannot extract \"" << name << "\" from a null value!";

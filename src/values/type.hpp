@@ -55,6 +55,8 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     SWITCH(RAY_QUERY)
     SWITCH(IMAGE)
     SWITCH(SAMPLER)
+    default:
+        assert(false); // unhandled case!
     }
 #undef SWITCH
     return os;
@@ -94,7 +96,7 @@ class Type : public Valuable {
     [[nodiscard]] Value* construct(std::vector<const Value*>* values) const noexcept(false);
 
 public:
-    inline Type(): base(DataType::VOID), subSize(0), subElement(nullptr) {}
+    inline Type() noexcept(true): base(DataType::VOID), subSize(0), subElement(nullptr) {}
     Type(const Type& t) = default;
 
     // Factory methods to create type variants:
@@ -244,14 +246,14 @@ public:
         return base == rhs.base;
     }
 
-    inline void nameMember(unsigned i, std::string name) noexcept(false) {
+    inline void nameMember(unsigned i, const std::string& name) noexcept(false) {
         assert(base == DataType::STRUCT);
         if (i >= nameList.size())
             throw std::invalid_argument("Cannot name member at index beyond existing!");
         nameList[i] = name;
     }
 
-    inline void setName(std::string& name) {
+    inline void setName(const std::string& name) {
         this->name = name;
     }
     inline const std::string& getName() const {

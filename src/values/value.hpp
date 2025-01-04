@@ -18,7 +18,7 @@ protected:
     Type type;
 
 public:
-    Value(Type type): type(type) {}
+    explicit Value(const Type& type): type(type) {}
     virtual ~Value() = default;
 
     const Type& getType() const { return type; }

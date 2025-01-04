@@ -29,7 +29,7 @@ std::tuple<unsigned, bool> Trie::index(char key) const {
     return std::tuple(min, false);
 }
 
-void Trie::enumerate(std::string prefix, std::vector<std::string>& options) const {
+void Trie::enumerate(const std::string& prefix, std::vector<std::string>& options) const {
     if (valued)
         options.push_back(prefix);
     for (const Trie& kid : children)
@@ -55,7 +55,7 @@ void Trie::toString(
         kid.toString(id, myid, properties, connections);
 }
 
-Trie& Trie::insert(std::string key, unsigned value) {
+Trie& Trie::insert(const std::string& key, unsigned value) {
     if (key.empty()) {
         this->value = value;
         this->valued = true;
@@ -89,18 +89,18 @@ Trie& Trie::insert(std::string key, unsigned value) {
             } else {
                 // We must create a third node which gets new and other as kids
                 other.reset(key.substr(0, common), false, 0);
-                key = key.substr(common);
+                auto substr = key.substr(common);
                 other.children.push_back(copy);
                 return *other.children.insert(
-                    other.children.begin() + (key < copy.key? 0:1),
-                    Trie(key, true, value)
+                    other.children.begin() + (substr < copy.key? 0:1),
+                    Trie(substr, true, value)
                 );
             }
         }
     }
 }
 
-std::tuple<const Trie*, std::string> Trie::next(std::string key) const {
+std::tuple<const Trie*, std::string> Trie::next(const std::string& key) const {
     if (key.empty())
         return std::tuple(this, "");
     auto [at, exact] = index(key[0]);

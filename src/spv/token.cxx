@@ -27,9 +27,9 @@ export struct Token {
         // For CONST, UINT, REF
         assert(type == Type::CONST || type == Type::UINT || type == Type::REF);
     }
-    Token(int inum): type(Type::INT), raw(inum) {}
-    Token(float fnum): type(Type::FLOAT), raw(fnum) {}
-    Token(std::string str): type(Type::STRING), raw(str) {}
+    explicit Token(int inum): type(Type::INT), raw(inum) {}
+    explicit Token(float fnum): type(Type::FLOAT), raw(fnum) {}
+    explicit Token(std::string str): type(Type::STRING), raw(str) {}
 
     void print() const {
         switch (type) {
@@ -59,6 +59,8 @@ export struct Token {
         case Type::STRING:
             std::cout << "\"" << std::get<std::string>(raw) << "\"";
             break;
+        default:
+            assert(false); // unhandled token type!
         }
     }
 };

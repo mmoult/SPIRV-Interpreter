@@ -52,7 +52,7 @@ public:
         val->copyFrom(*other.val);
     }
     Variable& operator= (const Variable&) = delete;
-    ~Variable() {
+    virtual ~Variable() {
         if (val != nullptr)
             delete val;
     }
@@ -142,8 +142,9 @@ export class Function : public Valuable {
 
 public:
     Function(Type* type, unsigned location): type(type), location(location) {}
+    virtual ~Function() = default;
 
-    void setName(std::string& new_name) {
+    void setName(const std::string& new_name) {
         name = new_name;
     }
 
@@ -199,11 +200,11 @@ export class Data {
 
 public:
     Data(): raw(nullptr), type(DType::UNDEFINED) {};
-    Data(Variable* var): raw(var), type(DType::VARIABLE) {};
-    Data(Function* func): raw(func), type(DType::FUNCTION) {};
-    Data(EntryPoint* entry): raw(entry), type(DType::ENTRY) {};
-    Data(Value* val): raw(val), type(DType::VALUE) {};
-    Data(Type* type): raw(type), type(DType::TYPE) {};
+    explicit(false) Data(Variable* var): raw(var), type(DType::VARIABLE) {};
+    explicit(false) Data(Function* func): raw(func), type(DType::FUNCTION) {};
+    explicit(false) Data(EntryPoint* entry): raw(entry), type(DType::ENTRY) {};
+    explicit(false) Data(Value* val): raw(val), type(DType::VALUE) {};
+    explicit(false) Data(Type* type): raw(type), type(DType::TYPE) {};
 
     Data& operator=(Data& other) = delete;
 
