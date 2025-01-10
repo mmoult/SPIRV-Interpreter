@@ -252,6 +252,9 @@ void Instruction::readOp(
     case spv::OpMatrixTimesMatrix: // 146
     case spv::OpOuterProduct: // 147
     case spv::OpDot: // 148
+    case spv::OpIAddCarry: // 149
+    case spv::OpISubBorrow: // 150
+    case spv::OpUMulExtended: // 151
     case spv::OpLogicalEqual: // 164
     case spv::OpLogicalNotEqual: // 165
     case spv::OpLogicalOr: // 166
@@ -389,9 +392,15 @@ void Instruction::readOp(
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
+    case spv::OpAtomicIAdd: // 234
+        to_load.push_back(Type::REF);  // pointer
+        to_load.push_back(Type::REF);  // memory
+        to_load.push_back(Type::REF);  // semantics
+        to_load.push_back(Type::REF);  // value
+        break;
     case spv::OpPhi: // 245
-        to_load.push_back(Type::REF); // value
-        to_load.push_back(Type::REF); // block
+        to_load.push_back(Type::REF);  // value
+        to_load.push_back(Type::REF);  // block
         optional.push_back(Type::REF);
         optional.push_back(Type::REF);
         repeating = Repeat::WHOLE;
@@ -426,6 +435,7 @@ void Instruction::readOp(
         to_load.push_back(Type::CONST);
         optional.push_back(Type::REF);
         repeating = Repeat::WHOLE;
+        break;
     case spv::OpTraceRayKHR: // 4445
         for (int i = 0; i < 11; ++i)
             to_load.push_back(Type::REF);

@@ -426,6 +426,65 @@ void element_shift_op(
     data[dst.at].redefine(res);
 }
 
+using ExtArithOp = std::function<void(const Primitive*, const Primitive*, Primitive*, Primitive*)>;
+
+/// @brief Element-wise binary extended arithmetic operation between 2 scalars or two arrays of equal length
+///
+/// @param bin0 The location in data for the first operand
+/// @param bin1 The location in data for the second operand
+/// @param dst  The destination type and data locations
+/// @param data The data to use in fetching values
+/// @param op   The binary operation to perform on pairs of primitive elements
+/// @param type The expected type of elements or use VOID to disable checking
+void element_extended_arith_op(
+    unsigned bin0,
+    unsigned bin1,
+    const OpDst& dst,
+    DataView& data,
+    ExtArithOp& op,
+    DataType type = DataType::VOID
+) {
+    const Value* src1 = data[bin0].getValue();
+    const Value* src2 = data[bin1].getValue();
+
+    // Operate on two primitive arrays or two primitive scalars
+    const Type& type1 = src1->getType();
+    const Type& type2 = src2->getType();
+    assert(type == DataType::VOID || ((element_base(*src1) == element_base(*src2)) &&
+                                      "Cannot perform element-wise operation on operands of different bases!"));
+    Value* res_v = data[dst.type].getType()->construct();
+
+    if (type1.getBase() == DataType::ARRAY) {
+        assert(type2.getBase() == DataType::ARRAY);
+        const Array& op1 = *static_cast<const Array*>(src1);
+        const Array& op2 = *static_cast<const Array*>(src2);
+        assert((op1.getSize() == op2.getSize()) && "Cannot do arithmetic operation on arrays of different size!");
+        unsigned asize = op1.getSize();
+
+        Array& res = static_cast<Array&>(*res_v);
+        assert(res.getSize() == asize);
+        for (unsigned i = 0; i < asize; ++i) {
+            Struct& res_str = static_cast<Struct&>(*(res[i]));
+            assert(res_str.getSize() == 2);
+            op(
+                static_cast<const Primitive*>(op1[i]),
+                static_cast<const Primitive*>(op2[i]),
+                static_cast<Primitive*>(res_str[0]),
+                static_cast<Primitive*>(res_str[1])
+            );
+        }
+    } else {
+        assert(type2.getBase() != DataType::ARRAY);
+        const Primitive* op1 = static_cast<const Primitive*>(src1);
+        const Primitive* op2 = static_cast<const Primitive*>(src2);
+        Struct& res = static_cast<Struct&>(*res_v);
+        assert(res.getSize() == 2);
+        op(op1, op2, static_cast<Primitive*>(res[0]), static_cast<Primitive*>(res[1]));
+    }
+
+    data[dst.at].redefine(res_v);
+}
+
 using UnOp = std::function<Primitive(const Primitive*)>;
 
 void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataView& data, UnOp& op) {
@@ -1432,6 +1491,37 @@ bool Instruction::makeResult(
         data[result_at].redefine(ret);
         break;
     }
+    case spv::OpIAddCarry: { // 149
+        // Despite being called I (for int), only uints are allowed as inputs
+        ExtArithOp op = [](const Primitive* a, const Primitive* b, Primitive* f, Primitive* s) {
+            s->data.u32 = (a->uAdd(b, f))? 1 : 0;
+        };
+        OpDst dst{checkRef(dst_type_at, data_len), result_at};
+        element_extended_arith_op(
+            checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, op, DataType::UINT
+        );
+        break;
+    }
+    case spv::OpISubBorrow: { // 150
+        ExtArithOp op = [](const Primitive* a, const Primitive* b, Primitive* f, Primitive* s) {
+            s->data.u32 = (a->uSub(b, f))? 1 : 0;
+        };
+        OpDst dst{checkRef(dst_type_at, data_len), result_at};
+        element_extended_arith_op(
+            checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, op, DataType::UINT
+        );
+        break;
+    }
+    case spv::OpUMulExtended: { // 151
+        ExtArithOp op = [](const Primitive* a, const Primitive* b, Primitive* f, Primitive* s) {
+            a->uMul(b, f, s);
+        };
+        OpDst dst{checkRef(dst_type_at, data_len), result_at};
+        element_extended_arith_op(
+            checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, op, DataType::UINT
+        );
+        break;
+    }
     case spv::OpAny: { // 154
         Value* vec_val = getValue(src_at, data);
         const Type& vec_type = vec_val->getType();
@@ -1682,6 +1772,32 @@ bool Instruction::makeResult(
         };
         OpDst dst{checkRef(dst_type_at, data_len), result_at};
         element_unary_op(base, checkRef(src_at, data_len), dst, data, op);
+        break;
+    }
+    case spv::OpAtomicIAdd: { // 234
+        Primitive& prev_val = static_cast<Primitive&>(*getFromPointer(src_at, data));
+        assert(prev_val.getType().getBase() == DataType::UINT || prev_val.getType().getBase() == DataType::INT);
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(prev_val);
+        data[result_at].redefine(ret);  // store the original value into the result
+
+        // Memory scope and Memory semantics are not needed because we don't reorder interpreted instructions.
+        // See: https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Scope_-id-
+        // See: https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Memory_Semantics_-id-
+
+        const auto& other_val = static_cast<const Primitive&>(*getValue(src_at + 3, data));
+        // the spec says the type of val and prev_val must match
+        Primitive prim(0);
+        // TODO: possible underflow or overflow
+        if (other_val.getType().getBase() == DataType::UINT) {
+            assert(prev_val.getType().getBase() == DataType::UINT);
+            prim = Primitive(prev_val.data.u32 + other_val.data.u32);
+        } else {
+            assert(other_val.getType().getBase() == DataType::INT);
+            assert(prev_val.getType().getBase() == DataType::INT);
+            prim = Primitive(prev_val.data.i32 + other_val.data.i32);
+        }
+        prev_val.copyFrom(prim);
         break;
     }
     case spv::OpLabel: // 248

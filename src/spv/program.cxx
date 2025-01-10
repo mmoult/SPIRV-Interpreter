@@ -341,7 +341,14 @@ if (!(COND)) \
                 auto var = inputs[i];
                 if (var->getName() == name) {
                     found = true;
-                    var->setVal(*val);
+                    try {
+                        var->setVal(*val);
+                    } catch (const std::exception& e) {
+                        std::stringstream err;
+                        err << "Could not copy input variable \"" << name << "\" into program memory: ";
+                        err << e.what();
+                        throw std::runtime_error(err.str());
+                    }
 
                     // Special case for acceleration structures since their shader binding table may have extra shaders
                     // to parse and resolve.

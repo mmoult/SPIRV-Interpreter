@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <bit>
 #include <cassert>
 #include <cmath>
 #include <cstdint> // for uint32_t and int32_t
@@ -30,12 +31,15 @@ export struct Primitive : public Value {
 public:
     Primitive(float fp32, unsigned size = 32): Value(Type::primitive(FLOAT, size)) {
         data.fp32 = fp32;
+        assert(size <= 64);
     }
     Primitive(uint32_t u32, unsigned size = 32): Value(Type::primitive(UINT, size)) {
         data.u32 = u32;
+        assert(size <= 64);
     }
     Primitive(int32_t i32, unsigned size = 32): Value(Type::primitive(INT, size)) {
         data.i32 = i32;
+        assert(size <= 64);
     }
     Primitive(bool b32): Value(Type::primitive(BOOL)) {
         data.b32 = b32;
@@ -162,5 +166,62 @@ public:
             assert(false);
             return false;
         }
+    }
+
+    /// @brief Add the unsigned components of this and addend, saving into sum's unsigned value
+    /// @return whether the addition overflowed
+    bool uAdd(const Primitive* addend, Primitive* sum) const {
+        assert(type.getBase() == DataType::UINT);
+        assert(addend->getType().getBase() == DataType::UINT);
+        uint64_t res = uint64_t(this->data.u32) + uint64_t(addend->data.u32);
+        const unsigned need_prec = 64 - static_cast<unsigned>(std::countl_zero(res));
+        unsigned res_prec = sum->getType().getPrecision();
+        const uint64_t dest_mask = (1ULL << res_prec) - 1;
+        sum->data.u32 = res & dest_mask;
+        return (need_prec > res_prec);
+    }
+
+    /// @brief Subtract subtrahend from this, saving into difference's unsigned value, preventing underflow if necessary
+    /// @return whether the borrow bit was used (ie, this's value < subtrahend's value)
+    bool uSub(const Primitive* subtrahend, Primitive* difference) const {
+        assert(type.getBase() == DataType::UINT);
+        assert(subtrahend->getType().getBase() == DataType::UINT);
+        uint64_t res = this->data.u32;
+        unsigned prec = type.getPrecision();
+        assert(prec >= subtrahend->getType().getPrecision());
+        if (prec < 64)
+            res |= 1 << prec;
+        res -= uint64_t(subtrahend->data.u32);
+        if (prec < 64) {
+            res &= ~(1 << prec);  // return the borrow bit to normal
+        } else {
+            // We cannot create an artificial borrow bit for 64-bit sizes.
+            // However, we can count on automatic rollover. overflow_result + 1 = expected
+            if (subtrahend->data.u32 > this->data.u32)
+                res++;  // by definition, this cannot overflow
+        }
+        const uint64_t dest_mask = (1ULL << difference->getType().getPrecision()) - 1;
+        difference->data.u32 = res & dest_mask;
+        return this->data.u32 < subtrahend->data.u32;
+    }
+
+    void uMul(const Primitive* multiplier, Primitive* product_lo, Primitive* product_hi = nullptr) const {
+        assert(type.getBase() == DataType::UINT);
+        assert(multiplier->getType().getBase() == DataType::UINT);
+
+        // constraint which we should be able to relax later
+        assert((type.getPrecision() <= 32) &&
+               (type.getPrecision() == multiplier->getType().getPrecision()) &&
+               (type.getPrecision() == product_lo->getType().getPrecision()) &&
+               ((product_hi == nullptr) || (type.getPrecision() == product_hi->getType().getPrecision())));
+
+        // The product of multiplicand size X and multiplier size Y will *never* exceed size (X+Y)
+
+        uint64_t res = uint64_t(this->data.u32) * uint64_t(multiplier->data.u32);
+        unsigned prod_lo_prec = product_lo->getType().getPrecision();
+        const uint64_t dest_mask = (1ULL << prod_lo_prec) - 1;
+        product_lo->data.u32 = res & dest_mask;
+        if (product_hi != nullptr)
+            product_hi->data.u32 = res >> prod_lo_prec;
     }
 };
