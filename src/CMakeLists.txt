@@ -26,6 +26,7 @@ target_sources(spv-interp
       spv/token.cxx
       util/array-math.cxx
       util/compare.cxx
+      util/fpconvert.cxx
       util/intersection.cxx
       util/string.cxx
       util/ternary.cxx

@@ -30,6 +30,7 @@ import spv.frame;
 import spv.rayFlags;
 import spv.token;
 import util.arraymath;
+import util.fpconvert;
 import value.aggregate;
 import value.image;
 import value.pointer;
@@ -453,32 +454,32 @@ void element_extended_arith_op(
     assert(type == DataType::VOID || ((element_base(*src1) == element_base(*src2)) &&
                                       "Cannot perform element-wise operation on operands of different bases!"));
     Value* res_v = data[dst.type].getType()->construct();
+    Struct& res = static_cast<Struct&>(*res_v);
+    assert(res.getSize() == 2);
 
     if (type1.getBase() == DataType::ARRAY) {
         assert(type2.getBase() == DataType::ARRAY);
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
-        assert((op1.getSize() == op2.getSize()) && "Cannot do arithmetic operation on arrays of different size!");
         unsigned asize = op1.getSize();
+        assert((asize == op2.getSize()) && "Cannot do arithmetic operation on arrays of different size!");
 
-        Array& res = static_cast<Array&>(*res_v);
-        assert(res.getSize() == asize);
+        Array& res_lo = static_cast<Array&>(*(res[0]));
+        Array& res_hi = static_cast<Array&>(*(res[1]));
+        assert(res_lo.getSize() == asize);
+        assert(res_hi.getSize() == asize);
         for (unsigned i = 0; i < asize; ++i) {
-            Struct& res_str = static_cast<Struct&>(*(res[i]));
-            assert(res_str.getSize() == 2);
             op(
                 static_cast<const Primitive*>(op1[i]),
                 static_cast<const Primitive*>(op2[i]),
-                static_cast<Primitive*>(res_str[0]),
-                static_cast<Primitive*>(res_str[1])
+                static_cast<Primitive*>(res_lo[i]),
+                static_cast<Primitive*>(res_hi[i])
             );
         }
     } else {
         assert(type2.getBase() != DataType::ARRAY);
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
-        Struct& res = static_cast<Struct&>(*res_v);
-        assert(res.getSize() == 2);
         op(op1, op2, static_cast<Primitive*>(res[0]), static_cast<Primitive*>(res[1]));
     }
 
@@ -669,7 +670,8 @@ bool Instruction::makeResult(
         throw std::runtime_error(err.str());
     }
     case spv::OpUndef: // 3
-    case spv::OpConstantNull: { // 46
+    case spv::OpConstantNull: // 46
+    {
         const Type* ret_type = getType(dst_type_at, data);
         data[result_at].redefine(ret_type->construct());
         break;
@@ -732,8 +734,9 @@ bool Instruction::makeResult(
         data[result_at].redefine(new Type(Type::primitive(DataType::FLOAT,
                 std::get<unsigned>(operands[1].raw))));
         break;
-    case spv::OpTypeVector:   // 23
-    case spv::OpTypeMatrix: { // 24
+    case spv::OpTypeVector: // 23
+    case spv::OpTypeMatrix: // 24
+    {
         // Element type for vectors, Column type for matrices
         // A matrix is an array of columns. This is a little confusing because its "columns" are displayed horizontally
         Type* sub = getType(1, data);
@@ -920,9 +923,10 @@ bool Instruction::makeResult(
         data[result_at].redefine(prim);
         break;
     }
-    case spv::OpConstantComposite: // 44
+    case spv::OpConstantComposite:     // 44
     case spv::OpSpecConstantComposite: // 51
-    case spv::OpCompositeConstruct: { // 80
+    case spv::OpCompositeConstruct:    // 80
+    {
         // Can create struct, array/vector, or matrix
         Type* ret = getType(dst_type_at, data);
         std::vector<const Value*> values;
@@ -942,8 +946,9 @@ bool Instruction::makeResult(
         }
         break;
     }
-    case spv::OpSpecConstantTrue: // 48
-    case spv::OpSpecConstantFalse: { // 49
+    case spv::OpSpecConstantTrue:  // 48
+    case spv::OpSpecConstantFalse: // 49
+    {
         // Specialization constants should be constant at compile time. They may have defaults, but their value does not
         // have to match that. They are constant inputs very similar to OpVariable, so much so that we will treat them
         // as such.
@@ -1193,10 +1198,11 @@ bool Instruction::makeResult(
         data[result_at].redefine(to_ret);
         break;
     }
-    case spv::OpImageSampleImplicitLod: // 87
-    case spv::OpImageSampleExplicitLod: // 88
+    case spv::OpImageSampleImplicitLod:     // 87
+    case spv::OpImageSampleExplicitLod:     // 88
     case spv::OpImageSampleProjImplicitLod: // 91
-    case spv::OpImageSampleProjExplicitLod: { // 92
+    case spv::OpImageSampleProjExplicitLod: // 92
+    {
         const Value* sampler_v = getValue(src_at, data);
         if (sampler_v->getType().getBase() != DataType::SAMPLER)
             throw std::runtime_error("The third operand to OpImageSample* must be an sampler!");
@@ -1207,7 +1213,8 @@ bool Instruction::makeResult(
         break;
     }
     case spv::OpImageFetch: // 95
-    case spv::OpImageRead: { // 98
+    case spv::OpImageRead:  // 98
+    {
         const Value* image_v = getValue(src_at, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to OpImage* must be an image!");
@@ -1708,7 +1715,8 @@ bool Instruction::makeResult(
     case spv::OpNot: // 200
         INT_E_UNARY_OP(~);
     case spv::OpBitFieldSExtract: // 202
-    case spv::OpBitFieldUExtract: { // 203
+    case spv::OpBitFieldUExtract: // 203
+    {
         // Base can be sint or uint regardless of which, however, the result must match the type of base, and only
         // SExtract will do sign extensions
         bool extend = (opcode == spv::OpBitFieldSExtract);
@@ -1803,8 +1811,9 @@ bool Instruction::makeResult(
     case spv::OpLabel: // 248
         data[result_at].redefine(new Primitive(location));
         break;
-    case spv::OpPtrEqual: // 401
-    case spv::OpPtrNotEqual: { // 402
+    case spv::OpPtrEqual:    // 401
+    case spv::OpPtrNotEqual: // 402
+    {
         const Value* first = getValue(src_at, data);
         const Value* second = getValue(src_at + 1, data);
         if (first->getType().getBase() != DataType::POINTER)
@@ -2302,8 +2311,49 @@ bool Instruction::makeResultGlsl(
         E_TERN_OP(FLOAT, fx);
         break;
     }
+    case GLSLstd450PackSnorm2x16: // 56
+    case GLSLstd450PackUnorm2x16: // 57
+    case GLSLstd450PackHalf2x16:  // 58
+    {
+        // input of vec2 -> 32-bit integer
+        std::function<uint32_t(float f)> pack;
+        switch (ext_opcode) {
+        case GLSLstd450PackSnorm2x16:
+            pack = [](float f) {
+                float res = std::round(std::clamp(double(f), -1.0, 1.0) * 32767.0);
+                return uint32_t(int16_t(res));
+            };
+            break;
+        case GLSLstd450PackUnorm2x16:
+            pack = [](float f) {
+                float res = std::round(std::clamp(double(f), 0.0, 1.0) * 65535.0);
+                return uint32_t(uint16_t(res));
+            };
+            break;
+        case GLSLstd450PackHalf2x16:
+            pack = [](float f) {
+                return uint32_t(FpConvert::encode_flt16(f));
+            };
+            break;
+        default:
+            assert(false);  // unhandled case!
+            break;
+        }
+        const auto& input = static_cast<const Array&>(*getValue(src_at, data));
+        assert(input.getSize() == 2);
+        assert(input.getType().getElement().getBase() == DataType::FLOAT);
+        uint32_t res_lo = pack(static_cast<const Primitive*>(input[0])->data.fp32);
+        uint32_t res_hi = pack(static_cast<const Primitive*>(input[1])->data.fp32);
+
+        const Type* res_type = getType(dst_type_at, data);
+        Primitive& ret = static_cast<Primitive&>(*res_type->construct());
+        ret.data.u32 = (res_hi << 16) | res_lo;  // set it raw. Could plausibly be an int, but need to access u32
+        data[result_at].redefine(&ret);
+        break;
+    }
     case GLSLstd450UnpackSnorm2x16: // 60
-    case GLSLstd450UnpackUnorm2x16: { // 61
+    case GLSLstd450UnpackUnorm2x16: // 61
+    {
         const Type* res_type = getType(dst_type_at, data);
         Array& ret = static_cast<Array&>(*res_type->construct());
         const auto& input = static_cast<const Primitive&>(*getValue(src_at, data));
@@ -2334,8 +2384,24 @@ bool Instruction::makeResultGlsl(
         data[result_at].redefine(&ret);
         break;
     }
+    case GLSLstd450UnpackHalf2x16: { // 62
+        const Type* res_type = getType(dst_type_at, data);
+        Array& ret = static_cast<Array&>(*res_type->construct());
+        assert(ret.getSize() == 2);
+
+        const auto& input = static_cast<const Primitive&>(*getValue(src_at, data));
+        uint32_t all_bits = input.data.u32;
+        for (unsigned i = 0; i < 2; ++i, all_bits >>= 16) {
+            uint16_t bits = uint16_t(all_bits & 0xFFFF);
+            // The spec requires the output to be FP32 floats
+            static_cast<Primitive*>(ret[i])->data.fp32 = FpConvert::decode_flt16<float>(bits);
+        }
+        data[result_at].redefine(&ret);
+        break;
+    }
     case GLSLstd450UnpackSnorm4x8: // 63
-    case GLSLstd450UnpackUnorm4x8: { // 64
+    case GLSLstd450UnpackUnorm4x8: // 64
+    {
         const Type* res_type = getType(dst_type_at, data);
         Array& ret = static_cast<Array&>(*res_type->construct());
         const auto& input = static_cast<const Primitive&>(*getValue(src_at, data));
