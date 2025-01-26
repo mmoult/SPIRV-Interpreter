@@ -223,6 +223,16 @@ int main(int argc, char* argv[]) {
         "be printed instead of <type> stubs.",
         "t"
     );
+    ArgParse::Flag single_invoc;
+    parser.addOption(
+        &single_invoc,
+        "single",
+        "Run only a single invocation of the shader, ignoring others in the workgroup which should be launched. If any "
+        "builtin input variables observing the invocation ID are used by the shader, they must be provided as input(s)."
+        " This option only has affect for shader stages with a concept of a workgroup (such as comp and tesc). It is "
+        "ignored by all other shader stages.",
+        "l"
+    );
     ArgParse::Flag unused;
     parser.addOption(
         &unused,
@@ -321,7 +331,7 @@ if (ret != ReturnCode::OK) \
     RayTraceSubstage dummy;
     try {
         if (!rt_template.enabled)
-            program.init(inputs);
+            program.init(inputs, single_invoc.enabled);
         else {
             auto& manager = program.getDataManager();
             dummy.data = &manager.getGlobal();
@@ -379,7 +389,7 @@ if (ret != ReturnCode::OK) \
 
     // Run the program
     try {
-        program.execute(verbose.enabled, debug.enabled, *format);
+        program.execute(verbose.enabled, debug.enabled, *format, single_invoc.enabled);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::FAILED_EXE;

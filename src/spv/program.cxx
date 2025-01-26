@@ -158,14 +158,21 @@ if (!(COND)) \
         return ret;
     }
 
-    unsigned init(ValueMap& provided, DataView& global, RayTraceSubstage* stage) {
+    unsigned init(ValueMap& provided, DataView& global, RayTraceSubstage* stage, bool single_invoc) {
         unsigned entry = 0;
         std::vector<unsigned>& ins = (stage == nullptr)? this->ins : stage->ins;
         std::vector<unsigned>& outs = (stage == nullptr)? this->outs : stage->outs;
         std::vector<unsigned>& specs = (stage == nullptr)? this->specs : stage->specs;
 
-        unsigned location = insts.getLastBreak();
+        auto process_visible_io = [&](const Instruction& inst) {
+            inst.ioGen(global, ins, outs, specs, provided, insts[entry]);
+        };
+
         Instruction::DecoQueue decorations(insts.getInstructions());
+        unsigned location = insts.getLastBreak();
+        unsigned local_idx_loc = 0;
+        unsigned local_id_loc = 0;
+        unsigned global_id_loc = 0;
         bool entry_found = false; // whether the entry instruction has been found
         bool static_ctn = true; // whether we can construct results statically (until first OpFunction)
         for (; location < insts.size(); ++location) {
@@ -202,12 +209,15 @@ if (!(COND)) \
                             case spv::BuiltIn::BuiltInLocalInvocationIndex:
                             case spv::BuiltIn::BuiltInInvocationId:
                                 localInvocIdx = inst.getResult();
+                                local_idx_loc = location;
                                 continue;
                             case spv::BuiltIn::BuiltInLocalInvocationId:
                                 localInvocId = inst.getResult();
+                                local_id_loc = location;
                                 continue;
                             case spv::BuiltIn::BuiltInGlobalInvocationId:
                                 globalInvocId = inst.getResult();
+                                global_id_loc = location;
                                 continue;
                             case spv::BuiltIn::BuiltInWorkgroupSize:
                                 workGroupSize = inst.getResult();
@@ -221,10 +231,36 @@ if (!(COND)) \
                                 continue;
                         }
 
-                        inst.ioGen(global, ins, outs, specs, provided, insts[entry]);
+                        process_visible_io(inst);
                     }
                 }
             }
+        }
+
+        if (single_invoc) {
+            // Need to allow specifying the id-observing variables.
+            // However, the variables transmit overlapping info- we can deduce local invocation index if we have the id,
+            // and we can deduce both if we have the global invocation id. There is no reason to force the user to
+            // supply the same data twice (if multiple of these variables exist on the interface)- that is redundant and
+            // can lead to unnecessary error. Therefore, select the *least* specific invocation variable used by the
+            // shader to be in the shader's template.
+
+            // Since we cannot guarantee the ordering of these variable's declarations, we must cache their locations
+            // until all are processed.
+
+            unsigned top_var;
+            if (global_id_loc != 0)
+                top_var = global_id_loc;
+            else if (local_id_loc != 0)
+                top_var = local_id_loc;
+            else if (local_idx_loc != 0)
+                top_var = local_idx_loc;
+            else
+                top_var = 0;
+
+            // If no id variable is used by the shader, no need to have the user define which invocation to use.
+            if (top_var != 0)
+                process_visible_io(insts[top_var]);
         }
 
         if (!entry_found)
@@ -421,11 +457,11 @@ public:
         return insts.size();
     }
 
-    void init(ValueMap& provided) noexcept(false) {
-        entry = init(provided, data.getGlobal(), nullptr);
+    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
+        entry = init(provided, data.getGlobal(), nullptr, single_invoc);
     }
     void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs, bool unused = false) {
-        unsigned entry = init(extra_inputs, *stage.data, &stage);
+        unsigned entry = init(extra_inputs, *stage.data, &stage, false);
         stage.entry = entry;
         auto* extra_accel = Program::checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, unused);
         if (extra_accel != nullptr)  // We shouldn't see any extra accel structs
@@ -501,7 +537,7 @@ public:
         return std::tuple(outputs.empty(), total_tests);
     }
 
-    void execute(bool verbose, bool debug, ValueFormat& format, void* extra_data = nullptr) noexcept(false) {
+    void execute(bool verbose, bool debug, ValueFormat& format, bool single_invoc) noexcept(false) {
         Instruction& entry_inst = insts[entry];
         DataView& global = data.getGlobal();
 
@@ -516,7 +552,7 @@ public:
             ep.sizeZ = static_cast<const Primitive*>(sizeAgg[2])->data.u32;
         }
         const EntryPoint& ep = entry_inst.getEntryPoint(global);
-        unsigned num_invocations = ep.sizeX * ep.sizeY * ep.sizeZ;
+        unsigned num_invocations = single_invoc? 1 : (ep.sizeX * ep.sizeY * ep.sizeZ);
 
         Debugger debugger(insts, format, num_invocations);
         // The stack frame holds variables, temporaries, program counter, return address, etc
@@ -541,44 +577,79 @@ public:
             global_invoc_id = global[globalInvocId].getVariable();
 
         for (unsigned i = 0; i < num_invocations; ++i) {
-            unsigned localX = i % ep.sizeX;
-            unsigned localY = (i / ep.sizeX) % ep.sizeY;
-            unsigned localZ = (i / (ep.sizeX * ep.sizeY)) % ep.sizeZ;
+            unsigned local_x = i % ep.sizeX;
+            unsigned local_y = (i / ep.sizeX) % ep.sizeY;
+            unsigned local_z = (i / (ep.sizeX * ep.sizeY)) % ep.sizeZ;
 
             DataView* invoc_global = data.makeView(&global);
             invoc_globals.push_back(invoc_global);
             active_threads.insert(i);
             live_threads.insert(i);
             // Copy over builtins from the global scope to the invocation's scope and populate with their values
-            if (local_invoc_idx != nullptr) {
-                Variable* v = new Variable(*local_invoc_idx);
-                const Primitive idx(i);
-                v->setVal(idx);
-                invoc_global->local(localInvocIdx).redefine(v);
-            }
-            if (local_invoc_id != nullptr) {
-                Variable* v = new Variable(*local_invoc_id);
-                Array arr(tUint, 3);
-                const Primitive gid_x(localX);
-                const Primitive gid_y(localY);
-                const Primitive gid_z(localZ);
-                std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
-                arr.addElements(elements);
-                v->setVal(arr);
-                invoc_global->local(localInvocId).redefine(v);
-            }
             if (global_invoc_id != nullptr) {
                 // GlobalInvocationID = WorkGroupID * WorkGroupSize + LocalInvocationID
-                Variable* v = new Variable(*global_invoc_id);
-                Array arr(tUint, 3);
-                const Primitive gid_x(0 * ep.sizeX + localX);
-                const Primitive gid_y(0 * ep.sizeY + localY);
-                const Primitive gid_z(0 * ep.sizeZ + localZ);
-                std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
-                arr.addElements(elements);
-                v->setVal(arr);
-                invoc_global->local(globalInvocId).redefine(v);
+                if (single_invoc) {
+                    // Because single invocation was specified and this variable is present, the value must have already
+                    // been set in input. We must fetch the value to update the more specific invoc fields- local ID and
+                    // local index
+                    assert(global_invoc_id->getVal()->getType().getBase() == DataType::ARRAY);
+                    const auto& ids = static_cast<const Array&>(*global_invoc_id->getVal());
+                    // deconstruct local ids from the given global
+                    local_x = static_cast<const Primitive&>(*ids[0]).data.u32 % ep.sizeX;
+                    local_y = static_cast<const Primitive&>(*ids[1]).data.u32 % ep.sizeY;
+                    local_z = static_cast<const Primitive&>(*ids[2]).data.u32 % ep.sizeZ;
+                } else {
+                    Variable* v = new Variable(*global_invoc_id);
+                    Array arr(tUint, 3);
+                    const Primitive gid_x(0 * ep.sizeX + local_x);
+                    const Primitive gid_y(0 * ep.sizeY + local_y);
+                    const Primitive gid_z(0 * ep.sizeZ + local_z);
+                    std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
+                    arr.addElements(elements);
+                    v->setVal(arr);
+                    invoc_global->local(globalInvocId).redefine(v);
+                }
             }
+            if (local_invoc_id != nullptr) {
+                if (single_invoc && global_invoc_id == nullptr) {
+                    // This is the highest-level invocation builtin. Get the current settings to update any lower
+                    assert(global_invoc_id->getVal()->getType().getBase() == DataType::ARRAY);
+                    const auto& ids = static_cast<const Array&>(*global_invoc_id->getVal());
+                    local_x = static_cast<const Primitive&>(*ids[0]).data.u32;
+                    local_y = static_cast<const Primitive&>(*ids[1]).data.u32;
+                    local_z = static_cast<const Primitive&>(*ids[2]).data.u32;
+                    // TODO: should we throw an error if the local sizes given exceed the workgroup size?
+                } else {
+                    Variable* v = new Variable(*local_invoc_id);
+                    Array arr(tUint, 3);
+                    const Primitive gid_x(local_x);
+                    const Primitive gid_y(local_y);
+                    const Primitive gid_z(local_z);
+                    std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
+                    arr.addElements(elements);
+                    v->setVal(arr);
+                    invoc_global->local(localInvocId).redefine(v);
+                }
+            }
+            if (local_invoc_idx != nullptr) {
+                // The variable should have already been set (and should therefore, not be set again) if single
+                // invocation mode is enabled and there are no higher-level variables to preempt.
+                if (!single_invoc || (global_invoc_id != nullptr || local_invoc_id != nullptr)) {
+                    Variable* v = new Variable(*local_invoc_idx);
+                    unsigned index;
+                    if (single_invoc)
+                        // (gl_LocalInvocationID.z * gl_WorkGroupSize.x * gl_WorkGroupSize.y)
+                        // + (gl_LocalInvocationID.y * gl_WorkGroupSize.x)
+                        // + gl_LocalInvocationID.x
+                        index = (local_z * ep.sizeX * ep.sizeY) + (local_y * ep.sizeX) + local_x;
+                    else
+                        index = i;
+                    const Primitive idx(index);
+                    v->setVal(idx);
+                    invoc_global->local(localInvocIdx).redefine(v);
+                }
+            }
+
             frame_stacks[i].push_back(new Frame(ep.getLocation(), entry_args, 0, *invoc_global));
         }
 
