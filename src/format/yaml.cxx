@@ -80,7 +80,7 @@ private:
             if (list) {
                 // Must see '-' and then some optional space
                 auto c0 = handler.peek();
-                if (*c0 != '-')
+                if (c0.value_or(0) != '-')
                     // The list is done because this line doesn't have a bullet. This cannot happen on the first element
                     // because we must see a bullet to get to this logic.
                     break;

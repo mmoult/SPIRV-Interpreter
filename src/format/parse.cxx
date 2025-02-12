@@ -148,7 +148,9 @@ protected:
             // If this is a multi-line approach, we can just go to the beginning of this line
             if (file != nullptr)
                 idx = 0;
-            else {
+            else if (pLine != nullptr) {
+                // If pLine is nullptr and file is nullptr, then we have reached the end. No more content to parse,
+                // so no need to backtrack any.
                 // Otherwise, we need to backtrack to the last newline
                 for (; idx > 0; --idx) {
                     if ((*pLine)[idx] == '\n')

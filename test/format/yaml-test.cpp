@@ -17,92 +17,13 @@ import value.primitive;
 
 
 TEST_CASE("output", "[yaml]") {
-#define SETUP \
-    std::map<std::string, const Value*> vars; \
-    std::stringstream out;
-
-    Yaml format;
-
     SECTION("empty") {
-        SETUP
+        Yaml format;
+        std::map<std::string, const Value*> vars;
+        std::stringstream out;
         format.printFile(out, vars);
         REQUIRE(out.str() == "");
     }
-
-    SECTION("array in array") {
-        SETUP
-        std::vector<const Value*> news;
-        Type fp32 = Type::primitive(DataType::FLOAT);
-
-        std::vector<const Value*> inners;
-        for (unsigned j = 0; j < 3; ++j) {
-            std::vector<const Value*> es;
-            for (unsigned i = 0; i < 4; ++i) {
-                const Value* prim = new Primitive(static_cast<float>(i + j));
-                news.push_back(prim);
-                es.push_back(prim);
-            }
-            Array* inner = new Array(fp32, es.size());
-            news.push_back(inner);
-            inner->addElements(es);
-            inners.push_back(static_cast<const Array*>(inner));
-        }
-        Array outer(inners[0]->getType(), inners.size());
-        outer.addElements(inners);
-        vars["foo"] = &outer;
-
-        format.printFile(out, vars);
-        REQUIRE(out.str() ==
-            "foo:\n"
-            "- [ 0.0, 1.0, 2.0, 3.0 ]\n"
-            "- [ 1.0, 2.0, 3.0, 4.0 ]\n"
-            "- [ 2.0, 3.0, 4.0, 5.0 ]\n"
-            );
-
-        for (const Value* val : news)
-            delete val;
-    }
-
-    SECTION("atypical indent") {
-        SETUP
-        Yaml sformat;
-        sformat.setIndentSize(5);
-
-        constexpr unsigned arr_size = 6;
-        std::vector<Primitive> prims;
-        prims.reserve(arr_size);
-        Type fp32 = Type::primitive(DataType::UINT);
-
-        std::vector<const Value*> es;
-        for (unsigned i = 0; i < arr_size; ++i) {
-            prims.emplace_back(static_cast<uint32_t>(i));
-            // It should be fine to access the vector pointer directly because we should never assign more than the
-            // initial allocation.
-            es.push_back(&prims[i]);
-        }
-        Array test(fp32, es.size());
-        test.addElements(es);
-        vars["array"] = &test;
-
-        sformat.printFile(out, vars);
-        REQUIRE(out.str() ==
-            "array: [\n"
-            "     0, 1, 2, 3,\n"
-            "     4, 5\n"
-            "]\n"
-            );
-    }
-
-/*
-    SECTION("struct in array") {
-
-    }
-
-    SECTION("array in struct") {
-
-    }
-*/
-#undef SETUP
 }
 
 void circle_test(Yaml& yaml, const std::string& key, Value& value, std::string result) {
@@ -149,6 +70,146 @@ TEST_CASE("i/o", "[yaml]") {
         // Notice that we don't need any quotes around the string. The subquote is interpreted as part of the whole
         circle_test(format, "quote \"Here\"", test, "quote \"Here\": -1");
         circle_test(format, "tricky: has colon", test, "'tricky: has colon': -1");
+    }
+
+    SECTION("atypical indent") {
+        Yaml sformat;
+        sformat.setIndentSize(5);
+
+        constexpr unsigned arr_size = 6;
+        std::vector<Primitive> prims;
+        prims.reserve(arr_size);
+        Type fp32 = Type::primitive(DataType::UINT);
+
+        std::vector<const Value*> es;
+        for (unsigned i = 0; i < arr_size; ++i) {
+            prims.emplace_back(static_cast<uint32_t>(i));
+            // It should be fine to access the vector pointer directly because we should never assign more than the
+            // initial allocation.
+            es.push_back(&prims[i]);
+        }
+        Array test(fp32, es.size());
+        test.addElements(es);
+
+        circle_test(sformat, "sequence", test,
+            "sequence: [\n"
+            "     0, 1, 2, 3,\n"
+            "     4, 5\n"
+            "]");
+    }
+
+    SECTION("sequence in sequence") {
+        std::map<std::string, const Value*> vars;
+        std::vector<const Value*> news;
+        Type fp32 = Type::primitive(DataType::FLOAT);
+
+        std::vector<const Value*> inners;
+        for (unsigned j = 0; j < 3; ++j) {
+            std::vector<const Value*> es;
+            for (unsigned i = 0; i < 4; ++i) {
+                const Value* prim = new Primitive(static_cast<float>(i + j));
+                news.push_back(prim);
+                es.push_back(prim);
+            }
+            Array* inner = new Array(fp32, es.size());
+            news.push_back(inner);
+            inner->addElements(es);
+            inners.push_back(static_cast<const Array*>(inner));
+        }
+        Array outer(inners[0]->getType(), inners.size());
+        outer.addElements(inners);
+
+        circle_test(format, "foo", outer,
+            "foo:\n"
+            "- [ 0.0, 1.0, 2.0, 3.0 ]\n"
+            "- [ 1.0, 2.0, 3.0, 4.0 ]\n"
+            "- [ 2.0, 3.0, 4.0, 5.0 ]");
+
+        for (const Value* val : news)
+            delete val;
+    }
+
+    SECTION("short mapping in sequence") {
+        std::vector<std::string> names;
+        names.push_back("foo");
+        names.push_back("bar");
+        Type foo = Type::primitive(DataType::UINT);
+        Type bar = Type::primitive(DataType::UINT);
+        std::vector<const Type*> sub_list;
+        sub_list.push_back(&foo);
+        sub_list.push_back(&bar);
+        Type mapping = Type::structure(sub_list, names);
+        std::vector<Primitive> prims;
+        std::vector<const Value*> first;
+        std::vector<const Value*> second;
+        constexpr unsigned STRUCT_SIZE = 2;
+        for (uint32_t i = 0; i < STRUCT_SIZE * 2; ++i)
+            prims.emplace_back(i);
+        for (unsigned i = 0; i < STRUCT_SIZE * 2; ++i) {
+            auto& vec = (i < STRUCT_SIZE)? first : second;
+            vec.push_back(&prims[i]);
+        }
+
+        Struct idx0(mapping);
+        idx0.addElements(first);
+        Struct idx1(mapping);
+        idx1.addElements(second);
+
+        std::vector<const Value*> sequence_elements;
+        sequence_elements.push_back(&idx0);
+        sequence_elements.push_back(&idx1);
+        Array sequence(mapping, 2);
+        sequence.addElements(sequence_elements);
+
+        circle_test(format, "abc", sequence,
+            "abc:\n"
+            "- { foo: 0, bar: 1 }\n"
+            "- { foo: 2, bar: 3 }");
+    }
+
+
+    SECTION("long mapping in sequence") {
+        std::vector<std::string> names;
+        names.push_back("foo");
+        names.push_back("bar");
+        names.push_back("baz");
+        Type t_uint = Type::primitive(DataType::UINT);
+        constexpr unsigned STRUCT_SIZE = 3;
+        std::vector<const Type*> sub_list;
+        for (unsigned i = 0; i < STRUCT_SIZE; ++i)
+            sub_list.push_back(&t_uint);
+        Type mapping = Type::structure(sub_list, names);
+        std::vector<Primitive> prims;
+        std::vector<const Value*> first;
+        std::vector<const Value*> second;
+        for (uint32_t i = 0; i < STRUCT_SIZE * 2; ++i)
+            prims.emplace_back(i);
+        for (unsigned i = 0; i < STRUCT_SIZE * 2; ++i) {
+            auto& vec = (i < STRUCT_SIZE)? first : second;
+            vec.push_back(&prims[i]);
+        }
+
+        Struct idx0(mapping);
+        idx0.addElements(first);
+        Struct idx1(mapping);
+        idx1.addElements(second);
+
+        std::vector<const Value*> sequence_elements;
+        sequence_elements.push_back(&idx0);
+        sequence_elements.push_back(&idx1);
+        Array sequence(mapping, 2);
+        sequence.addElements(sequence_elements);
+
+        circle_test(format, "def", sequence,
+            "def:\n"
+            "-\n"
+            "  foo: 0\n"
+            "  bar: 1\n"
+            "  baz: 2\n"
+            "-\n"
+            "  foo: 3\n"
+            "  bar: 4\n"
+            "  baz: 5");
     }
 
 }

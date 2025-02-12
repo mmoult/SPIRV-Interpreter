@@ -1054,9 +1054,9 @@ bool Instruction::makeResult(
                 switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
                 case spv::ExecutionMode::ExecutionModeLocalSizeId:
                     assert(deco->operands.size() == 5);
-                    ep->sizeX = static_cast<const Primitive*>(getValue(src_at, data))->data.u32;
-                    ep->sizeY = static_cast<const Primitive*>(getValue(src_at + 1, data))->data.u32;
-                    ep->sizeZ = static_cast<const Primitive*>(getValue(src_at + 2, data))->data.u32;
+                    ep->sizeX = static_cast<const Primitive*>(deco->getValue(src_at, data))->data.u32;
+                    ep->sizeY = static_cast<const Primitive*>(deco->getValue(src_at + 1, data))->data.u32;
+                    ep->sizeZ = static_cast<const Primitive*>(deco->getValue(src_at + 2, data))->data.u32;
                     break;
                 default:
                     break;
