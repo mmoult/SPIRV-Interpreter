@@ -102,22 +102,22 @@ class InstanceNode : public Node {
     inline static Type type;
     inline static Type mat4x3Type;
     inline static const std::vector<std::string> names{
-        "transformation", "child_node", "id", "custom_index", "mask", "sbt_record_offset"
+        "world_to_obj", "child_node", "id", "custom_index", "mask", "sbt_record_offset"
     };
 
     NodeReference child;
-    glm::mat4 transformation;  // column-major order
-    glm::mat4 inverse;         // column-major order: inverse of `transformation`
-    uint32_t id;               // Id relative to other instance nodes in the same acceleration structure
-    uint32_t customIndex;      // For shading
-    uint32_t mask;             // Mask that can make the ray ignore this instance
-    uint32_t sbtRecordOffs;    // Shader binding table record offset (a.k.a. hit group id)
+    glm::mat4 worldToObj;    // column-major order
+    glm::mat4 inverse;       // column-major order: inverse of `worldToObj`
+    uint32_t id;             // Id relative to other instance nodes in the same acceleration structure
+    uint32_t customIndex;    // For shading
+    uint32_t mask;           // Mask that can make the ray ignore this instance
+    uint32_t sbtRecordOffs;  // Shader binding table record offset (a.k.a. hit group id)
 
 public:
     InstanceNode(
         unsigned major,
         unsigned minor,
-        glm::mat4x3& transform,
+        glm::mat4x3& world_to_obj,
         uint32_t id,
         uint32_t custom_index,
         uint32_t mask,
@@ -128,14 +128,14 @@ public:
     customIndex(custom_index),
     mask(mask),
     sbtRecordOffs(sbt_record_offset) {
-        // Copy from transform into transformation field. Last row should be 0,0,0,1
+        // Copy from transform into worldToObj field. Last row should be 0,0,0,1
         for (unsigned i = 0; i < 4; ++i) {
             for (unsigned j = 0; j < 3; ++j)
-                transformation[i][j] = transform[i][j];
-            transformation[i][3] = (i == 3)? 1.0 : 0.0;
+                worldToObj[i][j] = world_to_obj[i][j];
+            worldToObj[i][3] = (i == 3)? 1.0 : 0.0;
         }
         // ray query instructions may need to the inverse, so calculate it now:
-        this->inverse = glm::inverse(transformation);
+        this->inverse = glm::inverse(worldToObj);
     }
 
     inline void resolveReferences(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) override {

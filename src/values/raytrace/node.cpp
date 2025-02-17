@@ -126,15 +126,13 @@ Ternary InstanceNode::step(Trace* trace_p) const {
 
     // Transform the ray to match the instance's object-space.
     const Intersection& before = trace.getCandidate();
-    // TODO find out the correct direction to multiply in...
-    glm::mat4 objToWorld = before.objToWorld * transformation;
-    glm::mat4 worldToObj = before.worldToObj * inverse;
-    // TODO: determine whether the ray interval (t-min and t-max) also needs to be scaled.
+    glm::mat4 world_to_obj = this->worldToObj * before.worldToObj;
+    glm::mat4 obj_to_world = this->inverse * before.objToWorld;
 
     Intersection& cand = trace.candidates.emplace_back(before);
     cand.search = child.ptr;
-    cand.objToWorld = objToWorld;
-    cand.worldToObj = worldToObj;
+    cand.worldToObj = world_to_obj;
+    cand.objToWorld = obj_to_world;
     cand.instance = this;
 
     return Ternary::NO;
@@ -144,9 +142,9 @@ Ternary InstanceNode::step(Trace* trace_p) const {
     const Struct& str = Statics::extractStruct(val, "InstanceNode", names);
     const Array& transform = Statics::extractArray(str[0], names[0]);
     if (transform.getSize() != 4)
-        throw std::runtime_error("InstanceNode field \"transformation\" must be a mat4x3!");
-    glm::mat4x3 transformation;
-    ArrayMath::value_to_glm<glm::mat4x3, 4, 3>(transform, transformation, true);
+        throw std::runtime_error("InstanceNode field \"world_to_obj\" must be a mat4x3!");
+    glm::mat4x3 world_to_obj;
+    ArrayMath::value_to_glm<glm::mat4x3, 4, 3>(transform, world_to_obj, true);
 
     std::vector<unsigned> ref = Statics::extractUvec(str[1], names[1], 2);
     uint32_t id = Statics::extractUint(str[2], names[2]);
@@ -154,7 +152,7 @@ Ternary InstanceNode::step(Trace* trace_p) const {
     uint32_t mask = Statics::extractUint(str[4], names[4]);
     uint32_t sbt_record_offset = Statics::extractUint(str[5], names[5]);
 
-    return new InstanceNode(ref[0], ref[1], transformation, id, custom_index, mask, sbt_record_offset);
+    return new InstanceNode(ref[0], ref[1], world_to_obj, id, custom_index, mask, sbt_record_offset);
 }
 
 [[nodiscard]] Struct* InstanceNode::toStruct() const {
@@ -162,7 +160,7 @@ Ternary InstanceNode::step(Trace* trace_p) const {
     for (unsigned i = 0; i < 4; ++i) {
         std::vector<Value*> row(3, nullptr);
         for (unsigned j = 0; j < 3; ++j)
-            row[j] = new Primitive(transformation[i][j]);
+            row[j] = new Primitive(this->worldToObj[i][j]);
         cols[i] = new Array(row);
     }
     std::vector<Value*> fields{

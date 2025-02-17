@@ -33,7 +33,7 @@ topLevelAS:
   box_nodes: []
   instance_nodes:
   -
-    transformation:
+    world_to_obj:
     - [ 1.0, 0.0, 0.0 ]
     - [ 0.0, 1.0, 0.0 ]
     - [ 0.0, 0.0, 1.0 ]
