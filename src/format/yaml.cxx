@@ -30,9 +30,9 @@ export class Yaml : public ValueFormat {
 private:
     /// @brief Skips whitespace
     /// @param handler to parse from
-    /// @param breakAtNewline whether to stop at newlines (true) or treat them as regular space (false)
+    /// @param break_at_newline whether to stop at newlines (true) or treat them as regular space (false)
     /// @return (char, valid) of next non-whitespace or newline
-    std::optional<char> skipWhitespace(LineHandler& handler, bool breakAtNewline) const {
+    std::optional<char> skipWhitespace(LineHandler& handler, bool break_at_newline) const {
         while (true) {
             auto cc = handler.peek();
             if (!cc.has_value())
@@ -46,11 +46,11 @@ private:
                         return {};
                     c = *cc1;
                 } while (c != '\n');
-                if (breakAtNewline)
+                if (break_at_newline)
                     return {c};
-            } else if (!std::isspace(c) || (breakAtNewline && c == '\n'))
+            } else if (!std::isspace(c) || (break_at_newline && c == '\n'))
                 return {c}; // semantically relevant character
-            handler.skip(1);
+            handler.skip();
         }
     }
 
@@ -70,11 +70,13 @@ private:
         return {key, val};
     }
 
-    std::tuple<Value*, bool> parseAgg(LineHandler& handler, unsigned indent, bool list) {
+    std::tuple<Value*, bool> parseAgg(LineHandler& handler, unsigned indent, bool list, std::string seen_name = "") {
         std::vector<const Value*> elements;
         std::vector<std::string> names;
         // We have already seen the indent at the start of the first element
         // The indent has been saved as indent
+        assert(seen_name.empty() || !list);
+
         while (true) {
             const Value* celement;
             if (list) {
@@ -85,13 +87,25 @@ private:
                     // because we must see a bullet to get to this logic.
                     break;
                 handler.skip();
-                // We should know validity because we checked when first identifying or asserting indentation
+
                 auto [element, new_line] = parseValue(handler, indent);
                 if (!new_line)
                     verifyBlank(handler, true);
                 celement = static_cast<const Value*>(element);
             } else {
-                auto [key, val] = parseVariable(handler, indent);
+                std::string key;
+                Value* val = nullptr;
+                if (seen_name.empty()) {
+                    auto pair = parseVariable(handler, indent);
+                    key = std::get<0>(pair);
+                    val = std::get<1>(pair);
+                } else {
+                    key = seen_name;
+                    seen_name = "";  // empty for next iteration
+                    handler.skip();  // skip over the colon
+                    auto result = parseValue(handler, indent);
+                    val = std::get<0>(result);
+                }
                 names.push_back(key);
                 celement = static_cast<const Value*>(val);
             }
@@ -100,7 +114,7 @@ private:
             // parseVariable or verifyBlank have taken the courtesy of going to the next line for us.
             // We want to see if the next line has the correct indent or if it is out of this aggregate
             unsigned next = countIndent(handler);
-            // next == 0 if we reached end of file
+            // also note that next == 0 if we reached end of file
             if (next < indent)
                 break;
             else if (next > indent) {
@@ -148,7 +162,7 @@ private:
             }
             elements.push_back(celement);
 
-            // Allow comma after each element ((even after final element))
+            // Allow comma after each element (even after final element)
             auto cc1 = skipWhitespace(handler, false);
             if (cc1.has_value()) {
                 char c1 = *cc1;
@@ -213,14 +227,15 @@ private:
         return value.str();
     }
 
-    void verifyBlank(LineHandler& handler, bool breakAtNewline) {
+    void verifyBlank(LineHandler& handler, bool break_at_newline) {
         while (true) {
-            auto cc = skipWhitespace(handler, breakAtNewline);
+            auto cc = skipWhitespace(handler, break_at_newline);
             if (!cc.has_value())
                 break;
             char c = *cc;
             if (c == '\n') {
                 // Should only be triggered if break at newline true
+                assert(break_at_newline);
                 break;
             } else if (!std::isspace(c)) {
                 std::stringstream err;
@@ -296,7 +311,7 @@ private:
             out << std::string(indentSize - 2, ' ');
     }
 
-    void printValue(std::stringstream& out, const Value& value, unsigned indents = 0) const {
+    void printValue(std::stringstream& out, const Value& value, unsigned indents = 0, bool can_compact = false) const {
         const auto& type_base = value.getType().getBase();
         Struct* structure = nullptr;
 
@@ -393,13 +408,17 @@ private:
 
                 for (unsigned i = 0; i < agg.getSize(); ++i) {
                     const auto& element = *agg[i];
-                    newline(out, true, e_indents);
+                    if (can_compact && is_struct && i == 0) {
+                        // Use compact form where the first element of the mapping starts on the same line
+                        out << std::string(indentSize - 1, ' ');
+                    } else
+                        newline(out, true, e_indents);
 
                     if (is_struct)
                         printKeyValue(out, (*names)[i], element, e_indents);
                     else {
                         printArrayIndent(out);
-                        printValue(out, element, e_indents);
+                        printValue(out, element, e_indents, true);
                     }
                 }
             } else {
@@ -482,7 +501,7 @@ private:
         }
     }
 
-    unsigned countIndent(LineHandler& handler) const {
+    unsigned countIndent(LineHandler& handler, bool break_at_newline = false) const {
         unsigned indent = 0;
         while (true) {
             auto cc = handler.peek();
@@ -491,30 +510,28 @@ private:
             char c = *cc;
             if (c == '#') { // comment until end of line. count indent on next
                 do {
-                    handler.skip(1);
+                    handler.skip();
                     auto cc1 = handler.peek();
                     if (!cc1.has_value())
                         return 0;
                     c = *cc1;
                 } while (c != '\n');
-                indent = 0; // reset indent because we are on next line
-                continue;
+                continue;  // rehandle the same character without advancing. Punt newline behavior to other case
             } else if (c == ' ') { // YAML only allows space for indents
                 ++indent;
-            } else if (c == '\n') {
-                // Blank line, so its indent is irrelevant
-                indent = 0; // restart for next linestd::tuple<std::string, Value*>
+            } else if (c == '\n' && !break_at_newline) {
+                indent = 0;
             } else // encountered semantically relevant character
-                return indent;
+                break;
             handler.skip();
         }
+        return indent;
     }
 
     std::tuple<Value*, bool> parseValue(LineHandler& handler, unsigned min_indent) {
-        while (true) {
-            auto cc = skipWhitespace(handler, true);
-            if (!cc.has_value())
-                break;
+        unsigned added_indent = countIndent(handler, true);
+        auto cc = handler.peek();
+        if (cc.has_value()) {
             char c = *cc;
 
             // Inline lists or maps
@@ -532,9 +549,9 @@ private:
                 }
                 // If we see a -, then this is a list. Otherwise, it is a map
                 auto cc1 = handler.peek();
-                if (!cc1.has_value())
-                    break; // missing value
-                return parseAgg(handler, next, *cc1 == '-');
+                if (cc1.has_value())
+                    return parseAgg(handler, next, *cc1 == '-');
+                // intentional fallthrough to error after conditional
             }
 
             // Note: true, false are forbidden field names
@@ -547,7 +564,14 @@ private:
             // The special float constants could be difficult, but luckily for us, they all begin with dot (.)
             else if (c == '-' || c == '.' || (c >= '0' && c <= '9'))
                 return {parseNumber(handler), false};
-            return {new String(parseString(handler)), false};
+
+            std::string str = parseString(handler);
+            // if we see a colon after this string but before a newline, we are in a compacted mapping
+            auto got = skipWhitespace(handler, true);
+            if (got.has_value() && *got == ':')
+                return parseAgg(handler, min_indent + added_indent + 1, false, str);
+            else
+                return {new String(str), false};
         }
         throw std::runtime_error("Missing value!");
     }

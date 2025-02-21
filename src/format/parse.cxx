@@ -63,6 +63,7 @@ protected:
 
     class LineHandler {
         std::istream* file;
+        /// Stores the most recently fetched line from the file (if any), so that pLine may point to it.
         std::string fromFile;
         const std::string* pLine;
         unsigned idx;
@@ -82,17 +83,25 @@ protected:
             return IdValidity::INVALID;
         }
 
+        // Requests the next line- for init or if the previous has been exceeded
+        bool queueLine() {
+            if (file == nullptr || !std::getline(*file, fromFile))
+                return false;
+
+            pLine = &fromFile;
+            idx = 0; // reset point to front
+            return true;
+        }
+
     public:
-        LineHandler(const std::string* start_line, unsigned start_idx, std::istream* file):
+        LineHandler(const std::string* start_line, std::istream* file):
             file(file),
+            fromFile(""),
             pLine(start_line),
-            idx(start_idx)
+            idx(0)
         {
-            if (pLine == nullptr && file != nullptr) {
-                // Load the first line
-                idx = 1;
-                peek();
-            }
+            if (start_line == nullptr)
+                queueLine();
         }
 
         /// @brief Returns the next character (with its validity) and moves the string pointer to the next
@@ -145,12 +154,16 @@ protected:
         }
 
         void resetToLineStart() {
+            // Verify that the index state is synced with the line state
+            if (!peek().has_value())
+                return;
+
             // If this is a multi-line approach, we can just go to the beginning of this line
             if (file != nullptr)
                 idx = 0;
-            else if (pLine != nullptr) {
-                // If pLine is nullptr and file is nullptr, then we have reached the end. No more content to parse,
-                // so no need to backtrack any.
+            else {
+                // If there is no file, pLine must not be null. If it was, the earlier peek would have yielded empty.
+                assert(pLine != nullptr);
                 // Otherwise, we need to backtrack to the last newline
                 for (; idx > 0; --idx) {
                     if ((*pLine)[idx] == '\n')
@@ -159,8 +172,8 @@ protected:
             }
         }
 
-        void skip(unsigned delta = 1) {
-            idx += delta;
+        void skip() {
+            ++idx;
         }
         void setIdx(unsigned i) {
             idx = i;
@@ -168,21 +181,22 @@ protected:
 
         /// @brief fetches (but does not advance beyond) the next character.
         std::optional<char> peek() {
-            if (pLine == nullptr) {
-                // fetch a new line
-                if (file == nullptr || !std::getline(*file, fromFile))
-                    return {};
-
-                pLine = &fromFile;
-                idx = 0; // reset point to front
-            }
+            if (pLine == nullptr && !queueLine())
+                return {};
 
             const auto& line = *pLine;
-            if (!line.empty() && idx < line.length())
-                return {line[idx]};
-
-            pLine = nullptr; // reset to ask for new line
-            return {'\n'};
+            // Logically, this loop should never repeat more than twice.
+            while (true) {
+                if (idx < line.length())
+                    return {line[idx]};
+                else if (idx == line.length())
+                    return {'\n'};
+                else {
+                    // fetch a new line
+                    if (!queueLine())
+                        return {};
+                }
+            }
         }
     };
 
@@ -258,7 +272,7 @@ protected:
         if (*c == '+' || *c == '-') {
             sign = (*c == '+');
             // character accepted, move on to next
-            handler.skip(1);
+            handler.skip();
         }
 
         // Next, we check for special nums (inf and nan)
@@ -447,7 +461,7 @@ public:
     /// @brief Parse values from the given file
     /// @param vars the map of pre-existing variables. Also the map new values are saved to
     void parseFile(ValueMap& vars, std::istream& file) noexcept(false) {
-        LineHandler handle(nullptr, 0, &file);
+        LineHandler handle(nullptr, &file);
         parseFile(vars, handle);
     }
 
@@ -457,7 +471,7 @@ public:
     /// @param val the string to parse the value from
     void parseVariable(ValueMap& vars, const std::string& keyval) noexcept(false) {
         const std::string* pstr = &keyval; // need an r-value pointer even though the value should not change
-        LineHandler handle(pstr, 0, nullptr);
+        LineHandler handle(pstr, nullptr);
         auto [key, value] = parseVariable(handle);
         addToMap(vars, key, value);
         verifyBlank(handle); // Verify there is only whitespace or comments after

@@ -26,30 +26,79 @@ TEST_CASE("output", "[yaml]") {
     }
 }
 
+void input_test(Yaml& yaml, std::map<std::string, const Value*>& compare, std::string result) {
+    std::map<std::string, const Value*> read;
+    static_cast<ValueFormat*>(&yaml)->parseVariable(read, result);
+    REQUIRE(read.size() == compare.size());
+    for (const auto& [key, val] : compare) {
+        REQUIRE(read.contains(key));
+        const Value* val2 = read[key];
+        if (!val->equals(*val2)) {
+            std::stringstream failure;
+            failure << "  ";
+            yaml.printFile(failure, read);
+            failure << "!=\n  ";
+            yaml.printFile(failure, compare);
+            FAIL(failure.str());
+        }
+    }
+}
+
+TEST_CASE("input", "[yaml]") {
+    SECTION("long mapping in sequence") {
+        std::vector<std::string> names{"foo", "bar", "baz"};
+        Type t_uint = Type::primitive(DataType::UINT);
+        constexpr unsigned STRUCT_SIZE = 3;
+        std::vector<const Type*> sub_list;
+        for (unsigned i = 0; i < STRUCT_SIZE; ++i)
+            sub_list.push_back(&t_uint);
+        Type mapping = Type::structure(sub_list, names);
+        std::vector<Primitive> prims;
+        std::vector<const Value*> first;
+        std::vector<const Value*> second;
+        for (uint32_t i = 0; i < STRUCT_SIZE * 2; ++i)
+            prims.emplace_back(i);
+        for (unsigned i = 0; i < STRUCT_SIZE * 2; ++i) {
+            auto& vec = (i < STRUCT_SIZE)? first : second;
+            vec.push_back(&prims[i]);
+        }
+
+        Struct idx0(mapping);
+        idx0.addElements(first);
+        Struct idx1(mapping);
+        idx1.addElements(second);
+
+        std::vector<const Value*> sequence_elements;
+        sequence_elements.push_back(&idx0);
+        sequence_elements.push_back(&idx1);
+        Array sequence(mapping, 2);
+        sequence.addElements(sequence_elements);
+
+        std::map<std::string, const Value*> vars;
+        vars["def"] = &sequence;
+        Yaml format;
+        input_test(format, vars,
+            "def:\n"
+            "-\n"
+            "  foo: 0\n"
+            "  bar: 1\n"
+            "  baz: 2\n"
+            "-\n"
+            "  foo: 3\n"
+            "  bar: 4\n"
+            "  baz: 5");
+    }
+}
+
 void circle_test(Yaml& yaml, const std::string& key, Value& value, std::string result) {
     std::map<std::string, const Value*> print;
     std::stringstream out;
     print[key] = &value;
     yaml.printFile(out, print);
     REQUIRE(out.str() == (result + '\n'));
-
     std::map<std::string, const Value*> read;
-    static_cast<ValueFormat*>(&yaml)->parseVariable(read, result);
-    REQUIRE(read.size() == print.size());
-    REQUIRE(read.size() == 1);
-    for (const auto& [key, val] : print) {
-        for (const auto& [key2, val2] : print) {
-            REQUIRE(key == key2);
-            if (!val->equals(*val2)) {
-                std::stringstream failure;
-                failure << "  ";
-                yaml.printFile(failure, read);
-                failure << "!=\n  ";
-                yaml.printFile(failure, print);
-                FAIL(failure.str());
-            }
-        }
-    }
+    read[key] = &value;
+    input_test(yaml, read, result);
 }
 
 // Verify that input -> output -> input preserves data
@@ -130,14 +179,10 @@ TEST_CASE("i/o", "[yaml]") {
     }
 
     SECTION("short mapping in sequence") {
-        std::vector<std::string> names;
-        names.push_back("foo");
-        names.push_back("bar");
+        std::vector<std::string> names{"foo", "bar"};
         Type foo = Type::primitive(DataType::UINT);
         Type bar = Type::primitive(DataType::UINT);
-        std::vector<const Type*> sub_list;
-        sub_list.push_back(&foo);
-        sub_list.push_back(&bar);
+        std::vector<const Type*> sub_list{&foo, &bar};
         Type mapping = Type::structure(sub_list, names);
         std::vector<Primitive> prims;
         std::vector<const Value*> first;
@@ -155,9 +200,7 @@ TEST_CASE("i/o", "[yaml]") {
         Struct idx1(mapping);
         idx1.addElements(second);
 
-        std::vector<const Value*> sequence_elements;
-        sequence_elements.push_back(&idx0);
-        sequence_elements.push_back(&idx1);
+        std::vector<const Value*> sequence_elements{&idx0, &idx1};
         Array sequence(mapping, 2);
         sequence.addElements(sequence_elements);
 
@@ -167,12 +210,8 @@ TEST_CASE("i/o", "[yaml]") {
             "- { foo: 2, bar: 3 }");
     }
 
-
     SECTION("long mapping in sequence") {
-        std::vector<std::string> names;
-        names.push_back("foo");
-        names.push_back("bar");
-        names.push_back("baz");
+        std::vector<std::string> names{"foo", "bar", "baz"};
         Type t_uint = Type::primitive(DataType::UINT);
         constexpr unsigned STRUCT_SIZE = 3;
         std::vector<const Type*> sub_list;
@@ -202,14 +241,58 @@ TEST_CASE("i/o", "[yaml]") {
 
         circle_test(format, "def", sequence,
             "def:\n"
-            "-\n"
-            "  foo: 0\n"
+            "- foo: 0\n"
             "  bar: 1\n"
             "  baz: 2\n"
-            "-\n"
-            "  foo: 3\n"
+            "- foo: 3\n"
             "  bar: 4\n"
             "  baz: 5");
+    }
+
+    SECTION("mapping in mapping") {
+        // Use three because it is long enough that we won't see inline aggregates
+        constexpr unsigned STRUCT_SIZE = 3;
+        // Notably, we must *not* see the compact form: that is only legal for mapping within sequence
+        std::vector<std::string> first_names{"foo", "bar", "baz"};
+        Type t_uint = Type::primitive(DataType::UINT);
+        std::vector<const Type*> bottom_types;
+        for (unsigned i = 0; i < STRUCT_SIZE; ++i)
+            bottom_types.push_back(&t_uint);
+        Type first_type = Type::structure(bottom_types, first_names);
+
+        std::vector<std::string> second_names{"oof", "rab", "zab"};
+        Type second_type = Type::structure(bottom_types, second_names);
+
+        std::vector<std::string> top_names{"first", "second"};
+        std::vector<const Type*> top_types{&first_type, &second_type};
+        Type top_type = Type::structure(top_types, top_names);
+
+        std::vector<const Value*> first_elements;
+        std::vector<const Value*> second_elements;
+        std::vector<Primitive> prims;
+        for (uint32_t i = 0; i < STRUCT_SIZE * 2; ++i)
+            prims.emplace_back(i);
+        // Must push back all of prims before using their addresses in case we needed to expand the vector capacity
+        for (unsigned i = 0; i < STRUCT_SIZE * 2; ++i) {
+            auto& vec = (i < STRUCT_SIZE)? first_elements : second_elements;
+            vec.push_back(&prims[i]);
+        }
+
+        Value* first = first_type.construct(first_elements);
+        Value* second = second_type.construct(second_elements);
+        Struct top(top_type);
+        std::vector<const Value*> top_elements{first, second};
+        top.addElements(top_elements);
+        circle_test(format, "test", top,
+            "test:\n"
+            "  first:\n"
+            "    foo: 0\n"
+            "    bar: 1\n"
+            "    baz: 2\n"
+            "  second:\n"
+            "    oof: 3\n"
+            "    rab: 4\n"
+            "    zab: 5");
     }
 
 }

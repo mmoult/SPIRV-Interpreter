@@ -65,7 +65,7 @@ private:
 
                 last = c;
             }
-            handler.skip(1);
+            handler.skip();
         }
         after:
 

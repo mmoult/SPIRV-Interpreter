@@ -1,161 +1,129 @@
 gl_in:
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.6
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.4
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.95
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
--
-    gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
+-   gl_Position: [ 0.0, 0.0, 0.0, 0.0 ]
     gl_PointSize: 0.0
     gl_ClipDistance: [ 0.0 ]
     gl_CullDistance: [ 0.0 ]
