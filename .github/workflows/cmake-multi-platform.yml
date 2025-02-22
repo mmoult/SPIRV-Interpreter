@@ -1,22 +1,7 @@
-# This workflows file is a derivative of a previous work published at:
-# https://github.com/cristianadam/HelloWorld/blob/master/.github/workflows/build_cmake.yml
-
-# MIT License
-# Copyright (c) 2019-2024 Cristian Adam
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-# documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
-# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
-# persons to whom the Software is furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
-# Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-# WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-# OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
+# © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
 name: CMake on multiple platforms
 
 on:
@@ -26,17 +11,9 @@ on:
   pull_request:
     branches: [ "master" ]
 
-env:
-  CMAKE_VERSION: "3.29.6"
-  NINJA_VERSION: "1.12.1"
-  BUILD_TYPE: Release
-
 jobs:
   build-and-test:
-    name: ${{ matrix.config.name }}
-    runs-on: ${{ matrix.config.os }}
-    outputs:
-      tag: ${{ steps.git.outputs.tag }}
+    runs-on: ${{ matrix.os }}
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this
@@ -44,199 +21,66 @@ jobs:
       fail-fast: false
 
       matrix:
+        build_type: Release
         config:
-        - name: "Windows Latest MSVC"
-          artifact: "Windows-MSVC"
-          os: windows-latest
-          cc: "cl"
-          cxx: "cl"
-          environment_script: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
-        - name: "Windows Latest MinGW"
-          artifact: "Windows-MinGW"
-          os: windows-latest
-          cc: "gcc"
-          cxx: "g++"
+#        - name: "Windows Latest MSVC"
+#          artifact: "Windows-MSVC"
+#          os: windows-latest
+#          cc: "cl"
+#          cxx: "cl"
+#          environment_script: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
+#        - name: "Windows Latest MinGW"
+#          artifact: "Windows-MinGW"
+#          os: windows-latest
+#          cc: "gcc"
+#          cxx: "g++"
         - name: "Ubuntu Latest GCC"
           artifact: "Linux"
           os: ubuntu-latest
           cc: "gcc"
           cxx: "g++"
-        - name: "macOS Latest Clang"
-          artifact: "macOS"
-          os: macos-latest
-          cc: "clang"
-          cxx: "clang++"
+#        - name: "macOS Latest Clang"
+#          artifact: "macOS"
+#          os: macos-latest
+#          cc: "clang"
+#          cxx: "clang++"
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Set reusable strings
+      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be
+      # used throughout the workflow file.
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
     - name: Checkout submodules
+      shell: bash
+      working-directory: ${{ github.workspace }}
       run: git submodule update --init --recursive
 
-    - name: Download Ninja and CMake
-      shell: cmake -P {0}
-      run: |
-        set(cmake_version $ENV{CMAKE_VERSION})
-        set(ninja_version $ENV{NINJA_VERSION})
-
-        message(STATUS "Using host CMake version: ${CMAKE_VERSION}")
-
-        if ("${{ runner.os }}" STREQUAL "Windows")
-          set(ninja_suffix "win.zip")
-          set(cmake_suffix "windows-x86_64.zip")
-          set(cmake_dir "cmake-${cmake_version}-windows-x86_64/bin")
-        elseif ("${{ runner.os }}" STREQUAL "Linux")
-          set(ninja_suffix "linux.zip")
-          set(cmake_suffix "linux-x86_64.tar.gz")
-          set(cmake_dir "cmake-${cmake_version}-linux-x86_64/bin")
-        elseif ("${{ runner.os }}" STREQUAL "macOS")
-          set(ninja_suffix "mac.zip")
-          set(cmake_suffix "macos-universal.tar.gz")
-          set(cmake_dir "cmake-${cmake_version}-macos-universal/CMake.app/Contents/bin")
-        endif()
-
-        set(ninja_url "https://github.com/ninja-build/ninja/releases/download/v${ninja_version}/ninja-${ninja_suffix}")
-        file(DOWNLOAD "${ninja_url}" ./ninja.zip SHOW_PROGRESS)
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ninja.zip)
-
-        set(cmake_url "https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cmake-${cmake_version}-${cmake_suffix}")
-        file(DOWNLOAD "${cmake_url}" ./cmake.zip SHOW_PROGRESS)
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./cmake.zip)
-
-        # Add to PATH environment variable
-        file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}/${cmake_dir}" cmake_dir)
-        set(path_separator ":")
-        if ("${{ runner.os }}" STREQUAL "Windows")
-          set(path_separator ";")
-        endif()
-        file(APPEND "$ENV{GITHUB_PATH}" "$ENV{GITHUB_WORKSPACE}${path_separator}${cmake_dir}")
-
-        if (NOT "${{ runner.os }}" STREQUAL "Windows")
-          execute_process(
-            COMMAND chmod +x ninja
-            COMMAND chmod +x ${cmake_dir}/cmake
-          )
-        endif()
-
     - name: Configure
-      shell: cmake -P {0}
-      run: |
-        set(ENV{CC} ${ { matrix.config.cc } })
-        set(ENV{CXX} ${ { matrix.config.cxx } })
-
-        if ("${ { runner.os } }" STREQUAL "Windows" AND NOT "x${ { matrix.config.environment_script } }" STREQUAL "x")
-          execute_process(
-            COMMAND "${ { matrix.config.environment_script } }" && set
-            OUTPUT_FILE environment_script_output.txt
-          )
-          file(STRINGS environment_script_output.txt output_lines)
-          foreach(line IN LISTS output_lines)
-            if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-              set(ENV{${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
-            endif()
-          endforeach()
-        endif()
-
-        file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}/ninja" ninja_program)
-
-        execute_process(
-          COMMAND ${ { steps.cmake_and_ninja.outputs.cmake_dir } }/cmake
-            -S .
-            -B build
-            -D CMAKE_BUILD_TYPE=${ { matrix.config.build_type } }
-            -G Ninja
-            -D CMAKE_MAKE_PROGRAM=${ninja_program}
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Failure in CMake configure step")
-        endif()
+      # Configure CMake in a 'build' subdirectory.
+      run: >
+        cmake
+        -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ github.workspace }}
+        -G Ninja
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_BUILD_TESTING
 
     - name: Build
-      shell: cmake -P {0}
-      run: |
-        set(ENV{NINJA_STATUS} "[%f/%t %o/sec] ")
+      # Build your program with the given configuration. Note that --config is needed because the default Windows
+      # generator (Visual Studio) is a multi-config generator.
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-        if ("${ { runner.os } }" STREQUAL "Windows" AND NOT "x${ { matrix.config.environment_script } }" STREQUAL "x")
-          file(STRINGS environment_script_output.txt output_lines)
-          foreach(line IN LISTS output_lines)
-            if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-              set(ENV{${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
-            endif()
-          endforeach()
-        endif()
+    - name: Tests Unit
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}/test
+      run: tests
 
-        execute_process(
-          COMMAND ${ { steps.cmake_and_ninja.outputs.cmake_dir } }/cmake --build build
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Failure in Ninja build step")
-        endif()
-
-    - name: Test
-      shell: cmake -P {0}
-      run: |
-        execute_process(
-          COMMAND tests
-          WORKING_DIRECTORY build/test
-          RESULT_VARIABLE result
-          OUTPUT_VARIABLE output
-          ERROR_VARIABLE output
-          ECHO_OUTPUT_VARIABLE ECHO_ERROR_VARIABLE
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Running unit tests failed!")
-        endif()
-
-        execute_process(
-          COMMAND example-runner.py
-          WORKING_DIRECTORY build/test
-          RESULT_VARIABLE result
-          OUTPUT_VARIABLE output
-          ERROR_VARIABLE output
-          ECHO_OUTPUT_VARIABLE ECHO_ERROR_VARIABLE
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Running integration tests failed!")
-        endif()
-
-    - name: Install Strip
-      run: cmake --install build --prefix instdir --strip
-
-    - name: Pack
-      working-directory: instdir
-      run: cmake -E tar cfv ../${{ matrix.config.artifact }}-${{ steps.git.outputs.tag }}.7z --format=7zip .
-
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        path: ./${{ matrix.config.artifact }}-${{ steps.git.outputs.tag }}.7z
-        name: ${{ matrix.config.artifact }}-${{ steps.git.outputs.tag }}.7z
-
-
-  release:
-    if: contains(github.ref, 'tags/v')
-    runs-on: ubuntu-latest
-    needs: build-and-test
-
-    steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: release-with-dirs
-
-    - name: Fixup artifacts
-      run: |
-        mkdir release
-        mv release-with-dirs/*/* release/
-
-    - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ needs.build.outputs.tag }}
-        files: release/*
-        draft: false
-        prerelease: false
+    - name: Tests Integration
+      working-directory: ${{ github.workspace }}/test
+      run: example-runner.py
