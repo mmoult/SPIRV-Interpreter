@@ -13,7 +13,7 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ${{ matrix.config.os }}
+    runs-on: ${{ matrix.os }}
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this
@@ -30,7 +30,7 @@ jobs:
         - llvm
         - gcc
         include:
-        - os: "windows-2022"
+        - os: "windows-latest"
           compiler: "msvc"
 
     steps:
@@ -42,7 +42,7 @@ jobs:
     - name: Setup Cpp (C++ / C)
       uses: aminya/setup-cpp@v0.46.2
       with:
-        compiler: ${{ matrix.config.compiler }}
+        compiler: ${{ matrix.compiler }}
         cmake: true
         ninja: true
 
@@ -61,10 +61,10 @@ jobs:
         -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ github.workspace }}
         -G Ninja
-        -DCMAKE_CXX_COMPILER=${{ matrix.config.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.config.c_compiler }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TESTING=ON
-        -DCMAKE_BUILD_TYPE=${{ matrix.config.build_type }}
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
     - name: Build
       # Build your program with the given configuration.
