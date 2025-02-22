@@ -68,14 +68,14 @@ jobs:
         -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ github.workspace }}
         -G Ninja
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TESTING
+        -DCMAKE_CXX_COMPILER=${{ matrix.config.cpp_compiler }}
+        -DCMAKE_C_COMPILER=${{ matrix.config.c_compiler }}
+        -DCMAKE_BUILD_TESTING=ON
 
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows
       # generator (Visual Studio) is a multi-config generator.
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.config.build_type }}
 
     - name: Tests Unit
       working-directory: ${{ steps.strings.outputs.build-output-dir }}/test
