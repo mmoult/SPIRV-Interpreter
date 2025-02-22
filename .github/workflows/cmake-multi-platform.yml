@@ -32,8 +32,11 @@ env:
   BUILD_TYPE: Release
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  build-and-test:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    outputs:
+      tag: ${{ steps.git.outputs.tag }}
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this
@@ -42,40 +45,32 @@ jobs:
 
       matrix:
         config:
-        - {
-            name: "Windows Latest MSVC", artifact: "Windows-MSVC",
-            os: windows-latest,
-            cc: "cl", cxx: "cl",
-            environment_script: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
-          }
-        - {
-            name: "Windows Latest MinGW", artifact: "Windows-MinGW",
-            os: windows-latest,
-            cc: "gcc", cxx: "g++"
-          }
-        - {
-            name: "Ubuntu Latest GCC", artifact: "Linux",
-            os: ubuntu-latest,
-            cc: "gcc", cxx: "g++"
-          }
-        - {
-            name: "macOS Latest Clang", artifact: "macOS",
-            os: macos-latest,
-            cc: "clang", cxx: "clang++"
-          }
+        - name: "Windows Latest MSVC"
+          artifact: "Windows-MSVC"
+          os: windows-latest
+          cc: "cl"
+          cxx: "cl"
+          environment_script: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
+        - name: "Windows Latest MinGW"
+          artifact: "Windows-MinGW"
+          os: windows-latest
+          cc: "gcc"
+          cxx: "g++"
+        - name: "Ubuntu Latest GCC"
+          artifact: "Linux"
+          os: ubuntu-latest
+          cc: "gcc"
+          cxx: "g++"
+        - name: "macOS Latest Clang"
+          artifact: "macOS"
+          os: macos-latest
+          cc: "clang"
+          cxx: "clang++"
 
     steps:
     - uses: actions/checkout@v4
-
     - name: Checkout submodules
-      id: git
-      shell: cmake -P {0}
-      run: |
-        if (${{github.ref}} MATCHES "tags/v(.*)")
-            file(APPEND "$ENV{GITHUB_OUTPUT}" "tag=${CMAKE_MATCH_1}\n")
-        else()
-            file(APPEND "$ENV{GITHUB_OUTPUT}" "tag=${{github.run_id}}\n")
-        endif()
+      run: git submodule update --init --recursive
 
     - name: Download Ninja and CMake
       shell: cmake -P {0}
