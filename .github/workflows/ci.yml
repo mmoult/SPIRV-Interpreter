@@ -61,10 +61,8 @@ jobs:
         -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ github.workspace }}
         -G Ninja
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TESTING=ON
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_BUILD_TESTING=ON
 
     - name: Build
       # Build your program with the given configuration.
@@ -72,8 +70,8 @@ jobs:
 
     - name: Tests Unit
       working-directory: ${{ steps.strings.outputs.build-output-dir }}/test
-      run: tests
+      run: ./tests
 
     - name: Tests Integration
       working-directory: ${{ github.workspace }}/test
-      run: example-runner.py
+      run: ./example-runner.py
