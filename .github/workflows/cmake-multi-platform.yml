@@ -22,31 +22,30 @@ jobs:
 
       matrix:
         build_type: [ Release ]
-        config:
-#        - name: "Windows Latest MSVC"
-#          artifact: "Windows-MSVC"
-#          os: windows-latest
-#          cc: "cl"
-#          cxx: "cl"
-#          environment_script: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
-#        - name: "Windows Latest MinGW"
-#          artifact: "Windows-MinGW"
-#          os: windows-latest
-#          cc: "gcc"
-#          cxx: "g++"
-        - name: "Ubuntu Latest GCC"
-          artifact: "Linux"
-          os: ubuntu-latest
-          cc: "gcc"
-          cxx: "g++"
-#        - name: "macOS Latest Clang"
-#          artifact: "macOS"
-#          os: macos-latest
-#          cc: "clang"
-#          cxx: "clang++"
+        os:
+        - windows-latest
+        - ubuntu-latest
+        - macos-latest
+        compiler:
+        - llvm
+        - gcc
+        include:
+        - os: "windows-2022"
+          compiler: "msvc"
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout w/ submodules
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      uses: actions/checkout@v4
+      run: git submodule update --init --recursive
+
+    - name: Setup Cpp (C++ / C)
+      uses: aminya/setup-cpp@v0.46.2
+      with:
+        compiler: ${{ matrix.config.compiler }}
+        cmake: true
+        ninja: true
 
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be
@@ -55,11 +54,6 @@ jobs:
       shell: bash
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-
-    - name: Checkout submodules
-      shell: bash
-      working-directory: ${{ github.workspace }}
-      run: git submodule update --init --recursive
 
     - name: Configure
       # Configure CMake in a 'build' subdirectory.
@@ -71,11 +65,11 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.config.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.config.c_compiler }}
         -DCMAKE_BUILD_TESTING=ON
+        -DCMAKE_BUILD_TYPE=${{ matrix.config.build_type }}
 
     - name: Build
-      # Build your program with the given configuration. Note that --config is needed because the default Windows
-      # generator (Visual Studio) is a multi-config generator.
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.config.build_type }}
+      # Build your program with the given configuration.
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
 
     - name: Tests Unit
       working-directory: ${{ steps.strings.outputs.build-output-dir }}/test
