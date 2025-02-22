@@ -34,11 +34,10 @@ jobs:
           compiler: "msvc"
 
     steps:
-    - name: Checkout w/ submodules
-      shell: bash
-      working-directory: ${{ github.workspace }}
+    - name: Checkout
       uses: actions/checkout@v4
-      run: git submodule update --init --recursive
+      with:
+        submodules: 'true'
 
     - name: Setup Cpp (C++ / C)
       uses: aminya/setup-cpp@v0.46.2
