@@ -3,11 +3,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 cmake_minimum_required(VERSION 3.28)
+message(STATUS "Using CMake version: ${CMAKE_VERSION}")
 
 project(SPIRV-Interpreter CXX)
 
 # Set the version of C++ for the project
 set(CMAKE_CXX_STANDARD 20)
+message(STATUS "Compiling with: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)

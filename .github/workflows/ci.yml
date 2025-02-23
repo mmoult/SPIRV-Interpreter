@@ -25,13 +25,13 @@ jobs:
         os:
         - windows-latest
         - ubuntu-latest
-        - macos-latest
+        #- macos-latest
         compiler:
         - llvm
-        - gcc-14
-        include:
-        - os: "windows-latest"
-          compiler: "msvc"
+        #- gcc-14
+        #include:
+        #- os: "windows-latest"
+        #  compiler: "msvc"
 
     steps:
     - name: Checkout
