@@ -19,7 +19,7 @@ import spv.program;
 import spv.raySubstage;
 import value.raytrace.shaderBindingTable;
 
-constexpr auto VERSION = "0.8.0";
+constexpr auto VERSION = "0.9.0";
 
 enum ReturnCode : int {
     OK = 0,
@@ -36,8 +36,8 @@ enum ReturnCode : int {
 Yaml yaml;
 Json json;
 const unsigned NUM_FORMATS = 2;
-std::string format_names[] = {"yaml", "json"};
-ValueFormat* format_vals[] = {&yaml, &json};
+std::string format_names[] = {"yaml", "json", "yml"};
+ValueFormat* format_vals[] = {&yaml, &json, &yaml};
 
 ValueFormat* determine_format(const std::string& file_name, ValueFormat* preference, bool exact = false) {
     std::string to_match = file_name;
@@ -273,7 +273,8 @@ int main(int argc, char* argv[]) {
         std::cout << "https://github.com/mmoult/SPIRV-Interpreter" << std::endl;
 #define STRINGIZE(x) #x
 #define STRINGIZE_VALUE_OF(x) STRINGIZE(x)
-        std::cout << "Commit hash: " << STRINGIZE_VALUE_OF(HASH) << std::endl;
+        std::cout << "Latest commit hash: " << STRINGIZE_VALUE_OF(HASH) << std::endl;
+        std::cout << "Built on: " << STRINGIZE_VALUE_OF(BUILD_DATE) << std::endl;
 #undef STRINGIZE_VALUE_OF
 #undef STRINGIZE
         return ReturnCode::INFO;
