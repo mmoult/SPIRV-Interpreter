@@ -28,7 +28,7 @@ jobs:
         - macos-latest
         compiler:
         - llvm
-        - gcc
+        - gcc-14
         include:
         - os: "windows-latest"
           compiler: "msvc"
@@ -62,7 +62,7 @@ jobs:
         -S ${{ github.workspace }}
         -G Ninja
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DCMAKE_BUILD_TESTING=ON
+        -DBUILD_TESTING=ON
 
     - name: Build
       # Build your program with the given configuration.

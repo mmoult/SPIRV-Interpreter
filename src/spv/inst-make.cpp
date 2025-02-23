@@ -11,6 +11,7 @@ module;
 #include <cstdint>
 #include <functional>
 #include <limits> // for nan
+#include <numbers>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -2123,9 +2124,9 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450Fract: // 10
         TYPICAL_E_UNARY_OP(FLOAT, a->data.fp32 - std::floor(a->data.fp32));
     case GLSLstd450Radians: // 11
-        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * M_PI / 180.0));
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * std::numbers::pi / 180.0));
     case GLSLstd450Degrees: // 12
-        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * 180.0 / M_PI));
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * 180.0 / std::numbers::pi));
     case GLSLstd450Sin: // 13
         TYPICAL_E_UNARY_OP(FLOAT, std::sin(a->data.fp32));
     case GLSLstd450Cos: // 14
