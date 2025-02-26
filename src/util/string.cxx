@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
+#include <algorithm>  // for max
+#include <cassert>
 #include <cmath>
 #include <string>
 #include <sstream>
@@ -25,88 +27,126 @@ export std::string repeated_string(const unsigned num, const std::string& str) {
 /// Regular streaming is prone to truncation (note: not rounding), which confuses the interpreter's equivalence
 /// algorithm.
 /// @param out where to print the string representation of float, fp
-/// @param fp the float to print. Should not be NaN or Inf!
+/// @param fp the float to print. Must not be NaN or infinite!
 export void print_float(std::stringstream& out, double fp) {
+    assert(!std::isnan(fp));
+    assert(!std::isinf(fp));
+    // The number of precision digits to print. A float has roughly 5 digits after the first nonzero. Print through
+    // either 1 digit after the decimal or prec_rem after the first relevant digit, whichever comes *last*.
+    constexpr unsigned PRECISION_DIGITS = 6;
+    // The number of 0s before we use scientific notation for subnormals.
+    constexpr unsigned DIGITS_TO_SCIENTIFIC = 5;
+
     if (std::signbit(fp)) {
         fp = std::abs(fp);
         out << "-";
     }
 
-    double digit = 1e-4;
-    unsigned scientific = (fp <= digit && fp > 0.0)? 4 : 0;
-    if (scientific == 0) {
-        digit = 1.0;
-        // Multiply digit by 10 until it is at least the current float divided by 10
-        while (true) {
-            if (digit > fp / 10.0)
-                break;
-            digit *= 10.0;
-        }
-    } else {
-        // similarly to the non-scientific case, work down until we find where the digits begin
-        while (digit > fp) {
-            digit /= 10.0;
-            ++scientific;
-        }
-    }
+    // Converted digit characters. Does *not* include the decimal point character. Thus, each must be 0..=9
+    std::vector<char> digits;
+    // The decimal comes after this character index. For example:
+    //   digits = {0, 0}
+    //   dec_idx = 0
+    // => 0.0
+    unsigned dec_idx = 0;
 
-    unsigned precStart = 6;
-    unsigned precRem = precStart;  // the number of precision digits to print. Don't go beyond 6 after decimal
-    std::vector<char> toOut;
-    unsigned afterDec = 0;
+    double digit = 1.0;
+    // Multiply digit by 10 until it is at least the current float divided by 10
     while (true) {
-        // Even in the trivial case, we must print 0.0
-        for (unsigned i = 1; i < 11; ++i) {
-            // TODO: check the edge behavior. I assume that if i*digit >= max, then inf >= fp
-            if ((i * digit > fp) || (i == 10)) {
-                unsigned ii = i - 1;
-                fp -= (ii * digit);
-                toOut.push_back('0' + ii);
-                if (precRem > 0 && (precRem < precStart || ii > 0))
-                    --precRem;
+        if (digit > fp / 10.0)
+            break;
+        digit *= 10.0;
+        ++dec_idx;
+    }
+    unsigned scientific = 0;
+
+    unsigned max = std::max(dec_idx + 1, PRECISION_DIGITS);
+    bool prec_start = false;
+    for (; ; digit /= 10.0) {
+        for (unsigned ii = 1; ii < 11; ++ii) {
+            if ((ii * digit > fp) || (ii == 10)) {
+                unsigned i = ii - 1;
+                fp -= (i * digit);
+
+                if (prec_start || i > 0) {
+                    prec_start = true;
+                    digits.push_back('0' + i);
+                } else
+                    ++scientific;
                 break;
             }
         }
-        digit /= 10.0;
-        // should go from 1.0 -> 0.1, but use 0.5 as cut off since it is the middle and allows wiggle room
-        if (digit <= 0.5 && ++afterDec > 1 && (fp == 0.0 || precRem == 0)) {
-            // We are done! Round the remaining value, if any
-            if (fp >= (digit * 5.0)) {
-                unsigned at = 1;
-                for (; at < toOut.size(); ++at) {
-                    unsigned i = toOut.size() - at;
-                    if (toOut[i] != '9') {
-                        toOut[i]++;
-                        break;
-                    } else
-                        toOut[i] = '0';
-                }
-                if (at == toOut.size()) {
-                    out << '1';
-                    --afterDec;
+        if (fp == 0.0) {
+            if (digits.empty())
+                digits.push_back('0');
+            break;
+        }
+
+        if (digits.size() >= max) {
+            // Done creating new characters!
+
+            // Check if we should round up from the remaining value
+            if (fp >= (digit / 2.0)) {
+                for (unsigned at = 1; ; ++at) {
+                    if (at > digits.size()) {
+                        // Rounding went beyond the initial character, eg: 9.999995 -> 10.00000. Insert a leading 1.
+                        // Definitionally, if we reached this point, all characters are 0s. Therefore, we can "push
+                        // front" by replacing the first character and replicating a 0 in back
+                        digits[0] = '1';
+                        digits.push_back('0');
+                        if (scientific > 0)
+                            --scientific;
+                        else
+                            ++dec_idx;
+                    } else {
+                        unsigned i = digits.size() - at;
+                        if (digits[i] == '9') {
+                            digits[i] = '0';
+                            continue;
+                        }
+                        ++digits[i];
+                    }
+                    break;
                 }
             }
-
             break;
         }
     }
+    // We cannot use both scientific and dec_idx at the same time. If either is nonzero, the other must be zero.
+    assert((scientific == 0) || (dec_idx == 0));
 
     // Truncate trailing zeros
-    unsigned max = 1;
-    for (; max < toOut.size() && max < afterDec - 1; ++max) {
-        if (toOut[toOut.size() - max] != '0')
+    max = digits.size() - 1;
+    for (; max > 0; --max) {
+        if (digits[max] != '0') {
             break;
+        }
     }
-    max -= 1;  // since when we break out, we see a nonzero
-    max = toOut.size() - max;
+    ++max;  // exiting indicates the character at index max should be printed
 
-    // Print out what we got (and include the decimal in its place!)
+    // Print out what we got (including the decimal in its place)
+    bool sci_enabled = scientific >= DIGITS_TO_SCIENTIFIC;
+    bool regular;
+    if (!sci_enabled && scientific > 0) {
+        out << "0.";
+        if (scientific > 1)
+            out << std::string(scientific - 1, '0');
+        regular = false;
+    } else
+        regular = true;
     for (unsigned i = 0; i < max; ++i) {
-        out << toOut[i];
-        if (toOut.size() - i == afterDec)
+        out << digits[i];
+        if (i == dec_idx && regular)
             out << '.';
     }
+    if (regular) {
+        // Need at minimum 1 character after the decimal AND 2 total
+        if (max <= dec_idx)
+            out << std::string(dec_idx - max + 1, '0') << ".0";
+        else if (max < 2)
+            out << '0';
 
-    if (scientific > 0)
-        out << "E-" << scientific;
+        if (sci_enabled)
+            out << "E-" << scientific;
+    }
 }
