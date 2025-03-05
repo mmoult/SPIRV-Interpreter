@@ -26,6 +26,8 @@ TEST_CASE("print_float", "[string]") {
     CHECK_F(-4.2829E-7);
     CHECK_F(1000.0);
     CHECK_F(0.01);
+    CHECK_F(28.0);
+    CHECK_F(29.0);
 #undef CHECK_F
 
     CHECK(to_string(1.999996) == "2.0");

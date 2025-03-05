@@ -1287,6 +1287,8 @@ bool Instruction::makeResult(
             if (b->data.fp32 == 0.0) { // divisor is neg or pos zero
                 if (std::isnan(a->data.fp32))
                     return a->data.fp32;
+                if (a->data.fp32 == 0.0)
+                    return std::nanf("1");
                 float ret = std::numeric_limits<float>::infinity();
                 return (std::signbit(b->data.fp32) != std::signbit(a->data.fp32))? -ret: ret;
             }
@@ -1739,7 +1741,7 @@ bool Instruction::makeResult(
         UnOp ufx = [&](const Primitive* a) {
             if (mask == 0)
                 return Primitive(static_cast<uint32_t>(0));
-            uint32_t val = (a->data.u32 & mask) >> offset_p.data.u32;
+            uint32_t val = (a->data.u32 >> offset_p.data.u32) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
             return Primitive(val);
@@ -1747,7 +1749,7 @@ bool Instruction::makeResult(
         UnOp ifx = [&](const Primitive* a) {
             if (mask == 0)
                 return Primitive(static_cast<int32_t>(0));
-            uint32_t val = (a->data.u32 & mask) >> offset_p.data.u32;
+            uint32_t val = (a->data.u32 >> offset_p.data.u32) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
             Primitive prim(-1);
@@ -2166,7 +2168,7 @@ bool Instruction::makeResultGlsl(
     case GLSLstd450Sqrt: // 31
         TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.fp32));
     case GLSLstd450InverseSqrt: // 32
-        TYPICAL_E_UNARY_OP(FLOAT, 1.0f / std::sqrt(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(1.0 / std::sqrt(a->data.fp32)));
     case GLSLstd450Determinant: { // 33
         const Type* res_type = getType(dst_type_at, data);
         Value* ret = res_type->construct();

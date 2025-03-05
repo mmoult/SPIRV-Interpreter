@@ -19,7 +19,7 @@ import spv.program;
 import spv.raySubstage;
 import value.raytrace.shaderBindingTable;
 
-constexpr auto VERSION = "0.9.0";
+constexpr auto VERSION = "0.9.1";
 
 enum ReturnCode : int {
     OK = 0,

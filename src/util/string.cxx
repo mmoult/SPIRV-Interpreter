@@ -115,16 +115,7 @@ export void print_float(std::stringstream& out, double fp) {
     // We cannot use both scientific and dec_idx at the same time. If either is nonzero, the other must be zero.
     assert((scientific == 0) || (dec_idx == 0));
 
-    // Truncate trailing zeros
-    max = digits.size() - 1;
-    for (; max > 0; --max) {
-        if (digits[max] != '0') {
-            break;
-        }
-    }
-    ++max;  // exiting indicates the character at index max should be printed
-
-    // Print out what we got (including the decimal in its place)
+    // Determine the print mode
     bool sci_enabled = scientific >= DIGITS_TO_SCIENTIFIC;
     bool regular;
     if (!sci_enabled && scientific > 0) {
@@ -134,6 +125,18 @@ export void print_float(std::stringstream& out, double fp) {
         regular = false;
     } else
         regular = true;
+
+    // Truncate trailing zeros
+    max = digits.size() - 1;
+    for (; max > 0; --max) {
+        if (digits[max] != '0') {
+            break;
+        }
+    }
+    ++max;  // exiting indicates the character at index max should be printed
+    assert(max >= 1);
+
+    // Print characters collected as final output
     for (unsigned i = 0; i < max; ++i) {
         out << digits[i];
         if (i == dec_idx && regular)
@@ -142,8 +145,8 @@ export void print_float(std::stringstream& out, double fp) {
     if (regular) {
         // Need at minimum 1 character after the decimal AND 2 total
         if (max <= dec_idx)
-            out << std::string(dec_idx - max + 1, '0') << ".0";
-        else if (max < 2)
+            out << std::string(dec_idx - max + 1, '0') << '.';
+        if ((max <= dec_idx + 1) || (max < 2))
             out << '0';
 
         if (sci_enabled)
