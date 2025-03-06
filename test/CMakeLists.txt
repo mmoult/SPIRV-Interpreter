@@ -13,6 +13,7 @@ set_target_properties(tests PROPERTIES OUTPUT_NAME "tests")
 target_sources(tests
     PUBLIC
       format/json-test.cpp
+      format/parse-test.cpp
       format/yaml-test.cpp
       util/compare-test.cpp
       util/string-test.cpp

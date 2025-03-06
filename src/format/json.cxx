@@ -372,7 +372,7 @@ private:
     }
 
 protected:
-    SpecialFloatResult isSpecialFloat(LineHandler& handle) override {
+    SpecialFloatResult isSpecialFloat(LineHandler& handle) const override {
         // JSON parsing handles these cases by itself (within strings)
         return SpecialFloatResult::F_NONE;
     }

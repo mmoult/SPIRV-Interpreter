@@ -577,7 +577,7 @@ private:
     }
 
 protected:
-    SpecialFloatResult isSpecialFloat(LineHandler& handler) override {
+    SpecialFloatResult isSpecialFloat(LineHandler& handler) const override {
         if (handler.matchId(".inf") || handler.matchId(".Inf"))
             return SpecialFloatResult::F_INF;
         if (handler.matchId(".NAN"))

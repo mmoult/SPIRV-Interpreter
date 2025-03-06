@@ -262,7 +262,7 @@ protected:
     /// @brief Parse a number from the given index in the provided line
     /// @param handler the line handler used to parse from
     /// @return the number parsed (could be signed, unsigned, or float)
-    Value* parseNumber(LineHandler& handler) noexcept(false) {
+    Value* parseNumber(LineHandler& handler) const noexcept(false) {
         auto c = handler.peek();
         if (!c.has_value())
             throw std::runtime_error("Missing number!");
@@ -375,52 +375,12 @@ protected:
             }
         } else {
             // float parsing, which may include exponent after the first digit
-            float val = 0;
-            unsigned early_end = end;
-            float move_dec = 0;
-            if (e_sign != 0)
-                early_end = e;
-            for (unsigned ii = idx; ii < early_end; ++ii) {
-                char c = line[ii];
-                if (c >= '0' && c <= '9') {
-                    val *= 10;
-                    val += c - '0';
-                } else if (c == '.') {
-                    unsigned to_move = early_end - (ii + 1);
-                    move_dec = -static_cast<float>(to_move);
-                    continue; // We will move the decimal later
-                }
-            }
-            handler.setIdx(end); // float parsing cannot fail from here out
+            std::string substr = line.substr(idx, end - idx);
+            double val = std::atof(substr.c_str());
             if (!sign)
                 val *= -1;
-            // Process exponent, if any
-            if (e_sign != 0) {
-                int exp = 0;
-                unsigned ii = e + 1; // skip the e
-                // if the exponent was negative, there must be a '-' to skip
-                // if positive, check for an optional sign
-                if (e_sign < 0 || line[ii] == '+')
-                    ++ii;
-                if (!parseIntWithMax(exp, std::numeric_limits<int>::max(), line, ii, end)) {
-                    // If the exponent was out of bounds, we can do some approximation
-                    // Out of bounds positive exponent -> inf
-                    // Out of bounds negative exponent -> 0
-                    // multiply by val to keep the original sign
-                    val *= (e_sign >= 0) ? std::numeric_limits<float>::infinity(): 0.0;
-                    return new Primitive(val);
-                }
-                // Otherwise, the exponent was in bounds, so we can move the decimal appropriately
-                // Relies on signed int having a |min| >= |max|
-                // (Or in other words, loses a miniscule amount of precision for -exp)
-                // In fact, I am confident float cannot hold an exponent large enough to make any
-                // difference here.
-
-                move_dec += exp * (e_sign >= 0? 1 : -1);
-            }
-            // Finally, adjust the decimal (there is a decimal because otherwise we would parse integral)
-            val *= std::pow(10, move_dec);
-            return new Primitive(val);
+            handler.setIdx(end);
+            return new Primitive(static_cast<float>(val));
         }
     }
 
@@ -430,7 +390,7 @@ protected:
     /// @brief Give the derived class an opportunity to handle special floats while parsing a number
     /// @param handle the handle to read from
     /// @return one of none, infinity, or NaN
-    virtual SpecialFloatResult isSpecialFloat(LineHandler& handle) = 0;
+    virtual SpecialFloatResult isSpecialFloat(LineHandler& handle) const = 0;
 
     /// @brief Parse and return a single key-value pair
     /// @param vars variables to save to- a map of names to values
