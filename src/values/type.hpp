@@ -8,6 +8,7 @@
 
 #include <algorithm> // for min
 #include <cassert>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
