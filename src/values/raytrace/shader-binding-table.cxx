@@ -4,18 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <bit>
-#include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <memory>
-#include <sstream>
-#include <stack>
 #include <string>
-#include <tuple>
 #include <vector>
 
-#include "../../external/spirv.hpp"
 #include "../type.hpp"
 #include "../value.hpp"
 export module value.raytrace.shaderBindingTable;

@@ -6,8 +6,6 @@
 #include "node.hpp"
 
 #include <cstdint>
-#include <tuple>
-#include <sstream>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext.hpp>

@@ -6,8 +6,6 @@
 module;
 #include <cassert>
 #include <cstdint>
-#include <map>
-#include <sstream>
 #include <stdexcept>
 
 #include "../../external/spirv.hpp"

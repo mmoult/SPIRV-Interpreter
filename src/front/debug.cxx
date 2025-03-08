@@ -11,7 +11,6 @@ module;
 #include <optional>
 #include <sstream>
 #include <string>
-#include <stdexcept>
 #include <vector>
 
 #include "../spv/data/manager.h"

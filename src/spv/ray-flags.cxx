@@ -19,7 +19,6 @@ public:
         assert(!(opaque() && noOpaque()));
     }
 
-    // TODO remove this
     unsigned get() const {
         return rayFlags;
     }

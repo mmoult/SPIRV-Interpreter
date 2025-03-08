@@ -4,10 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <sstream>
 #include <string>
 #include <stdexcept>
-#include <vector>
 
 #include "type.hpp"
 #include "value.hpp"

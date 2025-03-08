@@ -36,8 +36,8 @@ structures. A best guess approximation is used for the interpreter, which relies
 implementations.
 
 ## Building
-The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16 or `g++`
-version ≥ 14). The source should be platform independent, but little to no testing has been done on Windows or Mac.
+The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16). It is known
+to build on Linux and Windows.
 
 Here are a few build commands to run from the repository's root directory:
 
@@ -69,7 +69,7 @@ Contributions via merge requests are welcome! Contributions should:
 - Be provided under the same license as the project (MPL 2.0).
 - Follow the coding style. We recommend using `clang-format` (see settings at [.clang-format](src/.clang-format)).
 - Be well-documented and have test cases (in `examples` and/or `test` directories).
-- Not break other code. Include the results of running `test/example-runner.py` and `tests` in requests as proof.
+- Not break other code. Run `test/example-runner.py` and `build/test/tests` as proof.
 
 ## License
 The interpreter's novel source is licensed with the MPL v2.0. Full license terms are in [LICENSE.md](LICENSE.md).

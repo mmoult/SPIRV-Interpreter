@@ -16,6 +16,8 @@ export module spv.raySubstage;
 import spv.data.data;
 import spv.frame;
 import spv.instruction;
+import value.aggregate;
+import value.primitive;
 import value.raytrace.accelStruct;
 
 void copy_into(Value* into, std::vector<Primitive>& src) {

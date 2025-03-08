@@ -7,6 +7,7 @@ module;
 #include <algorithm>
 #include <limits>
 #include <tuple>
+#include <vector>
 
 #include <glm/ext.hpp>
 

@@ -6,7 +6,6 @@
 #ifndef UTIL_TRIE_HPP
 #define UTIL_TRIE_HPP
 
-#include <algorithm> // for min
 #include <sstream>
 #include <string>
 #include <tuple>

@@ -6,7 +6,6 @@
 module;
 #include <algorithm>  // for std::max
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <tuple>
 #include <vector>

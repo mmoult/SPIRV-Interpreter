@@ -5,9 +5,7 @@
  */
 module;
 #include <cassert>
-#include <cstdint>
 #include <iostream>
-#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <stack>

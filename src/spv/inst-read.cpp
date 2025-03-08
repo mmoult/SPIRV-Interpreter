@@ -4,14 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <variant>
 #include <vector>
 
 #define SPV_ENABLE_UTILITY_CODE 1

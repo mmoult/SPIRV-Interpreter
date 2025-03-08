@@ -261,8 +261,8 @@ int main(int argc, char* argv[]) {
             "Usage: spirv-run [options] SPV",
             "where 'SPV' is a path to a spv file, which must have an OpEntry instruction.",
             "",
-            "Options may be given in any order or not at all. For all options which accept FILE as an argument,"
-            " \"-\" may be given to use stdin or stdout instead. The list of options is given below:",
+            "Options may be given in any order or not at all. For all options which accept FILE as an argument, "
+            "\"-\" may be given to use stdin or stdout instead. The list of options is given below:",
         };
         parser.printHelp(24, help_intro);
         return ReturnCode::INFO;

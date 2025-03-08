@@ -250,6 +250,9 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
     SIMPLE(RAY_QUERY, rayQuery);
     SIMPLE(IMAGE, image);
     SIMPLE(SAMPLER, sampler);
+    default:
+        assert(false);
+        return nullptr;
     }
 #undef SIMPLE
 }

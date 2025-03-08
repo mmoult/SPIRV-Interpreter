@@ -8,8 +8,7 @@
 
 #include <cassert>
 #include <cstdint>
-#include <tuple>
-#include <sstream>
+#include <vector>
 
 #include <glm/ext.hpp>
 

@@ -14,7 +14,6 @@ module;
 #endif
 
 #include <iostream>
-#include <sstream>
 #include <string>
 
 export module front.console;

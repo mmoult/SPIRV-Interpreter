@@ -4,24 +4,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <array>
-#include <bit>
 #include <cmath>
-#include <cstdint>
-#include <fstream>
-#include <iostream>
 #include <limits>
-#include <map>
-#include <memory>
 #include <string>
-#include <tuple>
+#include <vector>
 
 #include <glm/ext.hpp>
 
-// TODO it would be best for values/ to never import spv/, but here it is inconvenient not to use the flags which SPIR-V
-// set up. In the future, remove this dependency by defining a new enum here which SPIR-V instructions can convert from
-// as needed.
-//#include "../../external/spirv.hpp"
 #include "../type.hpp"
 #include "../value.hpp"
 #include "node.hpp"

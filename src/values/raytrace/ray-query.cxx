@@ -14,7 +14,6 @@ module;
 
 #include "../type.hpp"
 #include "../value.hpp"
-#include "trace.hpp"
 export module value.raytrace.rayQuery;
 import value.raytrace.accelStruct;
 import value.aggregate;

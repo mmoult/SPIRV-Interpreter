@@ -8,7 +8,6 @@
 
 #include <cassert>
 #include <map>
-#include <sstream>
 #include <stdexcept>
 
 #include "type.hpp"

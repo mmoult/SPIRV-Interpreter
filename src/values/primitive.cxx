@@ -8,7 +8,6 @@ module;
 #include <cassert>
 #include <cmath>
 #include <cstdint> // for uint32_t and int32_t
-#include <sstream>
 #include <stdexcept>
 
 #include "type.hpp"
