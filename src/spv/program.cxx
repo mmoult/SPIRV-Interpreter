@@ -12,10 +12,10 @@ module;
 #include <stdexcept>
 #include <vector>
 
-#include <glm/ext.hpp>
+#include "glm/ext.hpp"
 
 #include "data/manager.h"
-#include "../external/spirv.hpp"
+#include "../../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
 #include "../values/raytrace/trace.hpp"

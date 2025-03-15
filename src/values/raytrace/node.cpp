@@ -8,7 +8,7 @@
 #include <cstdint>
 
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/ext.hpp>
+#include "glm/ext.hpp"
 
 #include "../value.hpp"
 #include "trace.hpp"

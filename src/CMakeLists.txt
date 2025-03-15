@@ -50,25 +50,23 @@ target_sources(spv-interp
     spv/inst-read.cpp
     util/trie.cpp
     values/type.cpp
-    #values/raytrace/shader-binding-table.cpp
     values/raytrace/node.cpp
     values/raytrace/trace.cpp
 )
 
-# git rev-parse --short HEAD
-
 set(HASH "" CACHE STRING "Repository hash to insert into version info")
 set(GIT_EXECUTABLE "git" CACHE STRING "The path to a git executable, or just git if on path")
 
-# If the hash is set, skip the generation by using git
+# Detect the git hash unless already provided
 if(HASH STREQUAL "")
+  # git rev-parse --short HEAD
   execute_process(
     COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
     OUTPUT_VARIABLE HASH
-    RESULT_VARIABLE git_success
+    RESULT_VARIABLE git_fail
     ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE
   )
-  if(git_success)
+  if(git_fail)
     message(WARNING "Could not automatically determine version hash. Please set HASH or GIT_EXECUTABLE.")
   endif()
 endif()
@@ -77,7 +75,6 @@ message(STATUS "Latest git commit hash: ${HASH}")
 string(TIMESTAMP TODAY "%Y-%m-%d")
 message(STATUS "Current build date: ${TODAY}")
 
-add_subdirectory(external/glm)
 target_link_libraries(spv-interp glm::glm)
 
 add_executable(spv-run main.cpp)

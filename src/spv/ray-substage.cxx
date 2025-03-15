@@ -8,7 +8,7 @@ module;
 #include <vector>
 
 #include "data/manager.h"
-#include "../external/spirv.hpp"
+#include "../../external/spirv.hpp"
 #include "../values/value.hpp"
 #include "../values/raytrace/trace.hpp"
 #include "../values/raytrace/node.hpp"

@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-#include <glm/ext.hpp>
+#include "glm/ext.hpp"
 
 #include "../value.hpp"
 import util.ternary;

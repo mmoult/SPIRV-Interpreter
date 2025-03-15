@@ -12,7 +12,7 @@ module;
 #include <variant>
 #include <vector>
 
-#include "../external/spirv.hpp"
+#include "../../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
 #include "data/manager.h"

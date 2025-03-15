@@ -8,7 +8,7 @@
 
 #include <limits>
 
-#include <glm/ext.hpp>
+#include "glm/ext.hpp"
 
 #include "../value.hpp"
 #include "node.hpp"

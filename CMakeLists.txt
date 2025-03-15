@@ -14,8 +14,10 @@ message(STATUS "Compiling with: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VE
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     add_subdirectory(src)
+    add_subdirectory(external/glm)
 
     if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
         add_subdirectory(test)
+        add_subdirectory(external/Catch2)
     endif()
 endif()

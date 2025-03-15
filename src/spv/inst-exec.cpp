@@ -14,7 +14,7 @@ module;
 #include <vector>
 
 #define SPV_ENABLE_UTILITY_CODE 1
-#include "../external/spirv.hpp"
+#include "../../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
 #include "../values/raytrace/trace.hpp"

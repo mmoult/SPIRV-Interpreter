@@ -18,9 +18,9 @@ module;
 #include <variant>
 #include <vector>
 
-#include "../external/GLSL.std.450.h"
+#include "../../external/GLSL.std.450.h"
 #define SPV_ENABLE_UTILITY_CODE 1
-#include "../external/spirv.hpp"
+#include "../../external/spirv.hpp"
 #include "../values/raytrace/trace.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"

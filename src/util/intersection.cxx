@@ -9,7 +9,7 @@ module;
 #include <tuple>
 #include <vector>
 
-#include <glm/ext.hpp>
+#include "glm/ext.hpp"
 
 export module util.intersection;
 

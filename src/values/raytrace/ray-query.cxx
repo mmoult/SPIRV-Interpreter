@@ -7,10 +7,10 @@ module;
 
 #include <vector>
 
-#include <glm/mat4x3.hpp>
-#include <glm/vec2.hpp>
-#include <glm/vec3.hpp>
-#include <glm/vec4.hpp>
+#include "glm/mat4x3.hpp"
+#include "glm/vec2.hpp"
+#include "glm/vec3.hpp"
+#include "glm/vec4.hpp"
 
 #include "../type.hpp"
 #include "../value.hpp"

@@ -4,8 +4,6 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 cmake_minimum_required(VERSION 3.28)
 
-add_subdirectory(Catch2)
-
 # These tests can use the Catch2-provided main
 add_executable(tests)
 set_target_properties(tests PROPERTIES OUTPUT_NAME "tests")
