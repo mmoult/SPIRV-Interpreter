@@ -35,7 +35,7 @@ private:
     }
 
 public:
-    RayQuery(): Value(Type::rayQuery()) {}
+    RayQuery() : Value(Type::rayQuery()) {}
 
     void setAccelStruct(AccelStruct& as) {
         accelStruct = as;

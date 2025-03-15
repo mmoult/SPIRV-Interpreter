@@ -6,8 +6,4 @@
 module;
 export module util.ternary;
 
-export enum class Ternary {
-    YES,
-    NO,
-    MAYBE
-};
+export enum class Ternary { YES, NO, MAYBE };

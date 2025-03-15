@@ -17,10 +17,12 @@ protected:
     Type type;
 
 public:
-    explicit Value(const Type& type): type(type) {}
+    explicit Value(const Type& type) : type(type) {}
     virtual ~Value() = default;
 
-    const Type& getType() const { return type; }
+    const Type& getType() const {
+        return type;
+    }
 
     /// @brief Copy the value into this
     ///

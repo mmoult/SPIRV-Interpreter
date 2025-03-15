@@ -7,11 +7,11 @@ module;
 #include <cassert>
 #include <vector>
 
-#include "data/manager.h"
 #include "../../external/spirv.hpp"
-#include "../values/value.hpp"
-#include "../values/raytrace/trace.hpp"
 #include "../values/raytrace/node.hpp"
+#include "../values/raytrace/trace.hpp"
+#include "../values/value.hpp"
+#include "data/manager.hpp"
 export module spv.raySubstage;
 import spv.data.data;
 import spv.frame;
@@ -134,7 +134,7 @@ public:
             assert(var != nullptr);
             var->getVal()->copyFrom(tmin);
         }
-        Primitive customIdx((instance == nullptr)? 0 : instance->getCustomIndex());
+        Primitive customIdx((instance == nullptr) ? 0 : instance->getCustomIndex());
         for (unsigned loc : instanceCustomIndex) {
             Variable* var = dat[loc].getVariable();
             assert(var != nullptr);
@@ -163,12 +163,8 @@ public:
     /// 2) may come from a previous stage (intersection -> ahit, rchit)
     /// 3) may need to be created from the intersection's barycentrics (triangle hit -> ahit, rchit)
     /// 4) may not be needed at all (possible for all stages)
-    [[nodiscard]] Value* setUpHitAttribute(
-        RtStageKind stage,
-        DataView& dat,
-        glm::vec2 barycentrics,
-        Value* hit_attribute
-    ) const {
+    [[nodiscard]] Value*
+    setUpHitAttribute(RtStageKind stage, DataView& dat, glm::vec2 barycentrics, Value* hit_attribute) const {
         if (hitAttribute != 0) {
             Variable* var = dat[hitAttribute].getVariable();
             Value& hit_attrib_val = *var->getVal();

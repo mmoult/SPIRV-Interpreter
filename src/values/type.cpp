@@ -48,9 +48,8 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     }
     case DataType::ARRAY:
     case DataType::STRUCT: {
-        Aggregate* agg = (base == DataType::ARRAY)
-                            ? static_cast<Aggregate*>(new Array(*subElement, subSize))
-                            : static_cast<Aggregate*>(new Struct(*this));
+        Aggregate* agg = (base == DataType::ARRAY) ? static_cast<Aggregate*>(new Array(*subElement, subSize))
+                                                   : static_cast<Aggregate*>(new Struct(*this));
         // try to populate with each of the entries
         if (values != nullptr)
             agg->addElements(*values);
@@ -86,13 +85,13 @@ bool Type::operator==(const Type& rhs) const {
 
     switch (base) {
     default:
-        assert(false); // unknown type!
+        assert(false);  // unknown type!
         return false;
     case DataType::FLOAT:
     case DataType::UINT:
     case DataType::INT:
         return subSize == rhs.subSize;
-    case DataType::STRING: // TODO
+    case DataType::STRING:  // TODO
     case DataType::BOOL:
     case DataType::VOID:
         return true;
@@ -117,7 +116,7 @@ bool Type::operator==(const Type& rhs) const {
     case DataType::FUNCTION:
         return (*subElement == *(rhs.subElement)) && (subList == rhs.subList);
     case DataType::POINTER:
-    case DataType::IMAGE: // Can compare dimensions and other fields in the image itself
+    case DataType::IMAGE:  // Can compare dimensions and other fields in the image itself
         return *subElement == *(rhs.subElement);
     }
 }
@@ -160,8 +159,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
             base_str = "Int";
 
         // Shared logic for other primitives
-        if (other.base == base ||
-            other.base == DataType::UINT) { // UINT -> X
+        if (other.base == base || other.base == DataType::UINT) {  // UINT -> X
             // Select the more specific of precisions
             t.subSize = std::min(subSize, other.subSize);
             break;
@@ -223,7 +221,7 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
             break;
         throw std::runtime_error("Cannot find union of string and non-string types!");
     }
-    // TODO support other types
+        // TODO support other types
     }
     return t;
 }
@@ -236,20 +234,20 @@ Type Type::unionOf(const Type& other) const noexcept(false) {
         return new String(#LOWER);
 
     switch (base) {
-    SIMPLE(FLOAT, float);
-    SIMPLE(UINT, uint);
-    SIMPLE(INT, int);
-    SIMPLE(BOOL, bool);
-    SIMPLE(STRUCT, struct);
-    SIMPLE(ARRAY, array);
-    SIMPLE(STRING, string);
-    SIMPLE(VOID, void);
-    SIMPLE(FUNCTION, function);
-    SIMPLE(POINTER, pointer);
-    SIMPLE(ACCEL_STRUCT, accelStruct);
-    SIMPLE(RAY_QUERY, rayQuery);
-    SIMPLE(IMAGE, image);
-    SIMPLE(SAMPLER, sampler);
+        SIMPLE(FLOAT, float);
+        SIMPLE(UINT, uint);
+        SIMPLE(INT, int);
+        SIMPLE(BOOL, bool);
+        SIMPLE(STRUCT, struct);
+        SIMPLE(ARRAY, array);
+        SIMPLE(STRING, string);
+        SIMPLE(VOID, void);
+        SIMPLE(FUNCTION, function);
+        SIMPLE(POINTER, pointer);
+        SIMPLE(ACCEL_STRUCT, accelStruct);
+        SIMPLE(RAY_QUERY, rayQuery);
+        SIMPLE(IMAGE, image);
+        SIMPLE(SAMPLER, sampler);
     default:
         assert(false);
         return nullptr;

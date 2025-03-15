@@ -60,14 +60,14 @@ private:
                             goto after;
                         c = *cc1;
                     } while (c != '\n');
-                } else if (c != '/') // If c is a slash, it could be the start of a comment
+                } else if (c != '/')  // If c is a slash, it could be the start of a comment
                     return {c};
 
                 last = c;
             }
             handler.skip();
         }
-        after:
+    after:
 
         // If we end and last was / out of comment, it is NOT blank
         if (!in_comment && last == '/')
@@ -116,7 +116,7 @@ private:
                         err << "Unknown escape sequence in JSON string: \\" << c << "!";
                         throw std::runtime_error(err.str());
                     }
-                    continue; // do not fall through to print
+                    continue;  // do not fall through to print
                 }
             } else if (c == '"')
                 break;
@@ -203,8 +203,8 @@ private:
         // JSON doesn't have any kind of literal-forced string, so we must manually escape all characters as they
         // come up.
         out << '"';
-        std::array special{'\b', '\f', '\n', '\r', '\t'};
-        std::array match{"\\b", "\\f", "\\n", "\\r", "\\t"};
+        std::array special {'\b', '\f', '\n', '\r', '\t'};
+        std::array match {"\\b", "\\f", "\\n", "\\r", "\\t"};
         for (unsigned i = 0; i < key.length(); ++i) {
         next_char:
             char c = key[i];
@@ -291,7 +291,7 @@ private:
             bool compress = agg_size > inline_max;
             bool each_line = (is_struct && compress) || (agg_size == 0 && templatize && !is_struct);
             if (!each_line) {
-                for (const auto& element: agg) {
+                for (const auto& element : agg) {
                     if (isNested(*element)) {
                         each_line = true;
                         break;
@@ -327,7 +327,7 @@ private:
             if (each_line || compress)
                 newline(out, false, indents);
             else
-                out << " "; // space the final value from the end brace
+                out << " ";  // space the final value from the end brace
             out << close;
             break;
         }
@@ -361,7 +361,7 @@ private:
             structure = static_cast<const Sampler&>(value).toStruct();
             break;
         }
-        default: // VOID, FUNCTION, RAY_QUERY
+        default:  // VOID, FUNCTION, RAY_QUERY
             throw std::runtime_error("Cannot print JSON for object of unsupported type!");
         }
 

@@ -4,8 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <cctype> // for std::isspace
-#include <cmath> // for std::isinf and std::isnan
+#include <cctype>  // for std::isspace
+#include <cmath>  // for std::isinf and std::isnan
 #include <iostream>
 #include <optional>
 #include <string>
@@ -39,7 +39,7 @@ private:
                 return {};
 
             char c = *cc;
-            if (c == '#') { // comment until end of line
+            if (c == '#') {  // comment until end of line
                 do {
                     auto cc1 = handler.next();
                     if (!cc1.has_value())
@@ -49,7 +49,7 @@ private:
                 if (break_at_newline)
                     return {c};
             } else if (!std::isspace(c) || (break_at_newline && c == '\n'))
-                return {c}; // semantically relevant character
+                return {c};  // semantically relevant character
             handler.skip();
         }
     }
@@ -128,7 +128,7 @@ private:
         // Reset to the start of the line so the next to process has the correct indent count
         handler.resetToLineStart();
         // Now that we are done parsing, add elements and form the type:
-        return {list? constructArrayFrom(elements): constructStructFrom(names, elements), true};
+        return {list ? constructArrayFrom(elements) : constructStructFrom(names, elements), true};
     }
 
     Value* parseInlineAgg(LineHandler& handler, bool list) {
@@ -214,7 +214,7 @@ private:
                 if (first) {
                     first = false;
                     if (c == '"' || c == '\'') {
-                        in_str = (c == '"')? 1 : 2;
+                        in_str = (c == '"') ? 1 : 2;
                         goto next;
                     }
                 }
@@ -257,11 +257,10 @@ private:
             char c = name[i];
             if (i == 0 && std::isdigit(c) && need < SINGLE)
                 need = SINGLE;
-            else if ((
-                c == ':' || c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == '&' || c == '*' ||
-                c == '#' || c == '?' || c == '|' || c == '-' || c == '<' || c == '>' || c == '=' || c == '!' ||
-                c == '%' || c == '@' || c == '\\'
-            ) && need < SINGLE)
+            else if ((c == ':' || c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == '&' || c == '*' ||
+                      c == '#' || c == '?' || c == '|' || c == '-' || c == '<' || c == '>' || c == '=' || c == '!' ||
+                      c == '%' || c == '@' || c == '\\') &&
+                     need < SINGLE)
                 need = SINGLE;
             else if ((c == '\n' || c == '\t' || c == '\'') && need < DOUBLE)
                 need = DOUBLE;
@@ -384,7 +383,7 @@ private:
             // If any subelement is nested, print each on its own line
             bool nested = (is_struct && agg_size > inline_max) || (agg_size == 0 && !is_struct && templatize);
             if (!nested) {
-                for (const auto& element: agg) {
+                for (const auto& element : agg) {
                     if (isNested(*element)) {
                         nested = true;
                         break;
@@ -491,7 +490,7 @@ private:
             structure = static_cast<const Sampler&>(value).toStruct();
             break;
         }
-        default: // VOID, FUNCTION, RAY_QUERY
+        default:  // VOID, FUNCTION, RAY_QUERY
             throw std::runtime_error("Cannot print YAML for object of unsupported type!");
         }
 
@@ -508,7 +507,7 @@ private:
             if (!cc.has_value())
                 return 0;
             char c = *cc;
-            if (c == '#') { // comment until end of line. count indent on next
+            if (c == '#') {  // comment until end of line. count indent on next
                 do {
                     handler.skip();
                     auto cc1 = handler.peek();
@@ -517,11 +516,11 @@ private:
                     c = *cc1;
                 } while (c != '\n');
                 continue;  // rehandle the same character without advancing. Punt newline behavior to other case
-            } else if (c == ' ') { // YAML only allows space for indents
+            } else if (c == ' ') {  // YAML only allows space for indents
                 ++indent;
             } else if (c == '\n' && !break_at_newline) {
                 indent = 0;
-            } else // encountered semantically relevant character
+            } else  // encountered semantically relevant character
                 break;
             handler.skip();
         }

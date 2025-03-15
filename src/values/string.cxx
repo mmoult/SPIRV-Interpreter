@@ -4,8 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <string>
 #include <stdexcept>
+#include <string>
 
 #include "type.hpp"
 #include "value.hpp"
@@ -15,7 +15,7 @@ export class String : public Value {
     std::string internal;
 
 public:
-    explicit String(const std::string& str): Value(Type::string()), internal(str) {}
+    explicit String(const std::string& str) : Value(Type::string()), internal(str) {}
 
     void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
@@ -35,7 +35,7 @@ public:
     }
 
     bool equals(const Value& val) const override {
-        if (!Value::equals(val)) // guarantees matching types
+        if (!Value::equals(val))  // guarantees matching types
             return false;
         const auto& other = static_cast<const String&>(val);
         // I cannot think of why this would be used, but implement it in case...

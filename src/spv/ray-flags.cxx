@@ -13,7 +13,7 @@ export class RayFlags {
     unsigned rayFlags;
 
 public:
-    RayFlags(unsigned flags): rayFlags(flags) {
+    RayFlags(unsigned flags) : rayFlags(flags) {
         // The flags are defined by SPIR-V: spv::RayFlagsMask
         // Do some asserts to verify the value provided is valid:
         assert(!(opaque() && noOpaque()));

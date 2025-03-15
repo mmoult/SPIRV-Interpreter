@@ -7,8 +7,8 @@ module;
 #include <algorithm>  // for max
 #include <cassert>
 #include <cmath>
-#include <string>
 #include <sstream>
+#include <string>
 #include <vector>
 export module util.string;
 
@@ -62,7 +62,7 @@ export void print_float(std::stringstream& out, double fp) {
 
     unsigned max = std::max(dec_idx + 1, PRECISION_DIGITS);
     bool prec_start = false;
-    for (; ; digit /= 10.0) {
+    for (;; digit /= 10.0) {
         for (unsigned ii = 1; ii < 11; ++ii) {
             if ((ii * digit > fp) || (ii == 10)) {
                 unsigned i = ii - 1;
@@ -87,7 +87,7 @@ export void print_float(std::stringstream& out, double fp) {
 
             // Check if we should round up from the remaining value
             if (fp >= (digit / 2.0)) {
-                for (unsigned at = 1; ; ++at) {
+                for (unsigned at = 1;; ++at) {
                     if (at > digits.size()) {
                         // Rounding went beyond the initial character, eg: 9.999995 -> 10.00000. Insert a leading 1.
                         // Definitionally, if we reached this point, all characters are 0s. Therefore, we can "push

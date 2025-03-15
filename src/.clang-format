@@ -3,19 +3,23 @@ BasedOnStyle: WebKit
 IndentWidth: 4
 TabWidth: 4
 AccessModifierOffset: -4
-ContinuationIndentWidth: 8
+ContinuationIndentWidth: 4
 
 AlignEscapedNewlines: DontAlign
 AlignOperands: Align
+AlignAfterOpenBracket: BlockIndent
 AllowAllArgumentsOnNextLine: false
 AllowAllConstructorInitializersOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortFunctionsOnASingleLine: Empty
 BinPackArguments: false
 BinPackParameters: false
+BreakAfterReturnType: Automatic
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Attach
-BreakConstructorInitializers: BeforeColon
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: BeforeComma
+BreakTemplateDeclarations: Yes
 ColumnLimit: 120
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 Cpp11BracedListStyle: true
@@ -23,9 +27,13 @@ EmptyLineBeforeAccessModifier: Leave
 FixNamespaceComments: true
 InsertTrailingCommas: Wrapped
 MaxEmptyLinesToKeep: 2
+PackConstructorInitializers: NextLine
+#QualifierOrder: [volatile, restrict, static, friend, inline, constexpr, type, const]
 ReflowComments: true
 SpaceAfterTemplateKeyword: false
-SpaceBeforeCtorInitializerColon: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeRangeBasedForLoopColon: true
 SpaceInEmptyBlock: false
 SpacesBeforeTrailingComments: 2
 ...

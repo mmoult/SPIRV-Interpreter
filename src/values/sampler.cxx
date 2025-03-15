@@ -21,7 +21,7 @@ export class Sampler : public Value {
     inline static const std::vector<std::string> names {"lod", "image"};
 
 public:
-    Sampler(Type t): Value(t), defaultLod(0), image(t.getElement()) {};
+    Sampler(Type t) : Value(t), defaultLod(0), image(t.getElement()) {};
 
     void copyReinterp(const Value& other) noexcept(false) override {
         if (!tryCopyFrom(other))
@@ -44,7 +44,7 @@ public:
         // Can copy from a struct, assuming that the correct fields are present
         if (const auto& new_type = new_val.getType(); new_type.getBase() == DataType::STRUCT) {
             copyFrom(static_cast<const Struct&>(new_val));
-            return; // will either throw an exception or do a successful copy
+            return;  // will either throw an exception or do a successful copy
         }
 
         Value::copyFrom(new_val);  // verifies matching types

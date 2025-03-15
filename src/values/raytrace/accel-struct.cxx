@@ -39,9 +39,8 @@ private:
     unsigned triangleIndex = 0;
     unsigned proceduralIndex = 0;
 
-    inline static const std::vector<std::string> names {
-        "tlas", "box_nodes", "instance_nodes", "triangle_nodes", "procedural_nodes", "shader_binding_table"
-    };
+    inline static const std::vector<std::string>
+        names {"tlas", "box_nodes", "instance_nodes", "triangle_nodes", "procedural_nodes", "shader_binding_table"};
 
     Trace trace;
 
@@ -58,7 +57,7 @@ private:
     }
 
 public:
-    AccelStruct(): Value(Type::accelStruct()) {}
+    AccelStruct() : Value(Type::accelStruct()) {}
     ~AccelStruct() {
         if (ownNodes) {
             for (unsigned i = 0; i < bvh.size(); ++i)
@@ -68,17 +67,17 @@ public:
     // We could clone all nodes and resolve references, but there shouldn't be any need since AccelStructs created from
     // others have a lifetime equal or less than the AccelStruct created from. AccelStructs copied from a struct are
     // definitionally top-level, so we can borrow the nodes for all derivative copies.
-    AccelStruct(const AccelStruct& other):
-        Value(other.type),
-        ownNodes(false),
-        bvh(other.bvh),
-        shaderBindingTable(other.shaderBindingTable),
-        tlas(other.tlas),
-        boxIndex(other.boxIndex),
-        instanceIndex(other.instanceIndex),
-        triangleIndex(other.triangleIndex),
-        proceduralIndex(other.proceduralIndex),
-        trace(other.trace) {}
+    AccelStruct(const AccelStruct& other)
+        : Value(other.type)
+        , ownNodes(false)
+        , bvh(other.bvh)
+        , shaderBindingTable(other.shaderBindingTable)
+        , tlas(other.tlas)
+        , boxIndex(other.boxIndex)
+        , instanceIndex(other.instanceIndex)
+        , triangleIndex(other.triangleIndex)
+        , proceduralIndex(other.proceduralIndex)
+        , trace(other.trace) {}
 
     AccelStruct& operator=(const AccelStruct& other) {
         if (this == &other)
@@ -240,7 +239,7 @@ public:
     /// @param get_committed Type of intersection: committed or candidate.
     /// @return distance between the ray and intersection.
     float getIntersectionT(bool get_committed) const {
-        unsigned index = get_committed? trace.committed : trace.candidate;
+        unsigned index = get_committed ? trace.committed : trace.candidate;
         return trace.candidates[index].hitT;
     }
 
@@ -248,7 +247,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return custom index if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceCustomIndex(bool get_committed) const {
-        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        const Intersection& intersect = trace.candidates[get_committed ? trace.committed : trace.candidate];
         if (intersect.instance != nullptr)
             return static_cast<int>(intersect.instance->getCustomIndex());
         return -1;
@@ -258,7 +257,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return id if the instance exist, otherwise, a negative integer.
     int getIntersectionInstanceId(bool get_committed) const {
-        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        const Intersection& intersect = trace.candidates[get_committed ? trace.committed : trace.candidate];
         if (intersect.instance != nullptr)
             return static_cast<int>(intersect.instance->getId());
         return -1;
@@ -269,7 +268,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return SBT record offset
     unsigned getIntersectionInstanceShaderBindingTableRecordOffset(bool get_committed) const {
-        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        const Intersection& intersect = trace.candidates[get_committed ? trace.committed : trace.candidate];
         assert(intersect.instance != nullptr);
         return intersect.instance->getSbtRecordOffs();
     }
@@ -278,7 +277,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return geometry index.
     int getIntersectionGeometryIndex(bool get_committed) const {
-        unsigned index = get_committed? trace.committed : trace.candidate;
+        unsigned index = get_committed ? trace.committed : trace.candidate;
         return trace.candidates[index].geometryIndex;
     }
 
@@ -286,7 +285,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return primitive index.
     int getIntersectionPrimitiveIndex(bool get_committed) const {
-        unsigned index = get_committed? trace.committed : trace.candidate;
+        unsigned index = get_committed ? trace.committed : trace.candidate;
         return trace.candidates[index].primitiveIndex;
     }
 
@@ -294,7 +293,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return barycentrics.
     glm::vec2 getIntersectionBarycentrics(bool get_committed) const {
-        unsigned index = get_committed? trace.committed : trace.candidate;
+        unsigned index = get_committed ? trace.committed : trace.candidate;
         return trace.candidates[index].barycentrics;
     }
 
@@ -302,7 +301,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return whether the intersection was entered from the front face of a triangle.
     bool getIntersectionFrontFace(bool get_committed) const {
-        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        const Intersection& intersect = trace.candidates[get_committed ? trace.committed : trace.candidate];
         return intersect.type == Intersection::Type::Triangle && intersect.enteredTriangleFrontFace;
     }
 
@@ -317,7 +316,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-space ray direction.
     glm::vec3 getIntersectionObjectRayDirection(bool get_committed) const {
-        unsigned index = get_committed? trace.committed : trace.candidate;
+        unsigned index = get_committed ? trace.committed : trace.candidate;
         return trace.candidates[index].getRayDir(&trace);
     }
 
@@ -325,7 +324,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-space ray origin.
     glm::vec3 getIntersectionObjectRayOrigin(bool get_committed) const {
-        unsigned index = get_committed? trace.committed : trace.candidate;
+        unsigned index = get_committed ? trace.committed : trace.candidate;
         return trace.candidates[index].getRayPos(&trace);
     }
 
@@ -343,7 +342,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return object-to-world matrix.
     glm::mat4x3 getIntersectionObjectToWorld(bool get_committed) const {
-        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        const Intersection& intersect = trace.candidates[get_committed ? trace.committed : trace.candidate];
         assert(intersect.instance != nullptr);
         return removeLastRow(intersect.objToWorld);
     }
@@ -352,7 +351,7 @@ public:
     /// @param get_committed type of intersection: committed or candidate.
     /// @return world-to-object matrix.
     glm::mat4x3 getIntersectionWorldToObject(bool get_committed) const {
-        const Intersection& intersect = trace.candidates[get_committed? trace.committed : trace.candidate];
+        const Intersection& intersect = trace.candidates[get_committed ? trace.committed : trace.candidate];
         assert(intersect.instance != nullptr);
         return removeLastRow(intersect.worldToObj);
     }
@@ -361,7 +360,7 @@ public:
     /// @param get_committed Type of intersection: committed or candidate.
     /// @return intersection type.
     Intersection::Type getIntersectionType(bool get_committed) const {
-        unsigned index = get_committed? trace.committed : trace.candidate;
+        unsigned index = get_committed ? trace.committed : trace.candidate;
         if (index >= trace.candidates.size())
             return Intersection::Type::None;
         return trace.candidates[index].type;

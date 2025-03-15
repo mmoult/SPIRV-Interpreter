@@ -34,22 +34,20 @@ export class Variable : public Valuable {
     /// @brief Construct a new variable directly (instead of through makeVariable)
     /// @param value saved (not copied) as the variable's value. Must be on the heap!
     /// @param storage_class the category which defines this variable's storage/use
-    Variable(Value* value, spv::StorageClass storage_class, bool spec_const):
-        val(value),
-        storage(storage_class),
-        specConst(spec_const) {}
+    Variable(Value* value, spv::StorageClass storage_class, bool spec_const)
+        : val(value), storage(storage_class), specConst(spec_const) {}
 
 public:
-    Variable(const Variable& other):
-            storage(other.storage),
-            name(other.name),
-            builtIn(other.builtIn),
-            specConst(other.specConst),
-            noWrite(other.noWrite) {
+    Variable(const Variable& other)
+        : storage(other.storage)
+        , name(other.name)
+        , builtIn(other.builtIn)
+        , specConst(other.specConst)
+        , noWrite(other.noWrite) {
         val = other.val->getType().construct();
         val->copyFrom(*other.val);
     }
-    Variable& operator= (const Variable&) = delete;
+    Variable& operator=(const Variable&) = delete;
     virtual ~Variable() {
         if (val != nullptr)
             delete val;
@@ -114,7 +112,7 @@ public:
         // Represent this variable with its value, storage class, and if set, name
         // Don't currently display decorations although they could be helpful.
         std::vector<Value*> elements;
-        std::vector<std::string>  names;
+        std::vector<std::string> names;
 
         if (!name.empty()) {
             names.push_back("name");
@@ -139,7 +137,7 @@ export class Function : public Valuable {
     std::string name;
 
 public:
-    Function(Type* type, unsigned location): type(type), location(location) {}
+    Function(Type* type, unsigned location) : type(type), location(location) {}
     virtual ~Function() = default;
 
     void setName(const std::string& new_name) {
@@ -152,7 +150,7 @@ public:
 
     [[nodiscard]] Value* asValue() const override {
         std::vector<Value*> elements;
-        std::vector<std::string>  names;
+        std::vector<std::string> names;
         // Populate the representative struct with three fields:
         // - name (only use if has been set (ie, is not ""))
         // - type
@@ -179,7 +177,7 @@ export struct EntryPoint : public Function {
     unsigned sizeY = 1;
     unsigned sizeZ = 1;
 
-    EntryPoint(Type* type, unsigned location): Function(type, location) {}
+    EntryPoint(Type* type, unsigned location) : Function(type, location) {}
 };
 
 export class Data {
@@ -197,12 +195,12 @@ export class Data {
     DType type;
 
 public:
-    Data(): raw(nullptr), type(DType::UNDEFINED) {};
-    explicit(false) Data(Variable* var): raw(var), type(DType::VARIABLE) {};
-    explicit(false) Data(Function* func): raw(func), type(DType::FUNCTION) {};
-    explicit(false) Data(EntryPoint* entry): raw(entry), type(DType::ENTRY) {};
-    explicit(false) Data(Value* val): raw(val), type(DType::VALUE) {};
-    explicit(false) Data(Type* type): raw(type), type(DType::TYPE) {};
+    Data() : raw(nullptr), type(DType::UNDEFINED) {};
+    explicit(false) Data(Variable* var) : raw(var), type(DType::VARIABLE) {};
+    explicit(false) Data(Function* func) : raw(func), type(DType::FUNCTION) {};
+    explicit(false) Data(EntryPoint* entry) : raw(entry), type(DType::ENTRY) {};
+    explicit(false) Data(Value* val) : raw(val), type(DType::VALUE) {};
+    explicit(false) Data(Type* type) : raw(type), type(DType::TYPE) {};
 
     Data& operator=(Data& other) = delete;
 

@@ -23,12 +23,12 @@ std::string to_signed_string(float x) {
 }
 
 enum class CompareMode {
-    TYPICAL, // expect each digit to match
+    TYPICAL,  // expect each digit to match
     // If there is a discrepancy in typical, we need higher = 0 and the lower = 9 for all sigfigs
     // For example, 2.000004 and 1.999995
     X_HI,
     Y_HI,
-    ZERO, // If the sign differs. Eg: +0.000004 and -0.000004
+    ZERO,  // If the sign differs. Eg: +0.000004 and -0.000004
 };
 /// Returns (hi, lo) based on the given comparison mode and inputs
 std::tuple<char, char> select(CompareMode diff, char xc, char yc) {
@@ -40,13 +40,13 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
     bool xnan = std::isnan(x);
     bool ynan = std::isnan(y);
     if (xnan || ynan)
-        return xnan == ynan; // nan != nan, but we'll allow it here
+        return xnan == ynan;  // nan != nan, but we'll allow it here
     if (x == y)
         return true;
     bool xinf = std::isinf(x);
     bool yinf = std::isinf(y);
     if (xinf || yinf)
-        return false; // If either are inf, they must == each other
+        return false;  // If either are inf, they must == each other
 
     // Compare sigfigs via string. Slow, but should do the job
     std::string xf = to_signed_string(x);
@@ -115,14 +115,14 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
                     hi = xc;
                     lo = yc;
                     diff = CompareMode::X_HI;
-                } else { // yc > xc
+                } else {  // yc > xc
                     hi = yc;
                     lo = xc;
                     diff = CompareMode::Y_HI;
                 }
                 if (hi - lo > 1)
                     return false;
-            } // if a match, do nothing
+            }  // if a match, do nothing
         } else if (diff == CompareMode::ZERO) {
             if (xc != yc || xc != '0')
                 return false;
@@ -141,4 +141,4 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
     // each is 0. This breaks the needed pattern.
     return diff == CompareMode::TYPICAL || diff == CompareMode::ZERO;
 }
-}; // namespace Compare
+};  // namespace Compare

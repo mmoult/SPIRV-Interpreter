@@ -14,11 +14,11 @@ module;
 
 #include "glm/ext.hpp"
 
-#include "data/manager.h"
 #include "../../external/spirv.hpp"
+#include "../values/raytrace/trace.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
-#include "../values/raytrace/trace.hpp"
+#include "data/manager.hpp"
 export module spv.program;
 import format.parse;
 import front.debug;
@@ -45,7 +45,7 @@ export class Program {
     std::vector<unsigned> specs;
     // builtin variables we need to catch
     unsigned localInvocIdx = 0;
-    unsigned localInvocId  = 0;
+    unsigned localInvocId = 0;
     unsigned globalInvocId = 0;
     unsigned workGroupSize = 0;
 
@@ -108,12 +108,12 @@ export class Program {
         }
 
     public:
-        ProgramLoader(uint8_t* buffer, int length): buffer(buffer), length(length), endian(true), idx(0) {}
+        ProgramLoader(uint8_t* buffer, int length) : buffer(buffer), length(length), endian(true), idx(0) {}
 
         uint32_t parse(std::vector<Instruction>& insts) noexcept(false) {
 #define REQUIRE(COND, MSG) \
-if (!(COND)) \
-    throw std::runtime_error(MSG);
+    if (!(COND)) \
+        throw std::runtime_error(MSG);
 
             REQUIRE(determineEndian(), "Corrupted binary! Magic number missing.");
             REQUIRE(skip(2), "Corrupted binary! Version and/or generator missing.");
@@ -135,7 +135,7 @@ if (!(COND)) \
                 uint16_t opcode = control & 0xffff;
 
                 std::vector<uint32_t> words;
-                for (; word_count > 1; --word_count) { // first word in count is the control (already parsed)
+                for (; word_count > 1; --word_count) {  // first word in count is the control (already parsed)
                     uint32_t word;
                     REQUIRE(getWord(word), "Corrupted binary! Missing data in instruction stream!");
                     words.push_back(word);
@@ -160,9 +160,9 @@ if (!(COND)) \
 
     unsigned init(ValueMap& provided, DataView& global, RayTraceSubstage* stage, bool single_invoc) {
         unsigned entry = 0;
-        std::vector<unsigned>& ins = (stage == nullptr)? this->ins : stage->ins;
-        std::vector<unsigned>& outs = (stage == nullptr)? this->outs : stage->outs;
-        std::vector<unsigned>& specs = (stage == nullptr)? this->specs : stage->specs;
+        std::vector<unsigned>& ins = (stage == nullptr) ? this->ins : stage->ins;
+        std::vector<unsigned>& outs = (stage == nullptr) ? this->outs : stage->outs;
+        std::vector<unsigned>& specs = (stage == nullptr) ? this->specs : stage->specs;
 
         auto process_visible_io = [&](const Instruction& inst) {
             inst.ioGen(global, ins, outs, specs, provided, insts[entry]);
@@ -173,8 +173,8 @@ if (!(COND)) \
         unsigned local_idx_loc = 0;
         unsigned local_id_loc = 0;
         unsigned global_id_loc = 0;
-        bool entry_found = false; // whether the entry instruction has been found
-        bool static_ctn = true; // whether we can construct results statically (until first OpFunction)
+        bool entry_found = false;  // whether the entry instruction has been found
+        bool static_ctn = true;  // whether we can construct results statically (until first OpFunction)
         for (; location < insts.size(); ++location) {
             Instruction& inst = insts[location];
             auto opcode = inst.getOpcode();
@@ -273,7 +273,7 @@ if (!(COND)) \
         unsigned updated = index;
         std::vector<RayTraceSubstage>* list = nullptr;
         switch (stage) {
-        default: // including NONE
+        default:  // including NONE
             throw std::runtime_error("Cannot get raytracing substage for unsupported type!");
             break;
         case RtStageKind::ANY_HIT:
@@ -313,7 +313,7 @@ if (!(COND)) \
         const InstanceNode* instance = nullptr;
         glm::vec2 barycentrics(0.0);
         if (stage != RtStageKind::MISS) {
-            Intersection& cand = (stage == RtStageKind::CLOSEST)? as.getCommitted() : as.getCandidate();
+            Intersection& cand = (stage == RtStageKind::CLOSEST) ? as.getCommitted() : as.getCandidate();
             instance = cand.instance;
             barycentrics = cand.barycentrics;
         }
@@ -350,7 +350,7 @@ if (!(COND)) \
     /// @return the shader binding table to process (if any), otherwise, nullptr
     static const ShaderBindingTable* checkInputs(
         ValueMap& provided,
-        DataView& global, // needed for fetching variables
+        DataView& global,  // needed for fetching variables
         std::vector<unsigned>& ins,
         std::vector<unsigned>& specs,
         bool unused
@@ -390,7 +390,7 @@ if (!(COND)) \
                     // to parse and resolve.
                     const Value& now_val = *var->getVal();
                     if (now_val.getType().getBase() == DataType::ACCEL_STRUCT &&
-                    val->getType().getBase() == DataType::STRUCT) {
+                        val->getType().getBase() == DataType::STRUCT) {
                         if (sbt != nullptr)  // Cannot currently handle multiple shader binding tables.
                             throw std::runtime_error(
                                 "Encountered multiple accel structures while checking input! At most one may be used."
@@ -515,7 +515,7 @@ public:
                             std::cerr << "\" did not match the expected value!" << std::endl;
                             return std::tuple(false, total_tests);
                         }
-                    } catch(const std::exception& e) {
+                    } catch (const std::exception& e) {
                         if (dummy != nullptr)
                             delete dummy;
                         return std::tuple(false, total_tests);
@@ -525,7 +525,7 @@ public:
                     --i;
                     break;
                 } else
-                    continue; // this isn't a match, try next
+                    continue;  // this isn't a match, try next
             }
 
             if (!found)
@@ -552,7 +552,7 @@ public:
             ep.sizeZ = static_cast<const Primitive*>(sizeAgg[2])->data.u32;
         }
         const EntryPoint& ep = entry_inst.getEntryPoint(global);
-        unsigned num_invocations = single_invoc? 1 : (ep.sizeX * ep.sizeY * ep.sizeZ);
+        unsigned num_invocations = single_invoc ? 1 : (ep.sizeX * ep.sizeY * ep.sizeZ);
 
         Debugger debugger(insts, format, num_invocations);
         // The stack frame holds variables, temporaries, program counter, return address, etc
@@ -566,7 +566,7 @@ public:
         std::vector<Data*> entry_args;
 
         Variable* local_invoc_idx = nullptr;
-        Variable* local_invoc_id  = nullptr;
+        Variable* local_invoc_id = nullptr;
         Variable* global_invoc_id = nullptr;
         const Type tUint = Type::primitive(DataType::UINT);
         if (localInvocIdx != 0)
@@ -604,7 +604,7 @@ public:
                     const Primitive gid_x(0 * ep.sizeX + local_x);
                     const Primitive gid_y(0 * ep.sizeY + local_y);
                     const Primitive gid_z(0 * ep.sizeZ + local_z);
-                    std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
+                    std::vector<const Value*> elements {&gid_x, &gid_y, &gid_z};
                     arr.addElements(elements);
                     v->setVal(arr);
                     invoc_global->local(globalInvocId).redefine(v);
@@ -625,7 +625,7 @@ public:
                     const Primitive gid_x(local_x);
                     const Primitive gid_y(local_y);
                     const Primitive gid_z(local_z);
-                    std::vector<const Value*> elements{&gid_x, &gid_y, &gid_z};
+                    std::vector<const Value*> elements {&gid_x, &gid_y, &gid_z};
                     arr.addElements(elements);
                     v->setVal(arr);
                     invoc_global->local(localInvocId).redefine(v);
@@ -691,11 +691,11 @@ public:
 
             // print the result if verbose
             if (unsigned result = insts[i_at].getResult();
-            // Print the result's value iff:
-            // - verbose mode is enabled
-            // - the instruction has a result to print
-            // - the instruction didn't add or remove a frame (in which case, the value may be undefined)
-            verbose && result > 0 && frame_stack.size() == frame_depth) {
+                // Print the result's value iff:
+                // - verbose mode is enabled
+                // - the instruction has a result to print
+                // - the instruction didn't add or remove a frame (in which case, the value may be undefined)
+                verbose && result > 0 && frame_stack.size() == frame_depth) {
                 debugger.print(result, cur_data);
             }
 

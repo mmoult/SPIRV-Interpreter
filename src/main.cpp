@@ -47,7 +47,7 @@ ValueFormat* determine_format(const std::string& file_name, ValueFormat* prefere
     }
 
     for (unsigned i = 0; i < NUM_FORMATS; ++i) {
-        if(to_match == format_names[i])
+        if (to_match == format_names[i])
             return format_vals[i];
     }
     return preference;
@@ -100,17 +100,13 @@ ReturnCode parse_spv(Program& program, std::string program_path) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }
-    delete[] buffer; // delete source now that it has been inserted into the program
+    delete[] buffer;  // delete source now that it has been inserted into the program
 
     return ReturnCode::OK;
 }
 
-ReturnCode handle_record(
-    Program& program,
-    const ShaderRecord& record,
-    ValueFormat* preference,
-    RayTraceSubstage& stage
-) {
+ReturnCode
+handle_record(Program& program, const ShaderRecord& record, ValueFormat* preference, RayTraceSubstage& stage) {
     parse_spv(program, record.shaderSource);
     ValueMap extra_inputs;
     if (!record.extraInput.empty()) {
@@ -129,17 +125,17 @@ ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueF
 
     bool present = false;
 #define CHECK_INPUT(TEST, STAGE) \
-if (TEST.shaderSource.empty()) { \
-    if (!TEST.extraInput.empty()) { \
-        std::cerr << "Shader binding hit record may not specify input, \"" << TEST.extraInput; \
-        std::cerr << "\" without a corresponding shader!" << std::endl; \
-        return ReturnCode::BAD_PROG_INPUT; \
-    } \
-} else { \
-    present = true; \
-    if (auto ret = handle_record(program, TEST, preference, STAGE); ret != ReturnCode::OK) \
-        return ret; \
-}
+    if (TEST.shaderSource.empty()) { \
+        if (!TEST.extraInput.empty()) { \
+            std::cerr << "Shader binding hit record may not specify input, \"" << TEST.extraInput; \
+            std::cerr << "\" without a corresponding shader!" << std::endl; \
+            return ReturnCode::BAD_PROG_INPUT; \
+        } \
+    } else { \
+        present = true; \
+        if (auto ret = handle_record(program, TEST, preference, STAGE); ret != ReturnCode::OK) \
+            return ret; \
+    }
     // Note, we must create records even if the shader is empty because that is how we keep the groups aligned in a
     // single list (by 3's, where any, closest, intersection).
     RayTraceSubstage& any = program.nextHitRecord();
@@ -176,9 +172,9 @@ int main(int argc, char* argv[]) {
     parser.addOption(
         &format_arg,
         "format",
-        "Specify a default value format from {\"yaml\", \"json\"}. The interpreter will try to assume desired format "
-        "from the extension of the file to read/write, but this argument is still useful for --set pairs, stdout, or "
-        "if the extension is not recognized. Defaults to \"yaml\".",
+        "Specify a default value format from {\"yaml\", \"json\"}. The interpreter will try to assume desired "
+        "format from the extension of the file to read/write, but this argument is still useful for --set pairs, "
+        "stdout, or if the extension is not recognized. Defaults to \"yaml\".",
         "f"
     );
     ArgParse::Flag help;
@@ -198,12 +194,7 @@ int main(int argc, char* argv[]) {
         "n"
     );
     ArgParse::StringOption out_arg("FILE", "-");
-    parser.addOption(
-        &out_arg,
-        "out",
-        "Specify a file to output to. By default, output prints to stdout.",
-        "o"
-    );
+    parser.addOption(&out_arg, "out", "Specify a file to output to. By default, output prints to stdout.", "o");
     ArgParse::Flag verbose;
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
     ArgParse::Flag rt_template;
@@ -219,8 +210,8 @@ int main(int argc, char* argv[]) {
     parser.addOption(
         &template_arg,
         "template",
-        "Creates a template input file with stubs for all needed inputs. If --default is set, the default values will "
-        "be printed instead of <type> stubs.",
+        "Creates a template input file with stubs for all needed inputs. If --default is set, the default values "
+        "will be printed instead of <type> stubs.",
         "t"
     );
     ArgParse::Flag single_invoc;
@@ -244,18 +235,14 @@ int main(int argc, char* argv[]) {
     ArgParse::Flag version;
     parser.addOption(&version, "version", "Print version info and exit.", "v");
     ArgParse::StringOption spv_arg("FILE");
-    parser.addPositional(
-        &spv_arg,
-        "spv input",
-        false
-    );
+    parser.addPositional(&spv_arg, "spv input", false);
 
     if (!parser.parse(argc, argv))
         return ReturnCode::BAD_ARGS;
 
     // Perform actions which don't require positional arguments (such as help and version):
     if (help.enabled) {
-        std::vector<std::string> help_intro{
+        std::vector<std::string> help_intro {
             "spirv-run - Interpret SPIR-V shaders",
             "",
             "Usage: spirv-run [options] SPV",
@@ -298,11 +285,12 @@ int main(int argc, char* argv[]) {
         return ReturnCode::BAD_ARGS;
     }
 
-#define REQUIRE(COND) { \
-auto ret = COND; \
-if (ret != ReturnCode::OK) \
-    return ret; \
-}
+#define REQUIRE(COND) \
+    { \
+        auto ret = COND; \
+        if (ret != ReturnCode::OK) \
+            return ret; \
+    }
 
     // Load the SPIR-V input file:
     Program program;
@@ -352,7 +340,7 @@ if (ret != ReturnCode::OK) \
         format2->setTemplate(!generate.enabled);
 
         std::stringstream ss;
-        auto prog_ins = (!rt_template.enabled)? program.getInputs() : dummy.getInputs();
+        auto prog_ins = (!rt_template.enabled) ? program.getInputs() : dummy.getInputs();
         format2->printFile(ss, prog_ins);
 
         if (itemplate == "-") {
@@ -380,7 +368,7 @@ if (ret != ReturnCode::OK) \
         for (const auto& miss : shaderBindingTable.getMissRecords())
             REQUIRE(handle_record(program, miss, format, program.nextMissRecord()));
 
-        for (const auto& hit: shaderBindingTable.getHitRecords())
+        for (const auto& hit : shaderBindingTable.getHitRecords())
             REQUIRE(handle_hit_record(program, hit, format));
 
         for (const auto& call : shaderBindingTable.getCallableRecords())

@@ -5,7 +5,7 @@
  */
 #include "trie.hpp"
 
-#include <algorithm> // for min
+#include <algorithm>  // for min
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -36,12 +36,8 @@ void Trie::enumerate(const std::string& prefix, std::vector<std::string>& option
         kid.enumerate(prefix + kid.key, options);
 }
 
-void Trie::toString(
-    unsigned& id,
-    unsigned parent,
-    std::stringstream& properties,
-    std::stringstream& connections
-) const {
+void
+Trie::toString(unsigned& id, unsigned parent, std::stringstream& properties, std::stringstream& connections) const {
     unsigned myid = id++;
     if (parent < myid) {
         // don't print a connection from null!
@@ -92,7 +88,7 @@ Trie& Trie::insert(const std::string& key, unsigned value) {
                 auto substr = key.substr(common);
                 other.children.push_back(copy);
                 return *other.children.insert(
-                    other.children.begin() + (substr < copy.key? 0:1),
+                    other.children.begin() + (substr < copy.key ? 0 : 1),
                     Trie(substr, true, value)
                 );
             }

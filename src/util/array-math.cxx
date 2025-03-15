@@ -53,10 +53,14 @@ double determinant(const Array& arr) {
     assert(size > 0 && "Cannot find the determinant of an empty matrix!");
     const Value* el = arr[0];
     const Type& el_type = el->getType();
-    assert((el_type.getBase() == DataType::ARRAY && el_type.getSize() == size) &&
-            "Cannot compute determinant for non-square matrix!");
-    assert(el_type.getElement().getBase() == DataType::FLOAT &&
-            "Base type of square matrix must be float to compute determinant!");
+    assert(
+        (el_type.getBase() == DataType::ARRAY && el_type.getSize() == size) &&
+        "Cannot compute determinant for non-square matrix!"
+    );
+    assert(
+        el_type.getElement().getBase() == DataType::FLOAT &&
+        "Base type of square matrix must be float to compute determinant!"
+    );
     assert(size > 1 && "Cannot find the determinant of a 1x1 matrix!");
 
     std::vector<double> matrix;  // matrix transposed
@@ -113,7 +117,7 @@ double determinant(const Array& arr) {
                 // Create a new skips set, skipping the current column
                 std::set<unsigned> new_skips(col_skips);
                 new_skips.insert(i);
-                double top = GET(i, size - subsize); // a, b, or c from the earlier example
+                double top = GET(i, size - subsize);  // a, b, or c from the earlier example
                 if (terms % 2 == 0)
                     top = -top;  // Negate every other term
                 sum += (top * determinant_rec(new_skips));
@@ -153,4 +157,4 @@ void glm_to_value(const Mat& mat, Array& out) {
     }
 }
 
-}; // namespace ArrayMath
+};  // namespace ArrayMath

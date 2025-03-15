@@ -6,9 +6,9 @@
 module;
 #include <cassert>
 #include <cstdint>
-#include <string>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "type.hpp"
@@ -114,11 +114,8 @@ export struct Statics {
         return static_cast<const Primitive&>(*field).data.u32;
     }
 
-    static const Struct& extractStruct(
-        const Value* field,
-        const std::string& name,
-        const std::vector<std::string>& fields
-    ) {
+    static const Struct&
+    extractStruct(const Value* field, const std::string& name, const std::vector<std::string>& fields) {
         if (field == nullptr) {
             std::stringstream err;
             err << "Cannot extract \"" << name << "\" from a null value!";
@@ -137,7 +134,7 @@ export struct Statics {
             std::stringstream err;
             err << "Cannot extract struct from a value with too many fields! Expected: ";
             bool first = true;
-            for (const auto& s: fields) {
+            for (const auto& s : fields) {
                 if (first)
                     first = false;
                 else
@@ -157,5 +154,4 @@ export struct Statics {
         }
         return static_cast<const Struct&>(*field);
     }
-
 };

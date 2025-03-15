@@ -7,18 +7,11 @@ module;
 #include <stdexcept>
 
 #include "../values/value.hpp"
-#include "data/manager.h"
+#include "data/manager.hpp"
 export module spv.frame;
 import value.raytrace.accelStruct;
 
-export enum RtStageKind {
-    NONE,
-    ANY_HIT,
-    CLOSEST,
-    INTERSECTION,
-    MISS,
-    CALLABLE
-};
+export enum RtStageKind { NONE, ANY_HIT, CLOSEST, INTERSECTION, MISS, CALLABLE };
 export const char* to_string(RtStageKind kind) {
     switch (kind) {
     case RtStageKind::NONE:
@@ -78,15 +71,15 @@ export class Frame {
     } rt;
 
 public:
-    Frame(unsigned pc, std::vector<Data*>& args, unsigned ret_at, DataView& data) :
-        pc(pc),
-        curLabel(0),
-        lastLabel(0),
-        args(args),
-        retAt(ret_at),
-        view(data.getSource()->makeView(&data)),
-        argCount(0),
-        first(true) {}
+    Frame(unsigned pc, std::vector<Data*>& args, unsigned ret_at, DataView& data)
+        : pc(pc)
+        , curLabel(0)
+        , lastLabel(0)
+        , args(args)
+        , retAt(ret_at)
+        , view(data.getSource()->makeView(&data))
+        , argCount(0)
+        , first(true) {}
     Frame(const Frame&) = delete;
     Frame& operator=(const Frame&) = delete;
     ~Frame() {

@@ -20,7 +20,7 @@ export class Pointer : public Value {
     std::vector<unsigned> indices;
 
 public:
-    Pointer(unsigned head, std::vector<unsigned>& indices, Type t): Value(t), head(head), indices(indices) {}
+    Pointer(unsigned head, std::vector<unsigned>& indices, Type t) : Value(t), head(head), indices(indices) {}
 
     void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
@@ -63,7 +63,7 @@ public:
     }
 
     bool equals(const Value& val) const override {
-        if (!Value::equals(val)) // guarantees matching types
+        if (!Value::equals(val))  // guarantees matching types
             return false;
         const auto& other = static_cast<const Pointer&>(val);
         // I cannot think of why this would be used, but implement it in case...

@@ -22,7 +22,7 @@ class DataView {
     std::map<unsigned, Data> data;
 
 public:
-    DataView(DataManager* src): src(src) {};
+    DataView(DataManager* src) : src(src) {};
     DataView(const DataView& view) = delete;
     DataView& operator=(const DataView& other) = delete;
     ~DataView() {
@@ -70,7 +70,7 @@ class DataManager {
     std::vector<DataView*> views;
 
 public:
-    DataManager(unsigned max = 0): max(max), global(nullptr) {
+    DataManager(unsigned max = 0) : max(max), global(nullptr) {
         global.setSource(this);
     };
     DataManager(const DataManager& other) = delete;

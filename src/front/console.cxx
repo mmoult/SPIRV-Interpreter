@@ -6,11 +6,11 @@
 module;
 
 #if defined(WIN32) || defined(_WIN32)
-    #include <windows.h>
+#include <windows.h>
 #else
-    #include <sys/ioctl.h>
-    #include <cstdio>
-    #include <unistd.h>
+#include <cstdio>
+#include <sys/ioctl.h>
+#include <unistd.h>
 #endif
 
 #include <iostream>
@@ -79,7 +79,7 @@ public:
                 std::cout << std::string(headerWidth, ' ');
                 len += headerWidth;
             }
-            msg = msg.substr(breakAt + (breakFound? 1:0));
+            msg = msg.substr(breakAt + (breakFound ? 1 : 0));
         }
         std::cout << msg << std::endl;
         if (crunched)  // print an extra newline to separate entries

@@ -4,12 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 module;
-#include <cctype> // for std::isspace
+#include <cctype>  // for std::isspace
 #include <cmath>
-#include <concepts> // for std::integral
-#include <cstdint> // for uint32_t and int32_t
+#include <concepts>  // for std::integral
+#include <cstdint>  // for uint32_t and int32_t
 #include <istream>
-#include <limits> // for inf and nan
+#include <limits>  // for inf and nan
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -89,17 +89,13 @@ protected:
                 return false;
 
             pLine = &fromFile;
-            idx = 0; // reset point to front
+            idx = 0;  // reset point to front
             return true;
         }
 
     public:
-        LineHandler(const std::string* start_line, std::istream* file):
-            file(file),
-            fromFile(""),
-            pLine(start_line),
-            idx(0)
-        {
+        LineHandler(const std::string* start_line, std::istream* file)
+            : file(file), fromFile(""), pLine(start_line), idx(0) {
             if (start_line == nullptr)
                 queueLine();
         }
@@ -125,7 +121,7 @@ protected:
 
             unsigned len = match.length();
             const auto& line = *pLine;
-            if (idx + len > line.length()) // if the match string is longer than remaining length on line
+            if (idx + len > line.length())  // if the match string is longer than remaining length on line
                 return false;
 
             // speculatively look ahead
@@ -139,15 +135,15 @@ protected:
             // Either the match goes to the end of line (in which case, there are no chars after) OR
             // there is another character to check at (idx + len)
             if (idx + len == line.length() || isIdent(line[idx + len], false) != IdValidity::VALID) {
-                idx += len; // update the index to point to after the constant name
+                idx += len;  // update the index to point to after the constant name
                 return true;
             }
             return false;
         }
 
         /// @brief Return info for modified variables
-        /// Specifically, return the current line and index. The iterator (if any) is modified in place and the iterator end
-        /// should not have been modified.
+        /// Specifically, return the current line and index. The iterator (if any) is modified in place and the iterator
+        /// end should not have been modified.
         /// @return the info for variables changed during line handling
         std::tuple<const std::string*, unsigned> update() {
             return {pLine, idx};
@@ -278,9 +274,9 @@ protected:
         // Next, we check for special nums (inf and nan)
         switch (isSpecialFloat(handler)) {
         case SpecialFloatResult::F_INF:
-            return new Primitive(std::numeric_limits<float>::infinity() * (sign? 1: -1));
+            return new Primitive(std::numeric_limits<float>::infinity() * (sign ? 1 : -1));
         case SpecialFloatResult::F_NAN:
-            return new Primitive(std::numeric_limits<float>::quiet_NaN() * (sign? 1: -1));
+            return new Primitive(std::numeric_limits<float>::quiet_NaN() * (sign ? 1 : -1));
         default:
             break;
         }
@@ -385,7 +381,9 @@ protected:
     }
 
     enum class SpecialFloatResult {
-        F_NONE, F_INF, F_NAN,
+        F_NONE,
+        F_INF,
+        F_NAN,
     };
     /// @brief Give the derived class an opportunity to handle special floats while parsing a number
     /// @param handle the handle to read from
@@ -430,11 +428,11 @@ public:
     /// @param key the name of the value to parse
     /// @param val the string to parse the value from
     void parseVariable(ValueMap& vars, const std::string& keyval) noexcept(false) {
-        const std::string* pstr = &keyval; // need an r-value pointer even though the value should not change
+        const std::string* pstr = &keyval;  // need an r-value pointer even though the value should not change
         LineHandler handle(pstr, nullptr);
         auto [key, value] = parseVariable(handle);
         addToMap(vars, key, value);
-        verifyBlank(handle); // Verify there is only whitespace or comments after
+        verifyBlank(handle);  // Verify there is only whitespace or comments after
     }
 
     virtual void printFile(std::stringstream& out, const ValueMap& vars) = 0;

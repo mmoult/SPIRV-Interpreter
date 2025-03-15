@@ -6,7 +6,7 @@
 #ifndef VALUES_TYPE_HPP
 #define VALUES_TYPE_HPP
 
-#include <algorithm> // for min
+#include <algorithm>  // for min
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
@@ -42,22 +42,22 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     }
 
     switch (type) {
-    SWITCH(FLOAT)
-    SWITCH(UINT)
-    SWITCH(INT)
-    SWITCH(BOOL)
-    SWITCH(STRUCT)
-    SWITCH(ARRAY)
-    SWITCH(STRING)
-    SWITCH(VOID)
-    SWITCH(FUNCTION)
-    SWITCH(POINTER)
-    SWITCH(ACCEL_STRUCT)
-    SWITCH(RAY_QUERY)
-    SWITCH(IMAGE)
-    SWITCH(SAMPLER)
+        SWITCH(FLOAT)
+        SWITCH(UINT)
+        SWITCH(INT)
+        SWITCH(BOOL)
+        SWITCH(STRUCT)
+        SWITCH(ARRAY)
+        SWITCH(STRING)
+        SWITCH(VOID)
+        SWITCH(FUNCTION)
+        SWITCH(POINTER)
+        SWITCH(ACCEL_STRUCT)
+        SWITCH(RAY_QUERY)
+        SWITCH(IMAGE)
+        SWITCH(SAMPLER)
     default:
-        assert(false); // unhandled case!
+        assert(false);  // unhandled case!
     }
 #undef SWITCH
     return os;
@@ -78,17 +78,11 @@ class Type : public Valuable {
     std::string name;
     bool bufferBlock = false;
 
-    inline Type(DataType base, unsigned sub_size, const Type* sub_element):
-        base(base),
-        subSize(sub_size),
-        subElement(sub_element) {}
+    inline Type(DataType base, unsigned sub_size, const Type* sub_element)
+        : base(base), subSize(sub_size), subElement(sub_element) {}
 
-    inline Type(DataType base, const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list):
-        base(base),
-        subSize(0),
-        subElement(nullptr),
-        subList(sub_list),
-        nameList(name_list) {}
+    inline Type(DataType base, const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list)
+        : base(base), subSize(0), subElement(nullptr), subList(sub_list), nameList(name_list) {}
 
     /// @brief Creates a value corresponding to this type, with optional inputs
     /// @param values an optional vector of values to use
@@ -97,7 +91,7 @@ class Type : public Valuable {
     [[nodiscard]] Value* construct(std::vector<const Value*>* values) const noexcept(false);
 
 public:
-    inline Type() noexcept(true): base(DataType::VOID), subSize(0), subElement(nullptr) {}
+    inline Type() noexcept(true) : base(DataType::VOID), subSize(0), subElement(nullptr) {}
     Type(const Type& t) = default;
 
     // Factory methods to create type variants:
@@ -108,8 +102,10 @@ public:
     /// @param size the size of the type. Not all primitives have a usable size (bool and void don't)
     /// @return the created type
     static inline Type primitive(DataType primitive, unsigned size = 32) {
-        assert(primitive == DataType::UINT || primitive == DataType::INT ||
-               primitive == DataType::FLOAT || primitive == DataType::BOOL);
+        assert(
+            primitive == DataType::UINT || primitive == DataType::INT || primitive == DataType::FLOAT ||
+            primitive == DataType::BOOL
+        );
         assert(size == 32 || (primitive != DataType::BOOL));
         return Type(primitive, size, nullptr);
     }
@@ -178,8 +174,8 @@ public:
     ///              - comps = 2341 means that all components active in ARGB order
     /// @return the created image type
     static inline Type image(const Type* texel_type, unsigned dim, unsigned comps) {
-        assert(dim <= 3);      // max of 2 bits
-        assert(comps <= 4321); // max of 13 bits
+        assert(dim <= 3);  // max of 2 bits
+        assert(comps <= 4321);  // max of 13 bits
         return Type(DataType::IMAGE, (comps << 8) | dim, texel_type);
     }
 
@@ -269,7 +265,9 @@ public:
     }
 
     bool operator==(const Type& rhs) const;
-    inline bool operator!=(const Type& rhs) const { return !(*this == rhs); };
+    inline bool operator!=(const Type& rhs) const {
+        return !(*this == rhs);
+    };
 
     /// @brief Returns the type which is general to all elements
     /// Must follow the same conversion rules as void Value::copyFrom(const Value& new_val)

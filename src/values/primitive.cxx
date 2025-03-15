@@ -7,7 +7,7 @@ module;
 #include <bit>
 #include <cassert>
 #include <cmath>
-#include <cstdint> // for uint32_t and int32_t
+#include <cstdint>  // for uint32_t and int32_t
 #include <stdexcept>
 
 #include "type.hpp"
@@ -28,23 +28,23 @@ export struct Primitive : public Value {
     using enum DataType;
 
 public:
-    Primitive(float fp32, unsigned size = 32): Value(Type::primitive(FLOAT, size)) {
+    Primitive(float fp32, unsigned size = 32) : Value(Type::primitive(FLOAT, size)) {
         data.fp32 = fp32;
         assert(size <= 64);
     }
-    Primitive(uint32_t u32, unsigned size = 32): Value(Type::primitive(UINT, size)) {
+    Primitive(uint32_t u32, unsigned size = 32) : Value(Type::primitive(UINT, size)) {
         data.u32 = u32;
         assert(size <= 64);
     }
-    Primitive(int32_t i32, unsigned size = 32): Value(Type::primitive(INT, size)) {
+    Primitive(int32_t i32, unsigned size = 32) : Value(Type::primitive(INT, size)) {
         data.i32 = i32;
         assert(size <= 64);
     }
-    Primitive(bool b32): Value(Type::primitive(BOOL)) {
+    Primitive(bool b32) : Value(Type::primitive(BOOL)) {
         data.b32 = b32;
     }
     // Create a blank primitive for the given type
-    Primitive(const Type& t): Value(t) {
+    Primitive(const Type& t) : Value(t) {
         assert(isPrimitive(t.getBase()));
         // Initialize to dummy values (instead of 0 to indicate visibility and help user catch errors)
         if (t.getBase() == FLOAT)
@@ -77,9 +77,9 @@ public:
         const Primitive& other = static_cast<const Primitive&>(new_val);
 
         // TODO precision handling
-        switch (type.getBase()) { // cast to
+        switch (type.getBase()) {  // cast to
         case FLOAT:
-            switch (from_base) { // copy from
+            switch (from_base) {  // copy from
             case FLOAT:
                 data.fp32 = other.data.fp32;
                 break;
@@ -149,7 +149,7 @@ public:
     }
 
     bool equals(const Value& val) const override {
-        if (!Value::equals(val)) // guarantees matching types
+        if (!Value::equals(val))  // guarantees matching types
             return false;
         const auto& other = static_cast<const Primitive&>(val);
         switch (type.getBase()) {
@@ -209,10 +209,11 @@ public:
         assert(multiplier->getType().getBase() == DataType::UINT);
 
         // constraint which we should be able to relax later
-        assert((type.getPrecision() <= 32) &&
-               (type.getPrecision() == multiplier->getType().getPrecision()) &&
-               (type.getPrecision() == product_lo->getType().getPrecision()) &&
-               ((product_hi == nullptr) || (type.getPrecision() == product_hi->getType().getPrecision())));
+        assert(
+            (type.getPrecision() <= 32) && (type.getPrecision() == multiplier->getType().getPrecision()) &&
+            (type.getPrecision() == product_lo->getType().getPrecision()) &&
+            ((product_hi == nullptr) || (type.getPrecision() == product_hi->getType().getPrecision()))
+        );
 
         // The product of multiplicand size X and multiplier size Y will *never* exceed size (X+Y)
 

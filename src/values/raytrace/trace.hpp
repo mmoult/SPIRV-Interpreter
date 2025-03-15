@@ -38,7 +38,7 @@ struct Intersection {
     glm::vec3 getRayPos(const Trace* trace) const;
     glm::vec3 getRayDir(const Trace* trace) const;
 
-    Intersection(const Node* search): search(search) {}
+    Intersection(const Node* search) : search(search) {}
 };
 
 struct Trace {

@@ -7,18 +7,18 @@ module;
 #include <cassert>
 #include <iostream>
 #include <sstream>
-#include <stdexcept>
 #include <stack>
+#include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
 
 #define SPV_ENABLE_UTILITY_CODE 1
 #include "../../external/spirv.hpp"
+#include "../values/raytrace/trace.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
-#include "../values/raytrace/trace.hpp"
-#include "data/manager.h"
+#include "data/manager.hpp"
 module spv.instruction;
 import spv.data.data;
 import spv.frame;
@@ -31,18 +31,13 @@ import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
 import value.statics;
 
-void invoke_substage_shader(
-    RtStageKind kind,
-    Frame& frame,
-    AccelStruct& as,
-    Value* hit_attrib,
-    Value* payload = nullptr
-) {
+void
+invoke_substage_shader(RtStageKind kind, Frame& frame, AccelStruct& as, Value* hit_attrib, Value* payload = nullptr) {
     const Trace& trace = as.getTrace();
     int geom_index = 0;
     unsigned instance_sbt_offset = 0;
     if (kind != RtStageKind::MISS) {
-        const auto& candidate = kind == RtStageKind::CLOSEST? trace.getCommitted() : trace.getCandidate();
+        const auto& candidate = kind == RtStageKind::CLOSEST ? trace.getCommitted() : trace.getCandidate();
         geom_index = candidate.geometryIndex;
         if (candidate.instance != nullptr)
             instance_sbt_offset = candidate.instance->getSbtRecordOffs();
@@ -70,7 +65,7 @@ void invoke_substage_shader(
         // 2) whether we should continue the search (the alternative being immediate exit from the intersect):
         //    defaults to true, false if AcceptHitAndEndSearch used.
         // We use bool[2] to represent this data
-        std::vector<Value*> payload_el{new Primitive(true), new Primitive(true)};
+        std::vector<Value*> payload_el {new Primitive(true), new Primitive(true)};
         payload = new Array(payload_el);
         break;
     }
@@ -98,7 +93,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
     unsigned result_at;
     if (hasResult) {
-        unsigned idx = hasResultType? 1: 0;
+        unsigned idx = hasResultType ? 1 : 0;
         assert(operands[idx].type == Token::Type::REF);
         result_at = std::get<unsigned>(operands[idx].raw);
     }
@@ -136,26 +131,26 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         // If the instruction did make a result, success! These instructions cannot modify control flow,
         // so assume inc_pc = true
         break;
-    case spv::OpNop: // 1
-    case spv::OpLine: // 8
-    case spv::OpNoLine: // 317
-    case spv::OpModuleProcessed: // 330
+    case spv::OpNop:  // 1
+    case spv::OpLine:  // 8
+    case spv::OpNoLine:  // 317
+    case spv::OpModuleProcessed:  // 330
         // No semantic value. Kept only for predictability / debugging. Do nothing
         break;
-    case spv::OpFunction: // 54
-    case spv::OpMemoryBarrier: // 225
-    case spv::OpLoopMerge: // 246
-    case spv::OpSelectionMerge: // 247
+    case spv::OpFunction:  // 54
+    case spv::OpMemoryBarrier:  // 225
+    case spv::OpLoopMerge:  // 246
+    case spv::OpSelectionMerge:  // 247
         break;  // should print for verbose
-    case spv::OpFunctionParameter: // 55
+    case spv::OpFunctionParameter:  // 55
         inc_pc = false;  // get arg increments PC for us
         // Function parameters get a weak copy of the data passed in. If a pointer is passed (such as a Variable), then
         // changes to the pointed data in-function should remain after the function exits.
         data[result_at].redefine(frame.getArg(), false);
         break;
-    case spv::OpFunctionEnd: // 56
+    case spv::OpFunctionEnd:  // 56
         throw std::runtime_error("Missing return before function end!");
-    case spv::OpFunctionCall: { // 57
+    case spv::OpFunctionCall: {  // 57
         // Note: cannot call an entry point, right?
         Function* fx = getFunction(2, data);
         std::vector<Data*> args;
@@ -171,16 +166,16 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         inc_pc = false;
         break;
     }
-    case spv::OpVariable: // 59
+    case spv::OpVariable:  // 59
         // This instruction has been run before (during the static pass), so we can assume here the variable already
         // exists. Now, all we need to do is set the default value (in case not set before)
-        if (operands.size() > 3) { // included default value
+        if (operands.size() > 3) {  // included default value
             Variable* var = getVariable(1, data);
             Value* defaultVal = getValue(3, data);
             var->setVal(*defaultVal);
         }
         break;
-    case spv::OpLoad: { // 61
+    case spv::OpLoad: {  // 61
         Type* ret_type = getType(0, data);
         Value* from_val = getFromPointer(2, data);
 
@@ -198,13 +193,13 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         }
         break;
     }
-    case spv::OpStore: { // 62
+    case spv::OpStore: {  // 62
         Value* val = getValue(1, data);
         Value* store_to = getFromPointer(0, data);
         store_to->copyFrom(*val);
         break;
     }
-    case spv::OpImageWrite: { // 99
+    case spv::OpImageWrite: {  // 99
         Value* image_v = getValue(0, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to ImageWrite must be an image!");
@@ -229,12 +224,12 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         image.write(get(x), get(y), get(z), *composed);
         break;
     }
-    case spv::OpControlBarrier: { // 224
+    case spv::OpControlBarrier: {  // 224
         blocked = true;
         // TODO surely there is more to do here...
         break;
     }
-    case spv::OpPhi: { // 245
+    case spv::OpPhi: {  // 245
         unsigned last_label = frame.getLabel();
         // We must find a label in the phi which matches the last block seen
         for (unsigned i = 3; i < operands.size(); i += 2) {
@@ -254,35 +249,35 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         dst_val = real_dst;
         break;
     }
-    case spv::OpLabel: { // 248
+    case spv::OpLabel: {  // 248
         Value* val = getValue(0, data);  // get the label value which has been made earlier
         auto prim = static_cast<Primitive*>(val);
         frame.setLabel(prim->data.u32);
         break;
     }
-    case spv::OpBranch: { // 249
+    case spv::OpBranch: {  // 249
         Value* dstv = getValue(0, data);
         Primitive* dst = static_cast<Primitive*>(dstv);
         frame.setPC(dst->data.u32);
         inc_pc = false;
         break;
     }
-    case spv::OpBranchConditional: { // 250
+    case spv::OpBranchConditional: {  // 250
         Value* condv = getValue(0, data);
         Primitive* cond = static_cast<Primitive*>(condv);
-        Value* branchv = getValue((cond->data.b32)? 1 : 2, data);
+        Value* branchv = getValue((cond->data.b32) ? 1 : 2, data);
         Primitive* branch = static_cast<Primitive*>(branchv);
         frame.setPC(branch->data.u32);
         inc_pc = false;
         break;
     }
-    case spv::OpKill: // 252
-    case spv::OpTerminateInvocation: { // 4416
+    case spv::OpKill:  // 252
+    case spv::OpTerminateInvocation: {  // 4416
         // Completely stops execution
         terminate_invocation();
         break;
     }
-    case spv::OpSwitch: { // 251
+    case spv::OpSwitch: {  // 251
         Value* selectorv = getValue(0, data);
         int selector = static_cast<Primitive*>(selectorv)->data.i32;
         unsigned i = 2;
@@ -302,13 +297,13 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         inc_pc = false;
         break;
     }
-    case spv::OpReturn: // 253
+    case spv::OpReturn:  // 253
         // verify that the stack didn't expect a return value
         if (frame.hasReturn())
             throw std::runtime_error("Missing value for function return!");
-        inc_pc = pop_frame(); // don't increment PC if we are at the end of program
+        inc_pc = pop_frame();  // don't increment PC if we are at the end of program
         break;
-    case spv::OpReturnValue: { // 254
+    case spv::OpReturnValue: {  // 254
         if (!frame.hasReturn())
             throw std::runtime_error("Void function tried to return a value!");
         Value* val = getValue(0, data);
@@ -322,11 +317,11 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         frame_stack.back()->getData()[ret_at].redefine(ret);
         break;
     }
-    case spv::OpUnreachable: // 255
+    case spv::OpUnreachable:  // 255
         // Illegal code path reached- signal to user
         throw std::runtime_error("Unreachable code path executed!");
         break;
-    case spv::OpTraceRayKHR: { // 4445
+    case spv::OpTraceRayKHR: {  // 4445
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(0, data));
 
         // We use the trigger to keep track of rt stage:
@@ -359,8 +354,8 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                     ray_t_min,
                     ray_t_max,
                     true,
-                    offset_sbt & 0xF,    // Only the 4 least-significant bits of SBT Offset are used
-                    stride_sbt & 0xF,    // Only the 4 least-significant bits of SBT Stride are used
+                    offset_sbt & 0xF,  // Only the 4 least-significant bits of SBT Offset are used
+                    stride_sbt & 0xF,  // Only the 4 least-significant bits of SBT Stride are used
                     miss_index & 0xFFFF  // Only the 16 least-significant bits of Miss Index are used
                 );
             } else {
@@ -450,7 +445,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                     case DataType::UINT:
                     case DataType::INT: {
                         Primitive& val = static_cast<Primitive&>(*curr);
-                        val.copyFrom(Primitive(intersect_once? 1: 0));
+                        val.copyFrom(Primitive(intersect_once ? 1 : 0));
                         break;
                     }
                     case DataType::BOOL: {
@@ -481,21 +476,21 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         frame.disableRaytrace();
         break;
     }
-    //case spv::OpExecuteCallableKHR: { // 4446
-        // TODO: implement callable shader execution
-        //const unsigned index_sbt = static_cast<Primitive&>(*getValue(0, data)).data.u32;
-        //const auto shader_args = getFromPointer(1, data);
-        //std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
-        //std::cout << "Invoking callable shader at SBT index = (" << index_sbt << ") with argument of type ("
-        //          << shader_args->getType().getBase() << ")" << std::endl;
-        //break;
+    // case spv::OpExecuteCallableKHR: { // 4446
+    //  TODO: implement callable shader execution
+    // const unsigned index_sbt = static_cast<Primitive&>(*getValue(0, data)).data.u32;
+    // const auto shader_args = getFromPointer(1, data);
+    // std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
+    // std::cout << "Invoking callable shader at SBT index = (" << index_sbt << ") with argument of type ("
+    //           << shader_args->getType().getBase() << ")" << std::endl;
+    // break;
     //}
-    case spv::OpIgnoreIntersectionKHR: // 4448
-    case spv::OpTerminateRayKHR: { // 4449
+    case spv::OpIgnoreIntersectionKHR:  // 4448
+    case spv::OpTerminateRayKHR: {  // 4449
         // OpIgnoreIntersectionKHR: ignores/rejects this potential intersection. Continues intersection searching above
         // OpTerminateRayKHR: Accepts the potential intersection and stops searching above
         // The two are nearly identical. The only difference is which field in the result is changed.
-        unsigned field = opcode == spv::OpIgnoreIntersectionKHR? 0 : 1;
+        unsigned field = opcode == spv::OpIgnoreIntersectionKHR ? 0 : 1;
 
         // First, we have to get the launching frame. It should be the most recent frame with an rt trigger
         Frame* launch_frame = get_launching_frame(frame_stack, RtStageKind::ANY_HIT);
@@ -510,7 +505,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         terminate_invocation();
         break;
     }
-    case spv::OpRayQueryInitializeKHR: { // 4473
+    case spv::OpRayQueryInitializeKHR: {  // 4473
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(1, data));
         const unsigned ray_flags = static_cast<Primitive&>(*getValue(2, data)).data.u32;
@@ -523,27 +518,33 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         ray_query.setAccelStruct(as);
         ray_query.getAccelStruct().initTrace(
             // Note: ray query does NOT support using the shader binding table
-            ray_flags, cull_mask & 0xFF, ray_origin, ray_direction, ray_t_min, ray_t_max, false
+            ray_flags,
+            cull_mask & 0xFF,
+            ray_origin,
+            ray_direction,
+            ray_t_min,
+            ray_t_max,
+            false
         );
         break;
     }
-    case spv::OpRayQueryTerminateKHR: { // 4474
+    case spv::OpRayQueryTerminateKHR: {  // 4474
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         ray_query.getAccelStruct().terminate();
         break;
     }
-    case spv::OpRayQueryGenerateIntersectionKHR: { // 4475
+    case spv::OpRayQueryGenerateIntersectionKHR: {  // 4475
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         const float t_hit = static_cast<Primitive&>(*getValue(1, data)).data.fp32;
         ray_query.getAccelStruct().generateIntersection(t_hit);
         break;
     }
-    case spv::OpRayQueryConfirmIntersectionKHR: { // 4476
+    case spv::OpRayQueryConfirmIntersectionKHR: {  // 4476
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         ray_query.getAccelStruct().confirmIntersection();
         break;
     }
-    case spv::OpRayQueryProceedKHR: { // 4477
+    case spv::OpRayQueryProceedKHR: {  // 4477
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
         AccelStruct& as = ray_query.getAccelStruct();
 
@@ -556,7 +557,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         dst_val = new Primitive(status == Ternary::YES);
         break;
     }
-    case spv::OpReportIntersectionKHR: { // 5334
+    case spv::OpReportIntersectionKHR: {  // 5334
         const float t_hit = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
 
         auto prev_stage = frame.getRtTrigger();

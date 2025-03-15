@@ -17,7 +17,7 @@ class Trie {
     bool valued;
     unsigned value;
 
-    Trie(const std::string& key, bool valued, unsigned value = 0): key(key), valued(valued), value(value) {}
+    Trie(const std::string& key, bool valued, unsigned value = 0) : key(key), valued(valued), value(value) {}
 
     inline void reset(const std::string& key, bool valued, unsigned value = 0) {
         this->key = key;
@@ -33,15 +33,10 @@ class Trie {
 
     void enumerate(const std::string& prefix, std::vector<std::string>& options) const;
 
-    void toString(
-        unsigned& id,
-        unsigned parent,
-        std::stringstream& properties,
-        std::stringstream& connections
-    ) const;
+    void toString(unsigned& id, unsigned parent, std::stringstream& properties, std::stringstream& connections) const;
 
 public:
-    Trie(bool valued = false, unsigned value = 0): valued(valued), value(value) {}
+    Trie(bool valued = false, unsigned value = 0) : valued(valued), value(value) {}
 
     inline void clear() {
         reset(key, false);

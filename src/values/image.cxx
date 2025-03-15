@@ -66,7 +66,7 @@ export class Image : public Value {
             unsigned scale = 1000;
             unsigned i = 0;
             count = 0;
-            while (scale > 0) { // must init all indices even if in becomes 0
+            while (scale > 0) {  // must init all indices even if in becomes 0
                 unsigned factor = in / scale;
                 if (factor > 0) {
                     if (check && factor > 4)
@@ -99,21 +99,31 @@ export class Image : public Value {
 
         unsigned& operator[](unsigned index) {
             switch (index) {
-            case 0: return r;
-            case 1: return g;
-            case 2: return b;
-            case 3: return a;
-            default: throw std::runtime_error("Component indexed with invalid value!");
+            case 0:
+                return r;
+            case 1:
+                return g;
+            case 2:
+                return b;
+            case 3:
+                return a;
+            default:
+                throw std::runtime_error("Component indexed with invalid value!");
             }
         }
 
         unsigned operator[](unsigned index) const {
             switch (index) {
-            case 0: return r;
-            case 1: return g;
-            case 2: return b;
-            case 3: return a;
-            default: throw std::runtime_error("Component indexed with invalid value!");
+            case 0:
+                return r;
+            case 1:
+                return g;
+            case 2:
+                return b;
+            case 3:
+                return a;
+            default:
+                throw std::runtime_error("Component indexed with invalid value!");
             }
         }
 
@@ -216,7 +226,7 @@ export class Image : public Value {
     }
 
 public:
-    Image(Type t): Value(t), comps(t.getComps(), false), xx(0), yy(0), zz(0) {};
+    Image(Type t) : Value(t), comps(t.getComps(), false), xx(0), yy(0), zz(0) {};
 
     bool equals(const Value& val) const override {
         if (!Value::equals(val))  // guarantees matching types
@@ -287,7 +297,7 @@ public:
         // TODO: handle dimensions besides 2D and add support for mipmaps
         if (!reference.empty()) {
             int width, height, channels;
-            unsigned char *img = stbi_load(reference.c_str(), &width, &height, &channels, 0);
+            unsigned char* img = stbi_load(reference.c_str(), &width, &height, &channels, 0);
             if (img == nullptr) {
                 std::stringstream err;
                 err << "Could not load image from path \"" << reference << "\"!";
@@ -363,7 +373,7 @@ public:
         } else {
             const Type& element = data_a.getType().getElement();
             if (DataType ebase = element.getBase();
-            ebase != DataType::FLOAT && ebase != DataType::UINT && ebase != DataType::INT)
+                ebase != DataType::FLOAT && ebase != DataType::UINT && ebase != DataType::INT)
                 throw std::runtime_error("The image field \"data\" must have elements of type: uint, int, or float!");
             unsigned size = data_a.getSize();
             // Verify that the data matches expected from the given dimensions
@@ -377,8 +387,10 @@ public:
             }
             if (total != size) {
                 std::stringstream err;
-                err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
-                err << xx << " x " << yy << " x " << zz << ", with " << comps.count << " active channels. This requires ";
+                err << "The amount of data provided for the image does not match the dimensions given! Dimensions "
+                       "were ";
+                err << xx << " x " << yy << " x " << zz << ", with " << comps.count
+                    << " active channels. This requires ";
                 err << total << " values, however, " << size << " were provided.";
                 throw std::runtime_error(err.str());
             }
@@ -400,7 +412,7 @@ public:
         // Can copy from a struct, assuming that the correct fields are present
         if (const auto& new_type = new_val.getType(); new_type.getBase() == DataType::STRUCT) {
             copyFrom(static_cast<const Struct&>(new_val));
-            return; // will either throw an exception or do a successful copy
+            return;  // will either throw an exception or do a successful copy
         }
 
         Value::copyFrom(new_val);  // verifies matching types
@@ -498,7 +510,7 @@ public:
             x = get(coords_v, base);
         } else {
             const auto& coords = static_cast<const Array&>(*coords_v);
-            assert(coords.getSize() >= dim + proj? 1: 0);
+            assert(coords.getSize() >= dim + proj ? 1 : 0);
             x = get(coords[0], base);
             if (dim >= 2) {
                 y = get(coords[1], base);
@@ -517,15 +529,14 @@ public:
 
         // coordinates are given in the scale of lod=0, regardless of the actual lod to use
         auto [lBase, lRatio] = decompose(lod);
-        { // put this test in its own scope because we don't want the decomposed (besides lod) leaking out accidentally
+        {  // put this test in its own scope because we don't want the decomposed (besides lod) leaking out accidentally
             auto [xBase, xRatio] = decompose(x);
             auto [yBase, yRatio] = decompose(y);
             auto [zBase, zRatio] = decompose(z);
 
-            if ((xBase > xx || (xBase == xx && xRatio > 0.0)) ||
-            (yBase > yy || (yBase == yy && yRatio > 0.0)) ||
-            (zBase > zz || (zBase == zz && zRatio > 0.0)) ||
-            (lBase > mipmaps || (lBase == mipmaps && lRatio > 0.0)))
+            if ((xBase > xx || (xBase == xx && xRatio > 0.0)) || (yBase > yy || (yBase == yy && yRatio > 0.0)) ||
+                (zBase > zz || (zBase == zz && zRatio > 0.0)) ||
+                (lBase > mipmaps || (lBase == mipmaps && lRatio > 0.0)))
                 return outOfBoundsAccess();
         }
 
@@ -576,7 +587,7 @@ public:
         unsigned lod_offs = 0;  // the first index where data of this lod is stored
         for (unsigned which_lod = 0; which_lod < 2; ++which_lod) {
             unsigned use_lod = lBase + which_lod;
-            float lod_weight = (which_lod == 0)? (1.0 - lRatio) : lRatio;
+            float lod_weight = (which_lod == 0) ? (1.0 - lRatio) : lRatio;
             if (lod_weight == 0.0)
                 break;
 
@@ -595,7 +606,7 @@ public:
             unsigned xxx = std::max(xx, 1u);
             unsigned yyy = std::max(yy, 1u);
             unsigned zzz = std::max(zz, 1u);
-            for (unsigned lod_start = (which_lod == 0)? 1 : use_lod; lod_start <= use_lod; ++lod_start) {
+            for (unsigned lod_start = (which_lod == 0) ? 1 : use_lod; lod_start <= use_lod; ++lod_start) {
                 lod_offs += comps.count * xxx * yyy * zzz;
                 unsigned div = std::max(2 * lod_start, 1u);
                 xxx = std::max(xx / div, 1u);

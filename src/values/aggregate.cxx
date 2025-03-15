@@ -24,7 +24,7 @@ protected:
     virtual const Type& getTypeAt(unsigned idx) const = 0;
 
 public:
-    Aggregate(const Type& t): Value(t) {}
+    Aggregate(const Type& t) : Value(t) {}
 
     virtual ~Aggregate() {
         for (const auto& e : elements)
@@ -63,7 +63,7 @@ public:
             Value* val = typeAt.construct();
             try {
                 val->copyFrom(*es[i]);
-            } catch(const std::exception& e) {
+            } catch (const std::exception& e) {
                 delete val;
                 std::stringstream err;
                 err << "Could not add " << getTypeName() << " value #" << i << " because: " << e.what() << "!";
@@ -96,8 +96,7 @@ public:
 
         if (unsigned osize = other.elements.size(); osize != size) {
             std::stringstream err;
-            err << "Cannot copy from " << getTypeName() << " of a different size (" << osize << " -> " <<
-                   size << ")!";
+            err << "Cannot copy from " << getTypeName() << " of a different size (" << osize << " -> " << size << ")!";
             throw std::runtime_error(err.str());
         }
         for (unsigned i = 0; i < size; ++i)
@@ -110,7 +109,7 @@ public:
     }
 
     bool equals(const Value& val) const override {
-        if (!Value::equals(val)) // guarantees matching types
+        if (!Value::equals(val))  // guarantees matching types
             return false;
         const auto& other = static_cast<const Aggregate&>(val);
         // Shouldn't have to test lengths since that is encoded in the type
@@ -122,7 +121,7 @@ public:
     }
 };
 
-export class Array : public Aggregate  {
+export class Array : public Aggregate {
 protected:
     std::string getTypeName() const override {
         return "array";
@@ -132,7 +131,7 @@ protected:
     }
 
 public:
-    Array(const Type& sub_element, unsigned size): Aggregate(Type::array(size, sub_element)) {}
+    Array(const Type& sub_element, unsigned size) : Aggregate(Type::array(size, sub_element)) {}
 
     /// @brief Constructs an array from a list of elements.
     ///
@@ -141,8 +140,7 @@ public:
     /// Also, this may never be used with an empty array.
     /// @param elements a pointer of value elements to pull types from in constructing this's type. When this
     /// constructor is used, the struct takes ownership of all elements given (and will delete them on destruction).
-    explicit Array(std::vector<Value*>& elements)
-        : Aggregate(Type::array(elements.size(), elements[0]->getType())) {
+    explicit Array(std::vector<Value*>& elements) : Aggregate(Type::array(elements.size(), elements[0]->getType())) {
         this->elements = elements;
     }
 
@@ -209,7 +207,7 @@ protected:
     }
 
 public:
-    Struct(const Type& t): Aggregate(t) {}
+    Struct(const Type& t) : Aggregate(t) {}
 
     /// @brief Constructs a structure from elements and names.
     ///

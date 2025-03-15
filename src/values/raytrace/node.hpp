@@ -24,12 +24,7 @@ class Node {
 public:
     virtual ~Node() = default;
 
-    virtual void resolveReferences(
-        const std::vector<Node*>& nodes,
-        unsigned box,
-        unsigned inst,
-        unsigned tri
-    ) = 0;
+    virtual void resolveReferences(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) = 0;
 
     virtual Ternary step(Trace* trace) const = 0;
 
@@ -41,10 +36,10 @@ struct NodeReference {
     unsigned major;
     unsigned minor;
 
-    NodeReference(unsigned major, unsigned minor): ptr(nullptr), major(major), minor(minor) {}
+    NodeReference(unsigned major, unsigned minor) : ptr(nullptr), major(major), minor(minor) {}
 
     [[nodiscard]] inline Array* toArray() const {
-        std::vector<Value*> uvec2{new Primitive(major), new Primitive(minor)};
+        std::vector<Value*> uvec2 {new Primitive(major), new Primitive(minor)};
         return new Array(uvec2);
     }
 
@@ -52,7 +47,7 @@ struct NodeReference {
         assert(box <= inst && inst <= tri);
         unsigned index;
         switch (major) {
-        default: // 0
+        default:  // 0
             index = 0;
             break;
         case 1:
@@ -72,7 +67,7 @@ struct NodeReference {
 class BoxNode : public Node {
     inline static Type type;
     inline static Type childNodesType;
-    inline static const std::vector<std::string> names{"min_bounds", "max_bounds", "child_nodes"};
+    inline static const std::vector<std::string> names {"min_bounds", "max_bounds", "child_nodes"};
 
     glm::vec3 minBounds;
     glm::vec3 maxBounds;
@@ -100,16 +95,15 @@ public:
 class InstanceNode : public Node {
     inline static Type type;
     inline static Type mat4x3Type;
-    inline static const std::vector<std::string> names{
-        "world_to_obj", "child_node", "id", "custom_index", "mask", "sbt_record_offset"
-    };
+    inline static const std::vector<std::string>
+        names {"world_to_obj", "child_node", "id", "custom_index", "mask", "sbt_record_offset"};
 
     NodeReference child;
-    glm::mat4 worldToObj;    // column-major order
-    glm::mat4 inverse;       // column-major order: inverse of `worldToObj`
-    uint32_t id;             // Id relative to other instance nodes in the same acceleration structure
-    uint32_t customIndex;    // For shading
-    uint32_t mask;           // Mask that can make the ray ignore this instance
+    glm::mat4 worldToObj;  // column-major order
+    glm::mat4 inverse;  // column-major order: inverse of `worldToObj`
+    uint32_t id;  // Id relative to other instance nodes in the same acceleration structure
+    uint32_t customIndex;  // For shading
+    uint32_t mask;  // Mask that can make the ray ignore this instance
     uint32_t sbtRecordOffs;  // Shader binding table record offset (a.k.a. hit group id)
 
 public:
@@ -121,17 +115,13 @@ public:
         uint32_t custom_index,
         uint32_t mask,
         uint32_t sbt_record_offset
-    ):
-    child(major, minor),
-    id(id),
-    customIndex(custom_index),
-    mask(mask),
-    sbtRecordOffs(sbt_record_offset) {
+    )
+        : child(major, minor), id(id), customIndex(custom_index), mask(mask), sbtRecordOffs(sbt_record_offset) {
         // Copy from transform into worldToObj field. Last row should be 0,0,0,1
         for (unsigned i = 0; i < 4; ++i) {
             for (unsigned j = 0; j < 3; ++j)
                 worldToObj[i][j] = world_to_obj[i][j];
-            worldToObj[i][3] = (i == 3)? 1.0 : 0.0;
+            worldToObj[i][3] = (i == 3) ? 1.0 : 0.0;
         }
         // ray query instructions may need to the inverse, so calculate it now:
         this->inverse = glm::inverse(worldToObj);
@@ -162,30 +152,24 @@ public:
 class TriangleNode : public Node {
     inline static Type type;
     inline static Type mat3Type;
-    inline static const std::vector<std::string> names{"geometry_index", "primitive_index", "opaque", "vertices"};
+    inline static const std::vector<std::string> names {"geometry_index", "primitive_index", "opaque", "vertices"};
 
     uint32_t geomIndex;  // Geometry this node is a part of
     uint32_t primIndex;  // Index of node in geometry
-    bool opaque;         // Whether this triangle is opaque
+    bool opaque;  // Whether this triangle is opaque
     std::vector<glm::vec3> vertices;  // 3 x 3D vertices form a triangle
 
 public:
-    TriangleNode(uint32_t geometry_index, uint32_t primitive_index, bool opaque, std::vector<glm::vec3>& verts):
-            geomIndex(geometry_index),
-            primIndex(primitive_index),
-            opaque(opaque) {
+    TriangleNode(uint32_t geometry_index, uint32_t primitive_index, bool opaque, std::vector<glm::vec3>& verts)
+        : geomIndex(geometry_index), primIndex(primitive_index), opaque(opaque) {
         assert(verts.size() == 3);
         this->vertices.resize(3);
         for (unsigned i = 0; i < 3; ++i)
             this->vertices[i] = verts[i];
     }
 
-    inline void resolveReferences(
-        const std::vector<Node*>& nodes,
-        unsigned box,
-        unsigned inst,
-        unsigned tri
-    ) override {}
+    inline void resolveReferences(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) override {
+    }
 
     static const Type& getType();
 
@@ -197,9 +181,8 @@ public:
 
 class ProceduralNode : public Node {
     inline static Type type;
-    inline static const std::vector<std::string> names{
-        "min_bounds", "max_bounds", "opaque", "geometry_index", "primitive_index"
-    };
+    inline static const std::vector<std::string>
+        names {"min_bounds", "max_bounds", "opaque", "geometry_index", "primitive_index"};
 
     glm::vec3 minBounds;
     glm::vec3 maxBounds;
@@ -218,17 +201,14 @@ public:
         bool opaque,
         uint32_t geometry_index,
         uint32_t primitive_index
-    ): opaque(opaque), geomIndex(geometry_index), primIndex(primitive_index) {
+    )
+        : opaque(opaque), geomIndex(geometry_index), primIndex(primitive_index) {
         minBounds = glm::vec3(min_x, min_y, min_z);
         maxBounds = glm::vec3(max_x, max_y, max_z);
     }
 
-    inline void resolveReferences(
-        const std::vector<Node*>& nodes,
-        unsigned box,
-        unsigned inst,
-        unsigned tri
-    ) override {}
+    inline void resolveReferences(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) override {
+    }
 
     static const Type& getType();
 

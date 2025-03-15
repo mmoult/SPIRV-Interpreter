@@ -15,7 +15,7 @@ module;
 #include "../../external/spirv.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
-#include "data/manager.h"
+#include "data/manager.hpp"
 export module spv.instruction;
 import spv.data.data;
 import spv.frame;
@@ -124,29 +124,18 @@ export class Instruction {
     bool makeResultGlsl(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
     bool makeResultPrintf(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
 
-    [[nodiscard]] Value* handleImage(
-        DataView& data,
-        const Value& img,
-        const Value* coords,
-        unsigned img_qualifier,
-        bool proj = false
-    ) const;
+    [[nodiscard]] Value*
+    handleImage(DataView& data, const Value& img, const Value* coords, unsigned img_qualifier, bool proj = false) const;
 
 public:
     Instruction(spv::Op opcode, bool has_result, bool has_result_type)
-        : opcode(opcode),
-          hasResult(has_result),
-          hasResultType(has_result_type) {}
+        : opcode(opcode), hasResult(has_result), hasResultType(has_result_type) {}
 
     /// @brief Attempts to create an instruction with the given opcode, reading from the specified words
     /// @param insts the vector of insts to place the instruction in
     /// @param opcode the opcode of the instruction to create
     /// @param words a vector of words which holds the necesary arguments for the instruction
-    static void readOp(
-        std::vector<Instruction>& insts,
-        uint16_t opcode,
-        std::vector<uint32_t>& words
-    ) noexcept(false);
+    static void readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vector<uint32_t>& words) noexcept(false);
 
     /// @brief Lets the instruction add its variable to input and/or output lists
     /// @param data list of data to access for determining the storage class of each variable
@@ -226,16 +215,16 @@ public:
             if (entry_point.opcode != spv::OpEntryPoint)
                 throw std::runtime_error("Unsupported execution model for variable with storage class HitAttributeKHR");
             switch (std::get<unsigned>(entry_point.operands[0].raw)) {
-                default:
-                    throw std::runtime_error("Bad execution model using storage class HitAttributeKHR.");
-                case spv::ExecutionModelIntersectionKHR:
-                    ins.push_back(id);
-                    outs.push_back(id);
-                    break;
-                case spv::ExecutionModelAnyHitKHR:
-                case spv::ExecutionModelClosestHitKHR:
-                    ins.push_back(id);
-                    break;
+            default:
+                throw std::runtime_error("Bad execution model using storage class HitAttributeKHR.");
+            case spv::ExecutionModelIntersectionKHR:
+                ins.push_back(id);
+                outs.push_back(id);
+                break;
+            case spv::ExecutionModelAnyHitKHR:
+            case spv::ExecutionModelClosestHitKHR:
+                ins.push_back(id);
+                break;
             }
             break;
         }
@@ -286,12 +275,12 @@ public:
         unsigned toDecorate;
         std::vector<unsigned> pending;
 
-        DecoRequest(unsigned to_deco): toDecorate(to_deco) {}
+        DecoRequest(unsigned to_deco) : toDecorate(to_deco) {}
     };
     struct DecoQueue : std::vector<DecoRequest> {
         std::vector<Instruction>& insts;
 
-        DecoQueue(std::vector<Instruction>& insts): insts(insts) {}
+        DecoQueue(std::vector<Instruction>& insts) : insts(insts) {}
     };
 
     /// @brief The decoration equivalent of makeResult. Saves decoration requests into the queue
@@ -305,14 +294,14 @@ public:
         switch (opcode) {
         default:
             return false;
-        case spv::OpName: // 5
-        case spv::OpMemberName: // 6
-        case spv::OpEntryPoint: // 15
-        case spv::OpExecutionMode: // 16
-        case spv::OpDecorate: // 71
-        case spv::OpMemberDecorate: // 72
-        case spv::OpExecutionModeId: // 331
-            unsigned to_decor = checkRef((opcode == spv::OpEntryPoint)? 1 : 0, data_size);
+        case spv::OpName:  // 5
+        case spv::OpMemberName:  // 6
+        case spv::OpEntryPoint:  // 15
+        case spv::OpExecutionMode:  // 16
+        case spv::OpDecorate:  // 71
+        case spv::OpMemberDecorate:  // 72
+        case spv::OpExecutionModeId:  // 331
+            unsigned to_decor = checkRef((opcode == spv::OpEntryPoint) ? 1 : 0, data_size);
             // Search through the queue to see if the ref already has a request
             unsigned i = 0;
             for (; i < queue.size(); ++i) {
@@ -331,7 +320,6 @@ public:
 private:
     void applyVarDeco(DecoQueue* queue, Variable& var, unsigned result_at) const;
 public:
-
     /// @brief Create the instruction result from the operands.
     /// This is first called before execution (for static instructions) but is also a fallback during
     /// execution for instructions which have shared behavior / don't distinguish between the two.
@@ -362,7 +350,7 @@ public:
     /// @return the result index
     unsigned getResult() const {
         if (hasResult)
-            return std::get<unsigned>(operands[hasResultType? 1: 0].raw);
+            return std::get<unsigned>(operands[hasResultType ? 1 : 0].raw);
         return 0;
     }
 };

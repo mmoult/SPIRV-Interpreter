@@ -29,7 +29,7 @@ const Type& BoxNode::getType() {
     Statics statics;
     statics.init();
     childNodesType = Type::array(0, Statics::uvec2Type);
-    const std::vector<const Type*> sub_list{&Statics::vec3Type, &Statics::vec3Type, &childNodesType};
+    const std::vector<const Type*> sub_list {&Statics::vec3Type, &Statics::vec3Type, &childNodesType};
     type = Type::structure(sub_list, names);
     return type;
 }
@@ -40,14 +40,7 @@ Ternary BoxNode::step(Trace* trace_p) const {
     auto ray_pos = candidate.getRayPos(trace_p);
     auto ray_dir = candidate.getRayDir(trace_p);
 
-    const bool result = ray_AABB_intersect(
-        ray_pos,
-        ray_dir,
-        trace.rayTMin,
-        trace.rayTMax,
-        minBounds,
-        maxBounds
-    );
+    const bool result = ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, minBounds, maxBounds);
     // If the ray intersects the bounding box, then add its children to be evaluated.
     if (result) {
         for (const auto& child_ref : children) {
@@ -76,13 +69,9 @@ Ternary BoxNode::step(Trace* trace_p) const {
 
 [[nodiscard]] Struct* BoxNode::toStruct() const {
     std::vector<Value*> fields(3, nullptr);
-    std::vector<Value*> min_v{
-        new Primitive(minBounds.x), new Primitive(minBounds.y), new Primitive(minBounds.z)
-    };
+    std::vector<Value*> min_v {new Primitive(minBounds.x), new Primitive(minBounds.y), new Primitive(minBounds.z)};
     fields[0] = new Array(min_v);
-    std::vector<Value*> max_v{
-        new Primitive(maxBounds.x), new Primitive(maxBounds.y), new Primitive(maxBounds.z)
-    };
+    std::vector<Value*> max_v {new Primitive(maxBounds.x), new Primitive(maxBounds.y), new Primitive(maxBounds.z)};
     fields[1] = new Array(max_v);
     if (children.empty()) {
         BoxNode::getType();  // force init of type values
@@ -103,7 +92,7 @@ const Type& InstanceNode::getType() {
     statics.init();
     // matrix with 4 columns and 3 rows. This is confusing because columns are stored horizontally
     mat4x3Type = Type::array(4, Statics::vec3Type);
-    const std::vector<const Type*> sub_list{
+    const std::vector<const Type*> sub_list {
         &mat4x3Type,
         &Statics::uvec2Type,
         &Statics::uintType,
@@ -161,7 +150,7 @@ Ternary InstanceNode::step(Trace* trace_p) const {
             row[j] = new Primitive(this->worldToObj[i][j]);
         cols[i] = new Array(row);
     }
-    std::vector<Value*> fields{
+    std::vector<Value*> fields {
         new Array(cols),
         child.toArray(),
         new Primitive(id),
@@ -178,12 +167,7 @@ const Type& TriangleNode::getType() {
     Statics statics;
     statics.init();
     mat3Type = Type::array(3, Statics::vec3Type);
-    const std::vector<const Type*> sub_list{
-        &Statics::uintType,
-        &Statics::uintType,
-        &Statics::boolType,
-        &mat3Type
-    };
+    const std::vector<const Type*> sub_list {&Statics::uintType, &Statics::uintType, &Statics::boolType, &mat3Type};
     type = Type::structure(sub_list, names);
     return type;
 }
@@ -235,7 +219,7 @@ Ternary TriangleNode::step(Trace* trace_p) const {
     candidate.primitiveIndex = this->primIndex;
     candidate.hitKind = entered_front ? HIT_KIND_FRONT_FACING_TRIANGLE_KHR : HIT_KIND_BACK_FACING_TRIANGLE_KHR;
     candidate.type = Intersection::Type::Triangle;
-    return (this->opaque || !trace.useSBT)? Ternary::YES : Ternary::MAYBE;
+    return (this->opaque || !trace.useSBT) ? Ternary::YES : Ternary::MAYBE;
 }
 
 [[nodiscard]] TriangleNode* TriangleNode::fromVal(const Value* val) {
@@ -271,12 +255,8 @@ Ternary TriangleNode::step(Trace* trace_p) const {
             row[j] = new Primitive(vertices[i][j]);
         cols[i] = new Array(row);
     }
-    std::vector<Value*> fields{
-        new Primitive(geomIndex),
-        new Primitive(primIndex),
-        new Primitive(opaque),
-        new Array(cols)
-    };
+    std::vector<Value*>
+        fields {new Primitive(geomIndex), new Primitive(primIndex), new Primitive(opaque), new Array(cols)};
     return new Struct(fields, names);
 }
 
@@ -285,9 +265,8 @@ const Type& ProceduralNode::getType() {
         return type;
     Statics statics;
     statics.init();
-    const std::vector<const Type*> sub_list{
-        &Statics::vec3Type, &Statics::vec3Type, &Statics::boolType, &Statics::uintType, &Statics::uintType
-    };
+    const std::vector<const Type*>
+        sub_list {&Statics::vec3Type, &Statics::vec3Type, &Statics::boolType, &Statics::uintType, &Statics::uintType};
     type = Type::structure(sub_list, names);
     return type;
 }
@@ -313,14 +292,7 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
     auto ray_pos = candidate.getRayPos(trace_p);
     auto ray_dir = candidate.getRayDir(trace_p);
 
-    bool found = ray_AABB_intersect(
-        ray_pos,
-        ray_dir,
-        trace.rayTMin,
-        trace.rayTMax,
-        this->minBounds,
-        this->maxBounds
-    );
+    bool found = ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, this->minBounds, this->maxBounds);
 
     if (!found)
         return Ternary::NO;
@@ -330,7 +302,7 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
     candidate.geometryIndex = this->geomIndex;
     candidate.primitiveIndex = this->primIndex;
     candidate.type = Intersection::Type::AABB;
-    return trace.useSBT? Ternary::MAYBE : Ternary::YES;
+    return trace.useSBT ? Ternary::MAYBE : Ternary::YES;
 }
 
 [[nodiscard]] ProceduralNode* ProceduralNode::fromVal(const Value* val) {
@@ -350,16 +322,10 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
 }
 
 [[nodiscard]] Struct* ProceduralNode::toStruct() const {
-    std::vector<Value*> min_v{
-        new Primitive(minBounds.x), new Primitive(minBounds.y), new Primitive(minBounds.z)
-    };
+    std::vector<Value*> min_v {new Primitive(minBounds.x), new Primitive(minBounds.y), new Primitive(minBounds.z)};
     auto* mins = new Array(min_v);
-    std::vector<Value*> max_v{
-        new Primitive(maxBounds.x), new Primitive(maxBounds.y), new Primitive(maxBounds.z)
-    };
+    std::vector<Value*> max_v {new Primitive(maxBounds.x), new Primitive(maxBounds.y), new Primitive(maxBounds.z)};
     auto* maxs = new Array(max_v);
-    std::vector<Value*> fields{
-        mins, maxs, new Primitive(opaque), new Primitive(geomIndex), new Primitive(primIndex)
-    };
+    std::vector<Value*> fields {mins, maxs, new Primitive(opaque), new Primitive(geomIndex), new Primitive(primIndex)};
     return new Struct(fields, names);
 }

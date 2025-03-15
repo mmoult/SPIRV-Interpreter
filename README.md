@@ -21,7 +21,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 For the sake of runtime speed and code clarity, the interpreter expects syntactically correct SPIR-V inputs. It is not,
 nor does it intend to be, a SPIR-V validator. If that is what you need, use `spirv-val` in
 [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). If the input SPIR-V file is invalid, the behavior of the
-interpretation is undefined. This is unlikely to be a problem since most SPIR-V is auto-generated.
+interpretation is undefined. Correctness checking is not a high priority since most SPIR-V is auto-generated.
 
 ### Image Processing
 The SPIR-V specification does not explicitly define how some image operations should be done. This presents some
@@ -67,7 +67,9 @@ If you wish to run the unit tests, follow the steps to build, also including `-D
 ## Contributing
 Contributions via merge requests are welcome! Contributions should:
 - Be provided under the same license as the project (MPL 2.0).
-- Follow the coding style. We recommend using `clang-format` (see settings at [.clang-format](src/.clang-format)).
+- Follow the coding style. We recommend using `clang-format` (see settings at [.clang-format](src/.clang-format)), which
+  can be done easily with
+  [git-clang-format](https://github.com/llvm/llvm-project/blob/main/clang/tools/clang-format/git-clang-format).
 - Be well-documented and have test cases (in `examples` and/or `test` directories).
 - Not break other code. Run `test/example-runner.py` and `build/test/tests` as proof.
 
@@ -84,11 +86,11 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/.
 There are a few code dependencies. You may review each individually (the last two are handled via git's submodule, so
 the links may not work until they are initialized) for the complete terms:
 
-- [SPIR-V](src/external/spirv.hpp): Custom Permissive License
-- [GLSL](src/external/GLSL.std.450.h): Custom Permissive License
-- [stb](src/external/stb): dual-licensed public domain or MIT
-- [glm](src/external/glm): MIT License
-- [Catch2](test/Catch2): Boost Software License
+- [SPIR-V](external/spirv.hpp): Custom Permissive License
+- [GLSL](external/GLSL.std.450.h): Custom Permissive License
+- [stb](external/stb): dual-licensed public domain or MIT
+- [glm](external/glm): MIT License
+- [Catch2](external/Catch2): Boost Software License
 
 Examples in [examples](examples) may use their own licenses. Each has a `LICENSE` file with the necessary documentation.
 Examples are only for testing and demonstrating behavior- they are not bundled in the `spirv-run` executable or any

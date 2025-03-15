@@ -34,7 +34,7 @@ struct Flag : public Option {
     }
     virtual bool handle(const std::string& arg) override {
         assert(false);
-        return false; // flags may not use arguments!
+        return false;  // flags may not use arguments!
     }
     virtual std::string getArgNames() override {
         return "";
@@ -51,8 +51,8 @@ protected:
     virtual std::optional<T> isValid(std::string str) = 0;
 
 public:
-    UnaryOption(const std::string& arg_name): argName(arg_name) {}
-    UnaryOption(const std::string& arg_name, const T& def_value): argName(arg_name) {
+    UnaryOption(const std::string& arg_name) : argName(arg_name) {}
+    UnaryOption(const std::string& arg_name, const T& def_value) : argName(arg_name) {
         values.push_back(def_value);
     }
     virtual ~UnaryOption() = default;
@@ -101,8 +101,8 @@ protected:
     }
 
 public:
-    explicit StringOption(const std::string& arg_name): UnaryOption(arg_name) {}
-    StringOption(const std::string& arg_name, const std::string& def_value): UnaryOption(arg_name, def_value) {}
+    explicit StringOption(const std::string& arg_name) : UnaryOption(arg_name) {}
+    StringOption(const std::string& arg_name, const std::string& def_value) : UnaryOption(arg_name, def_value) {}
 };
 
 class UintOption : public UnaryOption<unsigned> {
@@ -122,8 +122,8 @@ protected:
     }
 
 public:
-    explicit UintOption(const std::string& arg_name): UnaryOption(arg_name) {}
-    UintOption(const std::string& arg_name, unsigned def_value): UnaryOption(arg_name, def_value) {}
+    explicit UintOption(const std::string& arg_name) : UnaryOption(arg_name) {}
+    UintOption(const std::string& arg_name, unsigned def_value) : UnaryOption(arg_name, def_value) {}
     virtual ~UintOption() = default;
 };
 
@@ -140,7 +140,8 @@ class Parser {
             const std::string& full_word,
             const std::string& description,
             const std::string& single
-        ): option(option), fullWord(full_word), description(description), single(single) {}
+        )
+            : option(option), fullWord(full_word), description(description), single(single) {}
     };
 
     /// @brief list of all added options
@@ -152,10 +153,8 @@ class Parser {
         std::string description;
         bool mandatory;
 
-        PositionalData(Option* option, const std::string& description, bool mandatory):
-            option(option),
-            description(description),
-            mandatory(mandatory) {}
+        PositionalData(Option* option, const std::string& description, bool mandatory)
+            : option(option), description(description), mandatory(mandatory) {}
     };
 
     std::vector<PositionalData> positionals;
@@ -165,14 +164,8 @@ class Parser {
 
     bool posOnly;
 
-    bool handleOption(
-        const std::string& option,
-        Option& opt,
-        const std::string& initial,
-        int* i,
-        char* argv[],
-        int argc
-    ) {
+    bool
+    handleOption(const std::string& option, Option& opt, const std::string& initial, int* i, char* argv[], int argc) {
         unsigned args = opt.getNumArgs();
         if (args == 0) {
             if (!initial.empty()) {
@@ -213,7 +206,6 @@ class Parser {
     }
 
 public:
-
     void addOption(Option* opt, std::string full_word, const std::string& description, const std::string& single = "") {
         options.emplace_back(opt, full_word, description, single);
         unsigned i = options.size() - 1;
@@ -345,4 +337,4 @@ public:
     }
 };
 
-};
+};  // namespace ArgParse

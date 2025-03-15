@@ -14,7 +14,7 @@ struct FileBreak {
     unsigned instNum;
     std::string filePath;
 
-    FileBreak(unsigned inst_num, const std::string& file_path): instNum(inst_num), filePath(file_path) {}
+    FileBreak(unsigned inst_num, const std::string& file_path) : instNum(inst_num), filePath(file_path) {}
 };
 
 export class InstList {
@@ -34,7 +34,7 @@ public:
         if (breaks.size() <= 1)
             return nullptr;
 
-        for (const auto& br: breaks) {
+        for (const auto& br : breaks) {
             if (br.instNum == index)
                 return &br.filePath;
             // Assuming we add breaks in order (which is true of the current use case), we can abort early if the index
