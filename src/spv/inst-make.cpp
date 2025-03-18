@@ -26,6 +26,7 @@ module;
 #include "../values/value.hpp"
 #include "data/manager.hpp"
 module spv.instruction;
+import front.console;
 import spv.data.data;
 import spv.frame;
 import spv.rayFlags;
@@ -1288,9 +1289,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpFDiv: {  // 136
         OpDst dst {checkRef(0, data_len), result_at};
         BinOp op = [](const Primitive* a, const Primitive* b) {
-            // Spec says that the behavior is undefined if divisor is 0
-            // We will go with explicit IEE754 because it is a common (and often expected) standard
             if (b->data.fp32 == 0.0) {  // divisor is neg or pos zero
+                Console::warn("FDiv undefined since divisor is 0! Defaults to IEEE754.");
                 if (std::isnan(a->data.fp32))
                     return a->data.fp32;
                 if (a->data.fp32 == 0.0)
@@ -1303,17 +1303,45 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         element_bin_op(checkRef(2, data_len), checkRef(3, data_len), dst, data, op, DataType::FLOAT);
         break;
     }
-    case spv::OpUMod:  // 137
-        // Result undefined if the denominator is 0. Maybe print an undefined warning?
-        TYPICAL_E_BIN_OP(UINT, (b->data.u32 != 0) ? a->data.u32 % b->data.u32 : 0);
-    case spv::OpSMod:  // 139
-        // Result undefined if denominator is 0 or denominator is -1 and numerator is -max (in which case, there is an
-        // overflow).
-        TYPICAL_E_BIN_OP(INT, (b->data.u32 != 0) ? a->data.u32 % b->data.u32 : 0);
-    case spv::OpFMod:  // 141
-        // TODO: Result undefined if the denominator is 0. Maybe print an undefined warning?
-        // OpenGL spec defines this operation as mod(x, y) = x - y * floor(x/y)
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 - (b->data.fp32 * std::floor(a->data.fp32 / b->data.fp32)));
+    case spv::OpUMod: {  // 137
+        BinOp fx = [](const Primitive* a, const Primitive* b) {
+            if (b->data.u32 == 0) {
+                Console::warn("UMod undefined since divisor is 0!");
+                return Primitive(0u);
+            }
+            return Primitive(a->data.u32 % b->data.u32);
+        };
+        OpDst dst {checkRef(dst_type_at, data_len), result_at};
+        element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::UINT);
+        break;
+    }
+    case spv::OpSMod: {  // 139
+        // TODO: Result undefined if denominator is -1 and numerator is -max for the primitive's type (in which case,
+        // there is an overflow).
+        BinOp fx = [](const Primitive* a, const Primitive* b) {
+            if (b->data.u32 == 0) {
+                Console::warn("SMod undefined since divisor is 0!");
+                return Primitive(0);
+            }
+            return Primitive(a->data.u32 % b->data.u32);
+        };
+        OpDst dst {checkRef(dst_type_at, data_len), result_at};
+        element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::INT);
+        break;
+    }
+    case spv::OpFMod: {  // 141
+        BinOp fx = [](const Primitive* a, const Primitive* b) {
+            if (b->data.fp32 == 0.0) {
+                Console::warn("FMod undefined since divisor is 0!");
+                return std::nanf("1");
+            }
+            // OpenGL spec defines this operation as mod(x, y) = x - y * floor(x/y)
+            return a->data.fp32 - (b->data.fp32 * std::floor(a->data.fp32 / b->data.fp32));
+        };
+        OpDst dst {checkRef(dst_type_at, data_len), result_at};
+        element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
+        break;
+    }
     case spv::OpVectorTimesScalar: {  // 142
         Value* vec_val = getValue(src_at, data);
         const Type& vec_type = vec_val->getType();
@@ -2288,7 +2316,8 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         TYPICAL_E_BIN_OP(INT, std::max(a->data.i32, b->data.i32));
     case GLSLstd450FClamp: {  // 43
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
-            assert(minVal->data.fp32 <= maxVal->data.fp32);
+            if (minVal->data.fp32 > maxVal->data.fp32)
+                Console::warn("FClamp undefined since minVal > maxVal!");
             return std::clamp(x->data.fp32, minVal->data.fp32, maxVal->data.fp32);
         };
         E_TERN_OP(FLOAT, fx);
@@ -2296,7 +2325,8 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     }
     case GLSLstd450UClamp: {  // 44
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
-            assert(minVal->data.u32 <= maxVal->data.u32);
+            if (minVal->data.u32 > maxVal->data.u32)
+                Console::warn("UClamp undefined since minVal > maxVal!");
             return std::clamp(x->data.u32, minVal->data.u32, maxVal->data.u32);
         };
         E_TERN_OP(UINT, fx);
@@ -2304,7 +2334,8 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     }
     case GLSLstd450SClamp: {  // 45
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
-            assert(minVal->data.i32 <= maxVal->data.i32);
+            if (minVal->data.i32 > maxVal->data.i32)
+                Console::warn("SClamp undefined since minVal > maxVal!");
             return std::clamp(x->data.i32, minVal->data.i32, maxVal->data.i32);
         };
         E_TERN_OP(INT, fx);
@@ -2312,7 +2343,10 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     }
     case GLSLstd450FMix: {  // 46
         TernOp fx = [](const Primitive* x, const Primitive* y, const Primitive* a) {
-            return x->data.fp32 * (1.0f - a->data.fp32) + y->data.fp32 * a->data.fp32;
+            // Linear interpolation. Two equivalent expressions:
+            // - std::lerp   = x + a(y - x)
+            // - GLSL's FMix = x * (1 - a) + y * a
+            return std::lerp(x->data.fp32, y->data.fp32, a->data.fp32);
         };
         E_TERN_OP(FLOAT, fx);
         break;

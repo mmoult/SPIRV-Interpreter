@@ -18,6 +18,8 @@ module;
 
 export module front.console;
 
+export bool suppress_warnings = false;
+
 export class Console {
     unsigned width;
     unsigned headerWidth;
@@ -84,5 +86,28 @@ public:
         std::cout << msg << std::endl;
         if (crunched)  // print an extra newline to separate entries
             std::cout << std::endl;
+    }
+
+    static void warn(std::string msg) {
+        if (suppress_warnings)
+            return;
+
+#if defined(WIN32) || defined(_WIN32)
+        HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        constexpr int RED_ON_BLACK = 12;
+        FlushConsoleInputBuffer(hConsole);
+        SetConsoleTextAttribute(hConsole, RED_ON_BLACK);
+#else
+        std::cout << "\e[0;31m";
+#endif
+
+        std::cout << "[Warning] " << msg << std::endl;
+
+#if defined(WIN32) || defined(_WIN32)
+        constexpr int DEFAULT = 7;
+        SetConsoleTextAttribute(hConsole, DEFAULT);
+#else
+        std::cout << "\e[0m";
+#endif
     }
 };
