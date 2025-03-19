@@ -197,6 +197,8 @@ int main(int argc, char* argv[]) {
     parser.addOption(&out_arg, "out", "Specify a file to output to. By default, output prints to stdout.", "o");
     ArgParse::Flag verbose;
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
+    ArgParse::Flag quiet;
+    parser.addOption(&quiet, "quiet", "Suppress all runtime warnings.", "q");
     ArgParse::Flag rt_template;
     parser.addOption(
         &rt_template,
@@ -278,6 +280,7 @@ int main(int argc, char* argv[]) {
         verbose.enabled = true;
     if ((generate.enabled || rt_template.enabled) && !template_arg.hasValue())
         template_arg.setValue("-");
+    suppress_warnings = quiet.enabled;
 
     ValueFormat* format = determine_format(format_arg.getValue(), nullptr, true);
     if (format == nullptr) {
