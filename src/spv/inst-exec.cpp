@@ -86,7 +86,7 @@ Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expecte
     return nullptr;
 }
 
-bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const {
+bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, bool use_sbt) const {
     bool inc_pc = true;
     bool blocked = false;
     Frame& frame = *frame_stack.back();
@@ -353,7 +353,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                     ray_direction,
                     ray_t_min,
                     ray_t_max,
-                    true,
+                    use_sbt,
                     offset_sbt & 0xF,  // Only the 4 least-significant bits of SBT Offset are used
                     stride_sbt & 0xF,  // Only the 4 least-significant bits of SBT Stride are used
                     miss_index & 0xFFFF  // Only the 16 least-significant bits of Miss Index are used

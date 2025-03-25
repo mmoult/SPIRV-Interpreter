@@ -84,11 +84,6 @@
                 "geometry_index" : 0,
                 "primitive_index" : 0
             }
-        ],
-        "shader_binding_table" : {
-            "miss_records" : [],
-            "hit_group_records" : [],
-            "callable_records" : []
-        }
+        ]
     }
 }

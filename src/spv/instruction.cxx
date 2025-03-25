@@ -210,11 +210,8 @@ public:
         case SC::StorageClassRayPayloadKHR:
             outs.push_back(id);
             break;
-        case SC::StorageClassHitAttributeKHR: {
-            // Make sure <entry_point> is an actual entry point before identifying the execution model
-            if (entry_point.opcode != spv::OpEntryPoint)
-                throw std::runtime_error("Unsupported execution model for variable with storage class HitAttributeKHR");
-            switch (std::get<unsigned>(entry_point.operands[0].raw)) {
+        case SC::StorageClassHitAttributeKHR:
+            switch (entry_point.getShaderStage()) {
             default:
                 throw std::runtime_error("Bad execution model using storage class HitAttributeKHR.");
             case spv::ExecutionModelIntersectionKHR:
@@ -227,7 +224,6 @@ public:
                 break;
             }
             break;
-        }
         case SC::StorageClassPrivate:
         case SC::StorageClassFunction:
         case SC::StorageClassWorkgroup:
@@ -266,6 +262,12 @@ public:
         if (fx == nullptr)
             throw std::runtime_error("Missing entry function in entry declaration!");
         return *fx;
+    }
+    /// Fetch the shader stage if this instruction is an entry point
+    spv::ExecutionModel getShaderStage() const {
+        // Make sure <entry_point> is an actual entry point before identifying the execution model
+        assert(opcode == spv::OpEntryPoint);
+        return static_cast<spv::ExecutionModel>(std::get<unsigned>(operands[0].raw));
     }
 
     // There may be many decorations, but there are very few instructions which are decorated.
@@ -341,8 +343,9 @@ public:
     /// @param data the data view at the current frame or the global if the frame stack is empty
     /// @param frame_stack holds variables, arguments, return addresses, and program counters
     /// @param verbose whether to print a verbose trace of execution
+    /// @param use_sbt whether the shader binding table should be used for raytracing interactions
     /// @return whether the instruction execution blocks the invocation (such as by a barrier)
-    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose) const;
+    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, bool use_sbt) const;
 
     void print() const;
 

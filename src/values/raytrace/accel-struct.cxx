@@ -22,7 +22,6 @@ import util.string;
 import util.ternary;
 import value.aggregate;
 import value.primitive;
-import value.raytrace.shaderBindingTable;
 import value.statics;
 import value.string;
 
@@ -30,7 +29,6 @@ export class AccelStruct : public Value {
 private:
     bool ownNodes = false;
     std::vector<Node*> bvh;
-    ShaderBindingTable shaderBindingTable;
 
     NodeReference tlas = NodeReference(0, 0);
     // Necessary for reconstructing an externally-viewable struct
@@ -39,8 +37,13 @@ private:
     unsigned triangleIndex = 0;
     unsigned proceduralIndex = 0;
 
-    inline static const std::vector<std::string>
-        names {"tlas", "box_nodes", "instance_nodes", "triangle_nodes", "procedural_nodes", "shader_binding_table"};
+    inline static const std::vector<std::string> names {
+        "tlas",
+        "box_nodes",
+        "instance_nodes",
+        "triangle_nodes",
+        "procedural_nodes",
+    };
 
     Trace trace;
 
@@ -71,7 +74,6 @@ public:
         : Value(other.type)
         , ownNodes(false)
         , bvh(other.bvh)
-        , shaderBindingTable(other.shaderBindingTable)
         , tlas(other.tlas)
         , boxIndex(other.boxIndex)
         , instanceIndex(other.instanceIndex)
@@ -85,7 +87,6 @@ public:
 
         bool ownNodes = false;
         bvh = other.bvh;
-        shaderBindingTable = other.shaderBindingTable;
         tlas = other.tlas;
         boxIndex = other.boxIndex;
         instanceIndex = other.instanceIndex;
@@ -126,7 +127,7 @@ public:
         trace.rayOrigin = glm::vec3(ray_origin[0], ray_origin[1], ray_origin[2]);
         trace.rayDirection = glm::vec3(ray_direction[0], ray_direction[1], ray_direction[2]);
 
-        trace.useSBT = use_sbt && !shaderBindingTable.isEmpty();
+        trace.useSBT = use_sbt;
         trace.offsetSBT = offset_sbt;
         trace.strideSBT = stride_sbt;
         trace.missIndex = miss_index;
@@ -380,14 +381,9 @@ public:
         trace.active = false;
     }
 
-    const ShaderBindingTable& getShaderBindingTable() const {
-        return shaderBindingTable;
-    }
-
     [[nodiscard]] Struct* toStruct() const {
-        std::vector<Value*> fields(6, nullptr);
+        std::vector<Value*> fields(names.size(), nullptr);
         fields[0] = tlas.toArray();
-        fields[5] = shaderBindingTable.toStruct();
 
         // Have to fill in the fields of the node types, where necessary
         if (boxIndex > 0) {
@@ -476,9 +472,6 @@ public:
         tlas.resolve(bvh, boxIndex, instanceIndex, triangleIndex);
         for (Node* node : bvh)
             node->resolveReferences(bvh, boxIndex, instanceIndex, triangleIndex);
-
-        // shader_binding_table
-        shaderBindingTable.copyFrom(other[5]);
     }
 
     void copyReinterp(const Value& other) noexcept(false) override {

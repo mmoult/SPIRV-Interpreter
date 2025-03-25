@@ -60,16 +60,17 @@ rs:
     - [ <float>, <float>, <float> ]
   - <...>
   procedural_nodes: []
-  shader_binding_table:
-    miss_records:
-    - { shader: <string>, input: <string> }
-    hit_group_records:
-    -
-      any: { shader: "", input: "" }
-      closest: { shader: <string>, input: <string> }
-      intersection: { shader: "", input: "" }
-    - <...>
-    callable_records:
-    - { shader: <string>, input: <string> }
-    - { shader: <string>, input: <string> }
-    - { shader: <string>, input: <string> }
+
+shader_binding_table:
+  miss_records:
+  - { shader: <string>, input: <string> }
+  hit_group_records:
+  -
+    any: { shader: "", input: "" }
+    closest: { shader: <string>, input: <string> }
+    intersection: { shader: "", input: "" }
+  - <...>
+  callable_records:
+  - { shader: <string>, input: <string> }
+  - { shader: <string>, input: <string> }
+  - { shader: <string>, input: <string> }

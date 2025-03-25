@@ -206,6 +206,13 @@ int main(int argc, char* argv[]) {
         "Treat the input as a ray tracing substage when creating an input template. Enables --template implicitly.",
         "r"
     );
+    ArgParse::StringOption sbt_name("SBT", "shader_binding_table");
+    parser.addOption(
+        &sbt_name,
+        "sbt-name",
+        "Name to expect for the definition of the shader binding table. Only applicable for rgen shaders. Default is "
+        "\"shader_binding_table\""
+    );
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
     ArgParse::StringOption template_arg("FILE");
@@ -323,7 +330,7 @@ int main(int argc, char* argv[]) {
     RayTraceSubstage dummy;
     try {
         if (!rt_template.enabled)
-            program.init(inputs, single_invoc.enabled);
+            program.init(inputs, single_invoc.enabled, sbt_name.getValue());
         else {
             auto& manager = program.getDataManager();
             dummy.data = &manager.getGlobal();
@@ -357,26 +364,24 @@ int main(int argc, char* argv[]) {
     }
 
     // Process the given inputs into the program
-    const ShaderBindingTable* sbt = nullptr;
     try {
-        sbt = program.checkInputs(inputs, unused.enabled);
+        program.checkInputs(inputs, unused.enabled);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROG_INPUT;
     }
 
     // May need to process info given from shader binding table, if any
-    if (sbt != nullptr) {
-        const auto& shaderBindingTable = *sbt;
-        for (const auto& miss : shaderBindingTable.getMissRecords())
-            REQUIRE(handle_record(program, miss, format, program.nextMissRecord()));
+    const ShaderBindingTable& sbt = program.getShaderBindingTable();
+    for (const auto& miss : sbt.getMissRecords())
+        REQUIRE(handle_record(program, miss, format, program.nextMissRecord()));
 
-        for (const auto& hit : shaderBindingTable.getHitRecords())
-            REQUIRE(handle_hit_record(program, hit, format));
+    for (const auto& hit : sbt.getHitRecords())
+        REQUIRE(handle_hit_record(program, hit, format));
 
-        for (const auto& call : shaderBindingTable.getCallableRecords())
-            REQUIRE(handle_record(program, call, format, program.nextCallableRecord()));
-    }
+    for (const auto& call : sbt.getCallableRecords())
+        REQUIRE(handle_record(program, call, format, program.nextCallableRecord()));
+
 #undef REQUIRE
 
     // Run the program

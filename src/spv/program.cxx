@@ -52,6 +52,8 @@ export class Program {
     std::vector<RayTraceSubstage> misses;
     std::vector<RayTraceSubstage> hits;
     std::vector<RayTraceSubstage> callables;
+    ShaderBindingTable sbt;
+    std::string sbtName;
 
     /// @brief Parses instructions from the binary words.
     /// Should identify whether the whole program is valid before any instructions are executed.
@@ -347,8 +349,7 @@ export class Program {
     /// @param provided map of names to values
     /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
     ///               default values.
-    /// @return the shader binding table to process (if any), otherwise, nullptr
-    static const ShaderBindingTable* checkInputs(
+    void checkInputs(
         ValueMap& provided,
         DataView& global,  // needed for fetching variables
         std::vector<unsigned>& ins,
@@ -369,7 +370,6 @@ export class Program {
             specConsts.push_back(global[spec].getVariable());
 
         // Next go through variables defined and verify they match needed
-        const ShaderBindingTable* sbt = nullptr;
         for (const auto& [name, val] : provided) {
             bool found = false;
             // first, find the variable which matches the name
@@ -386,24 +386,14 @@ export class Program {
                         throw std::runtime_error(err.str());
                     }
 
-                    // Special case for acceleration structures since their shader binding table may have extra shaders
-                    // to parse and resolve.
-                    const Value& now_val = *var->getVal();
-                    if (now_val.getType().getBase() == DataType::ACCEL_STRUCT &&
-                        val->getType().getBase() == DataType::STRUCT) {
-                        if (sbt != nullptr)  // Cannot currently handle multiple shader binding tables.
-                            throw std::runtime_error(
-                                "Encountered multiple accel structures while checking input! At most one may be used."
-                            );
-                        sbt = &static_cast<const AccelStruct&>(now_val).getShaderBindingTable();
-                    }
-
                     // Remove the interface from the check list
                     inputs.erase(inputs.begin() + i);
                     --i;
                     break;
                 }
             }
+
+            // If there was no matching pair in the standard inputs, try other sources
             if (!found) {
                 for (Variable* specConst : specConsts) {
                     if (specConst->getName() == name) {
@@ -412,8 +402,12 @@ export class Program {
                     }
                 }
             }
-
-            if (!found) {
+            if (!found && name == sbtName && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
+                // Read the shader binding table from the given value
+                sbt.copyFrom(val);
+                found = true;
+            }
+            if (!found) {  // Finally, display an error if the match wasn't found
                 std::stringstream err;
                 err << "Input specifies variable \"" << name << "\" which doesn't exist in the program interface!";
                 throw std::runtime_error(err.str());
@@ -439,8 +433,6 @@ export class Program {
             error << "!";
             throw std::runtime_error(error.str());
         }
-
-        return sbt;
     }
 
 public:
@@ -457,15 +449,18 @@ public:
         return insts.size();
     }
 
-    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
+    void init(ValueMap& provided, bool single_invoc, std::string sbt_name) noexcept(false) {
+        this->sbtName = sbt_name;
         entry = init(provided, data.getGlobal(), nullptr, single_invoc);
     }
     void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs, bool unused = false) {
         unsigned entry = init(extra_inputs, *stage.data, &stage, false);
         stage.entry = entry;
-        auto* extra_accel = Program::checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, unused);
-        if (extra_accel != nullptr)  // We shouldn't see any extra accel structs
-            throw std::runtime_error("Extra acceleration struct found when invoking raytracing substage!");
+        checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, unused);
+    }
+
+    const ShaderBindingTable& getShaderBindingTable() const {
+        return sbt;
     }
 
     /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
@@ -473,8 +468,8 @@ public:
     /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
     ///               default values.
     /// @return the shader binding table to process (if any), otherwise, nullptr
-    const ShaderBindingTable* checkInputs(ValueMap& provided, bool unused) noexcept(false) {
-        return Program::checkInputs(provided, this->data.getGlobal(), this->ins, this->specs, unused);
+    void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
+        checkInputs(provided, this->data.getGlobal(), this->ins, this->specs, unused);
     }
 
     std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true) {
@@ -653,6 +648,7 @@ public:
             frame_stacks[i].push_back(new Frame(ep.getLocation(), entry_args, 0, *invoc_global));
         }
 
+        bool use_sbt = !sbt.isEmpty();
         // Right now, do something like round robin scheduling. In the future, we will want to give other options
         // through the command line
         unsigned next_invoc = num_invocations - 1;
@@ -686,7 +682,7 @@ public:
             }
 
             unsigned frame_depth = frame_stack.size();
-            if (insts[i_at].execute(cur_data, frame_stack, verbose))
+            if (insts[i_at].execute(cur_data, frame_stack, verbose, use_sbt))
                 active_threads.erase(next_invoc);
 
             // print the result if verbose
@@ -721,6 +717,11 @@ public:
         auto input_map = getVariables(ins);
         auto spec_consts = getVariables(specs);
         input_map.insert(spec_consts.begin(), spec_consts.end());
+
+        // If this is an rgen shader, forcibly add the shader binding table as a value
+        if (insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR)
+            input_map[sbtName] = sbt.toStruct();
+
         return input_map;
     }
     ValueMap getOutputs() const {

@@ -1,0 +1,4 @@
+{
+	"gl_LaunchIDEXT" : [ <uint>, <uint>, <uint> ],
+	"gl_LaunchSizeEXT" : [ <uint>, <uint>, <uint> ]
+}

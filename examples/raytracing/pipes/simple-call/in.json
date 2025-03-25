@@ -1,0 +1,29 @@
+{
+	"gl_LaunchIDEXT" : [ 0, 0, 0 ],
+	"image" : {
+		"ref" : "",
+		"dim" : [ 3, 3 ],
+		"mipmaps" : 1,
+		"comps" : 1234,
+		"data" : [
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0, 0.0
+		]
+	},
+	"outColor" : [ -1.0, -1.0, -1.0, -1.0 ],
+	"shader_binding_table" : {
+		"miss_records" : [],
+		"hit_group_records" : [],
+		"callable_records" : [
+			{ "shader" : "first.rcall.spv", "input" : "" },
+			{ "shader" : "second.rcall.spv", "input" : "second-in.json" }
+		]
+	}
+}

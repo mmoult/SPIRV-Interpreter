@@ -1340,9 +1340,10 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 return std::nanf("1");
             }
             auto res = std::fmod(a->data.fp32, b->data.fp32);
-            return std::copysign(res, (this->opcode == spv::OpFRem)? a->data.fp32 : b->data.fp32);
+            return std::copysign(res, (this->opcode == spv::OpFRem) ? a->data.fp32 : b->data.fp32);
         };
-        // The two float modulus operators are very similar. The only difference is which sign the result must match: OpFRem matches numerator, OpFMod matches denominator
+        // The two float modulus operators are very similar. The only difference is which sign the result must match:
+        // OpFRem matches numerator, OpFMod matches denominator
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
         break;

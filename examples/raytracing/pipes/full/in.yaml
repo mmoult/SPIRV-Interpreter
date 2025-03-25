@@ -118,17 +118,18 @@ accelerationStructure:
     opaque: false  # Since the geometry isn't opaque, any hits from the intersection shader must run through any hit.
     geometry_index: 0
     primitive_index: 0
-  shader_binding_table:
-    miss_records:
-    - { shader: "./shaders/miss_sky.spv", input: "" }
-    - { shader: "./shaders/miss_shadow.spv", input: "" }
-    hit_group_records:
-    -
-      any: { shader: "./shaders/wall_rahit.spv", input: "" }
-      closest: { shader: "./shaders/wall_rchit.spv", input: "" }
-      intersection: { shader: "", input: "" }
-    -
-      any: { shader: "./shaders/sphere_rahit.spv", input: "" }
-      closest: { shader: "./shaders/sphere_rchit.spv", input: "" }
-      intersection: { shader: "./shaders/sphere_intersection.spv", input: "./sphere_in.yaml" }
-    callable_records: []
+
+shader_binding_table:
+  miss_records:
+  - { shader: "./shaders/miss_sky.spv", input: "" }
+  - { shader: "./shaders/miss_shadow.spv", input: "" }
+  hit_group_records:
+  -
+    any: { shader: "./shaders/wall_rahit.spv", input: "" }
+    closest: { shader: "./shaders/wall_rchit.spv", input: "" }
+    intersection: { shader: "", input: "" }
+  -
+    any: { shader: "./shaders/sphere_rahit.spv", input: "" }
+    closest: { shader: "./shaders/sphere_rchit.spv", input: "" }
+    intersection: { shader: "./shaders/sphere_intersection.spv", input: "./sphere_in.yaml" }
+  callable_records: []

@@ -326,9 +326,9 @@ public:
 
         for (const auto& option_data : options) {
             std::stringstream header;
-            if (!option_data.single.empty())
-                header << '-' << option_data.single << " / ";
             header << "--" << option_data.fullWord;
+            if (!option_data.single.empty())
+                header << " / -" << option_data.single;
             if (std::string arg_names = option_data.option->getArgNames(); !arg_names.empty())
                 header << ' ' << arg_names;
 
