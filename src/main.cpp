@@ -193,6 +193,15 @@ int main(int argc, char* argv[]) {
         "Specify the size of each indent (in spaces) for outputs. Defaults to 2",
         "n"
     );
+    ArgParse::Flag location;
+    parser.addOption(
+        &location,
+        "location",
+        "Prefer location names instead of decorated/inferred names when printing out variables (both for templates and "
+        " outputs. This option does not need to be enabled for location names to be usable when providing input or "
+        " comparing output(s).",
+        "l"
+    );
     ArgParse::StringOption out_arg("FILE", "-");
     parser.addOption(&out_arg, "out", "Specify a file to output to. By default, output prints to stdout.", "o");
     ArgParse::Flag verbose;
@@ -206,23 +215,8 @@ int main(int argc, char* argv[]) {
         "Treat the input as a ray tracing substage when creating an input template. Enables --template implicitly.",
         "r"
     );
-    ArgParse::StringOption sbt_name("SBT", "shader_binding_table");
-    parser.addOption(
-        &sbt_name,
-        "sbt-name",
-        "Name to expect for the definition of the shader binding table. Only applicable for rgen shaders. Default is "
-        "\"shader_binding_table\""
-    );
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
-    ArgParse::StringOption template_arg("FILE");
-    parser.addOption(
-        &template_arg,
-        "template",
-        "Creates a template input file with stubs for all needed inputs. If --default is set, the default values "
-        "will be printed instead of <type> stubs.",
-        "t"
-    );
     ArgParse::Flag single_invoc;
     parser.addOption(
         &single_invoc,
@@ -231,7 +225,15 @@ int main(int argc, char* argv[]) {
         "builtin input variables observing the invocation ID are used by the shader, they must be provided as input(s)."
         " This option only has affect for shader stages with a concept of a workgroup (such as comp and tesc). It is "
         "ignored by all other shader stages.",
-        "l"
+        "1"
+    );
+    ArgParse::StringOption template_arg("FILE");
+    parser.addOption(
+        &template_arg,
+        "template",
+        "Creates a template input file with stubs for all needed inputs. If --default is set, the default values "
+        "will be printed instead of <type> stubs.",
+        "t"
     );
     ArgParse::Flag unused;
     parser.addOption(
@@ -330,7 +332,7 @@ int main(int argc, char* argv[]) {
     RayTraceSubstage dummy;
     try {
         if (!rt_template.enabled)
-            program.init(inputs, single_invoc.enabled, sbt_name.getValue());
+            program.init(inputs, single_invoc.enabled);
         else {
             auto& manager = program.getDataManager();
             dummy.data = &manager.getGlobal();

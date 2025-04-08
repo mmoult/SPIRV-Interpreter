@@ -53,7 +53,8 @@ export class Program {
     std::vector<RayTraceSubstage> hits;
     std::vector<RayTraceSubstage> callables;
     ShaderBindingTable sbt;
-    std::string sbtName;
+
+    constexpr static const char* SBT_NAME = "@shader-binding-table";
 
     /// @brief Parses instructions from the binary words.
     /// Should identify whether the whole program is valid before any instructions are executed.
@@ -402,7 +403,7 @@ export class Program {
                     }
                 }
             }
-            if (!found && name == sbtName && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
+            if (!found && name == SBT_NAME && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
                 // Read the shader binding table from the given value
                 sbt.copyFrom(val);
                 found = true;
@@ -449,8 +450,7 @@ public:
         return insts.size();
     }
 
-    void init(ValueMap& provided, bool single_invoc, std::string sbt_name) noexcept(false) {
-        this->sbtName = sbt_name;
+    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
         entry = init(provided, data.getGlobal(), nullptr, single_invoc);
     }
     void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs, bool unused = false) {
@@ -720,7 +720,7 @@ public:
 
         // If this is an rgen shader, forcibly add the shader binding table as a value
         if (insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR)
-            input_map[sbtName] = sbt.toStruct();
+            input_map[SBT_NAME] = sbt.toStruct();
 
         return input_map;
     }

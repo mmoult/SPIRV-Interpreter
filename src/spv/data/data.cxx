@@ -6,6 +6,7 @@
 module;
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 
 #include "../../external/spirv.hpp"
@@ -17,19 +18,27 @@ import value.primitive;
 import value.string;
 
 export class Variable : public Valuable {
-    // The variable owns this value. When it is set, another value is copied over and decorations (such as
-    // relaxed precision or type conversions) are applied.
+    /// The variable owns this value. When it is set, another value is copied over and decorations (such as relaxed
+    /// precision or type conversions) are applied.
     Value* val;
-    // Used to determine whether this variable is in, out, or other
+    /// Used to determine whether this variable is in, out, or other
     spv::StorageClass storage;
-    // name of the variable, how this variable can be referenced by in and out toml files
+    /// Name of the variable, how this variable can be referenced by external-facing data files
     std::string name;
     /// Indicates which builtin this variable is, if any
     spv::BuiltIn builtIn = spv::BuiltIn::BuiltInMax;
     // Whether this variable is a spec constant, which is treated as a value and a variable
     bool specConst;
-    /// Internal modifier applied if this is decorated with NonWritable
-    bool noWrite = false;
+
+    // Optional settings holding decorated state:
+    constexpr static unsigned UNSET = std::numeric_limits<unsigned>::max();
+    /// if this is decorated with NonWritable
+    bool nonwritable = false;
+    /// The location of this variable. "location" can only be used on in/out variables and is therefore mutually
+    /// exclusive with "binding", which can only be used on buffers. This field holds both
+    unsigned location = UNSET;
+    /// The descriptor set of this variable.
+    unsigned descr_set = UNSET;
 
     /// @brief Construct a new variable directly (instead of through makeVariable)
     /// @param value saved (not copied) as the variable's value. Must be on the heap!
@@ -43,7 +52,7 @@ public:
         , name(other.name)
         , builtIn(other.builtIn)
         , specConst(other.specConst)
-        , noWrite(other.noWrite) {
+        , nonwritable(other.nonwritable) {
         val = other.val->getType().construct();
         val->copyFrom(*other.val);
     }
@@ -102,10 +111,24 @@ public:
     }
 
     void forbidWrite() {
-        noWrite = true;
+        nonwritable = true;
     }
     bool isWritable() const {
-        return !noWrite;
+        return !nonwritable;
+    }
+
+    void setBinding(unsigned location) {
+        this->location = location;
+    }
+    unsigned getBinding() const {
+        return location;
+    }
+
+    void setDescriptorSet(unsigned set) {
+        this->descr_set = set;
+    }
+    unsigned getDescriptorSet() const {
+        return descr_set;
     }
 
     [[nodiscard]] Value* asValue() const override {
