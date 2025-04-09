@@ -131,6 +131,13 @@ public:
         return descr_set;
     }
 
+    static inline bool isUnset(unsigned location_data) {
+        return location_data == UNSET;
+    }
+    static inline unsigned getUnset() {
+        return UNSET;
+    }
+
     [[nodiscard]] Value* asValue() const override {
         // Represent this variable with its value, storage class, and if set, name
         // Don't currently display decorations although they could be helpful.

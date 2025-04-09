@@ -11,7 +11,7 @@ module;
 
 #include "../values/type.hpp"
 
-export module util.arraymath;
+export module util.arrayMath;
 import value.aggregate;
 import value.primitive;
 import value.statics;

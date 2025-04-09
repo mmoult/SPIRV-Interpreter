@@ -208,6 +208,8 @@ int main(int argc, char* argv[]) {
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
     ArgParse::Flag quiet;
     parser.addOption(&quiet, "quiet", "Suppress all runtime warnings.", "q");
+
+    [[deprecated("rt template will be made obsolete by new location I/O features")]]
     ArgParse::Flag rt_template;
     parser.addOption(
         &rt_template,
@@ -352,7 +354,7 @@ int main(int argc, char* argv[]) {
         format2->setTemplate(!generate.enabled);
 
         std::stringstream ss;
-        auto prog_ins = (!rt_template.enabled) ? program.getInputs() : dummy.getInputs();
+        auto prog_ins = (!rt_template.enabled) ? program.getInputs(location.enabled) : dummy.getInputs();
         format2->printFile(ss, prog_ins);
 
         if (itemplate == "-") {
@@ -397,7 +399,7 @@ int main(int argc, char* argv[]) {
     // Output the result (If file output is not set, only print to stdout if checking isn't enabled)
     if (bool out_set = out_arg.isPresent(); !check.isPresent() || out_set) {
         std::stringstream ss;
-        const auto& prog_outs = program.getOutputs();
+        const auto& prog_outs = program.getOutputs(location.enabled);
 
         std::string out = out_arg.getValue();
         if (out_set && out != "-") {

@@ -31,7 +31,7 @@ import spv.data.data;
 import spv.frame;
 import spv.rayFlags;
 import spv.token;
-import util.arraymath;
+import util.arrayMath;
 import util.fpconvert;
 import value.aggregate;
 import value.image;

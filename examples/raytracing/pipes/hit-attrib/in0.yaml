@@ -54,7 +54,7 @@ topLevelAS:
     - [ 5.0, 6.0, 11.0 ]
   procedural_nodes: []
 
-shader_binding_table:
+'@shader-binding-table':
   miss_records:
   - { shader: "./substages/rmiss.spv", input: "" }
   hit_group_records:
