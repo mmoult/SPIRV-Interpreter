@@ -12,7 +12,7 @@
 
 #include "../value.hpp"
 #include "trace.hpp"
-import util.arraymath;
+import util.arrayMath;
 import util.intersection;
 import util.ternary;
 import value.aggregate;

@@ -27,6 +27,7 @@ import spv.frame;
 import spv.instList;
 import spv.instruction;
 import spv.raySubstage;
+import spv.varCompare;
 import value.aggregate;
 import value.primitive;
 import value.raytrace.accelStruct;
@@ -53,7 +54,8 @@ export class Program {
     std::vector<RayTraceSubstage> hits;
     std::vector<RayTraceSubstage> callables;
     ShaderBindingTable sbt;
-    std::string sbtName;
+
+    constexpr static const char* SBT_NAME = "@shader-binding-table";
 
     /// @brief Parses instructions from the binary words.
     /// Should identify whether the whole program is valid before any instructions are executed.
@@ -150,15 +152,6 @@ export class Program {
             return bound;
         }
     };
-
-    ValueMap getVariables(const std::vector<unsigned>& vars) const {
-        ValueMap ret;
-        for (const auto v : vars) {
-            const auto var = data.getGlobal()[v].getVariable();
-            ret.emplace(var->getName(), var->getVal());
-        }
-        return ret;
-    }
 
     unsigned init(ValueMap& provided, DataView& global, RayTraceSubstage* stage, bool single_invoc) {
         unsigned entry = 0;
@@ -371,12 +364,22 @@ export class Program {
 
         // Next go through variables defined and verify they match needed
         for (const auto& [name, val] : provided) {
+            if (name == SBT_NAME && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
+                // Read the shader binding table from the given value
+                sbt.copyFrom(val);
+                continue;
+            }
+
+            VarCompare compare(name);
+            compare.init();
+
             bool found = false;
-            // first, find the variable which matches the name
+            // next iterate over the variables in our lists and try to match either by name or by location binding
             for (unsigned i = 0; i < inputs.size(); ++i) {
                 auto var = inputs[i];
-                if (var->getName() == name) {
-                    found = true;
+
+                found = compare.isMatch(*var);
+                if (found) {
                     try {
                         var->setVal(*val);
                     } catch (const std::exception& e) {
@@ -385,7 +388,6 @@ export class Program {
                         err << e.what();
                         throw std::runtime_error(err.str());
                     }
-
                     // Remove the interface from the check list
                     inputs.erase(inputs.begin() + i);
                     --i;
@@ -396,17 +398,14 @@ export class Program {
             // If there was no matching pair in the standard inputs, try other sources
             if (!found) {
                 for (Variable* specConst : specConsts) {
+                    // Specialization constants are fixed at compile time and therefore don't have a location.
                     if (specConst->getName() == name) {
                         found = true;
                         break;
                     }
                 }
             }
-            if (!found && name == sbtName && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
-                // Read the shader binding table from the given value
-                sbt.copyFrom(val);
-                found = true;
-            }
+
             if (!found) {  // Finally, display an error if the match wasn't found
                 std::stringstream err;
                 err << "Input specifies variable \"" << name << "\" which doesn't exist in the program interface!";
@@ -449,8 +448,7 @@ public:
         return insts.size();
     }
 
-    void init(ValueMap& provided, bool single_invoc, std::string sbt_name) noexcept(false) {
-        this->sbtName = sbt_name;
+    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
         entry = init(provided, data.getGlobal(), nullptr, single_invoc);
     }
     void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs, bool unused = false) {
@@ -486,41 +484,43 @@ public:
         // Next go through checks and find the corresponding in outputs
         for (const auto& [name, val] : checks) {
             bool found = false;
+            VarCompare comp(name);
+            comp.init();
             // first, find the variable which matches the name
             for (unsigned i = 0; i < outputs.size(); ++i) {
                 auto var = outputs[i];
-                if (var->getName() == name) {
-                    found = true;
-                    // Now is the hard part- we need to compare whether this output matches the check file.
-                    // The check file lost some type precision (ie 0.0 -> 0), so we assume outputs are the
-                    // standard of type truth, although by definition the check values must be correct.
-                    // Therefore, we construct a dummy with the output's type and copy values from the check
-                    // into it, then compare for equality.
-                    const Value* var_val = var->getVal();
-                    const auto& v_type = var_val->getType();
-                    Value* dummy;
-                    try {
-                        dummy = v_type.construct();
-                        dummy->copyFrom(*val);
-                        bool compare = dummy->equals(*var_val);
-                        delete dummy;
-                        if (!compare) {
-                            std::stringstream err;
-                            std::cerr << "Output variable \"" << name;
-                            std::cerr << "\" did not match the expected value!" << std::endl;
-                            return std::tuple(false, total_tests);
-                        }
-                    } catch (const std::exception& e) {
-                        if (dummy != nullptr)
-                            delete dummy;
+                if (!comp.isMatch(*var))
+                    continue;  // this isn't a match, try next
+
+                found = true;
+                // Now is the hard part- we need to compare whether this output matches the check file.
+                // The check file lost some type precision (ie 0.0 -> 0), so we assume outputs are the
+                // standard of type truth, although by definition the check values must be correct.
+                // Therefore, we construct a dummy with the output's type and copy values from the check
+                // into it, then compare for equality.
+                const Value* var_val = var->getVal();
+                const auto& v_type = var_val->getType();
+                Value* dummy;
+                try {
+                    dummy = v_type.construct();
+                    dummy->copyFrom(*val);
+                    bool compare = dummy->equals(*var_val);
+                    delete dummy;
+                    if (!compare) {
+                        std::stringstream err;
+                        std::cerr << "Output variable \"" << name;
+                        std::cerr << "\" did not match the expected value!" << std::endl;
                         return std::tuple(false, total_tests);
                     }
-                    // Remove the interface from the compare list
-                    outputs.erase(outputs.begin() + i);
-                    --i;
-                    break;
-                } else
-                    continue;  // this isn't a match, try next
+                } catch (const std::exception& e) {
+                    if (dummy != nullptr)
+                        delete dummy;
+                    return std::tuple(false, total_tests);
+                }
+                // Remove the interface from the compare list
+                outputs.erase(outputs.begin() + i);
+                --i;
+                break;
             }
 
             if (!found)
@@ -713,19 +713,52 @@ public:
         }
     }
 
-    ValueMap getInputs() const {
-        auto input_map = getVariables(ins);
-        auto spec_consts = getVariables(specs);
+    ValueMap getVariables(const std::vector<unsigned>& vars, bool prefer_location) const {
+        ValueMap ret;
+        for (const auto v : vars) {
+            const auto var = data.getGlobal()[v].getVariable();
+
+            std::string name = var->getName();
+            bool need_mangle = true;
+            if (prefer_location) {
+                auto storage = var->getStorageClass();
+                std::stringstream name_builder;
+                name_builder << '@';
+                if (auto binding = var->getBinding(); !Variable::isUnset(binding)) {
+                    if (VarCompare::isBuffer(*var))
+                        name_builder << "binding";
+                    else
+                        name_builder << "location";
+                    name_builder << binding;
+                }
+                if (auto desc_set = var->getDescriptorSet(); !Variable::isUnset(desc_set))
+                    name_builder << "set" << desc_set;
+                if (auto built = name_builder.str(); built.length() > 1) {
+                    need_mangle = false;
+                    name = built;
+                }
+            }
+            if (need_mangle)
+                name = VarCompare::mangleName(name);
+
+            ret.emplace(name, var->getVal());
+        }
+        return ret;
+    }
+
+    ValueMap getInputs(bool prefer_location) const {
+        auto input_map = getVariables(ins, prefer_location);
+        auto spec_consts = getVariables(specs, prefer_location);
         input_map.insert(spec_consts.begin(), spec_consts.end());
 
         // If this is an rgen shader, forcibly add the shader binding table as a value
         if (insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR)
-            input_map[sbtName] = sbt.toStruct();
+            input_map[SBT_NAME] = sbt.toStruct();
 
         return input_map;
     }
-    ValueMap getOutputs() const {
-        return getVariables(outs);
+    ValueMap getOutputs(bool prefer_location) const {
+        return getVariables(outs, prefer_location);
     }
 
     std::map<std::string, spv::StorageClass> getStorageClasses() const {
