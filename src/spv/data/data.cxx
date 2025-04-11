@@ -349,4 +349,12 @@ public:
             return Data(new Type(*static_cast<Type*>(raw)));
         }
     }
+
+    /// @brief Move the data held by other into this, transferring ownership
+    /// @param other transferred from. Cleared before return.
+    void move(Data& other) {
+        redefine(other);
+        other.own = false;
+        other.clear();
+    }
 };

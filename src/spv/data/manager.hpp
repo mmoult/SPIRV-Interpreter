@@ -95,6 +95,10 @@ public:
         this->max = max;
     }
 
+    unsigned allocateNew() {
+        return max++;
+    }
+
     inline DataView* makeView(DataView* prev = nullptr) {
         auto view = new DataView(this);
         view->setPrev(prev);

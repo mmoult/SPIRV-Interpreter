@@ -3,7 +3,7 @@
 
 layout(set = 0, binding = 1, std140) uniform _14_16
 {
-    vec4 _m0[20];
+    vec4 _m0[5];
 } _16;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT _32;

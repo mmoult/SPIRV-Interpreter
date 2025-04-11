@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 
+#include "../external/spirv.hpp"
 #include "values/value.hpp"
 import format.json;
 import format.parse;
@@ -105,12 +106,12 @@ ReturnCode parse_spv(Program& program, std::string program_path) {
     return ReturnCode::OK;
 }
 
-bool handle_record(Program& program, const std::string& source, RayTraceSubstage& stage) {
+bool handle_record(Program& program, const std::string& source, RayTraceSubstage& stage, spv::ExecutionModel expected) {
     if (source.empty())
         return false;
     parse_spv(program, source);
     // Should delete the view after the record is done, but since it exists until main is exited, don't bother
-    program.initRaytrace(stage);
+    program.initRaytrace(stage, expected);
     return true;
 }
 
@@ -120,9 +121,9 @@ ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit) {
 
     // Note, we must create records even if the shader is empty because that is how we keep the groups aligned in a
     // single list (by 3's, where {any, closest, intersection} go together).
-    present |= handle_record(program, hit.any, program.nextHitRecord());
-    present |= handle_record(program, hit.closest, program.nextHitRecord());
-    present |= handle_record(program, hit.intersection, program.nextHitRecord());
+    present |= handle_record(program, hit.any, program.nextHitRecord(), spv::ExecutionModelAnyHitKHR);
+    present |= handle_record(program, hit.closest, program.nextHitRecord(), spv::ExecutionModelClosestHitKHR);
+    present |= handle_record(program, hit.intersection, program.nextHitRecord(), spv::ExecutionModelIntersectionKHR);
 
     if (!present) {
         std::cerr << "Shader binding hit record needs at least one shader but has none!" << std::endl;
@@ -132,8 +133,13 @@ ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit) {
     return ReturnCode::OK;
 }
 
-ReturnCode handle_other_record(Program& program, const std::string& source, RayTraceSubstage& stage) {
-    if (handle_record(program, source, stage))
+ReturnCode handle_other_record(
+    Program& program,
+    const std::string& source,
+    RayTraceSubstage& stage,
+    spv::ExecutionModel expected
+) {
+    if (handle_record(program, source, stage, expected))
         return ReturnCode::OK;
     std::cerr << "Shader record source must be non-empty!" << std::endl;
     return ReturnCode::BAD_PROG_INPUT;
@@ -315,13 +321,13 @@ int main(int argc, char* argv[]) {
         // Any bad returns are from incorrect SBT data - bad input
         const ShaderBindingTable& sbt = program.getShaderBindingTable();
         for (const auto& miss : sbt.getMissRecords())
-            REQUIRE(handle_other_record(program, miss, program.nextMissRecord()));
+            REQUIRE(handle_other_record(program, miss, program.nextMissRecord(), spv::ExecutionModelMissKHR));
 
         for (const auto& hit : sbt.getHitRecords())
             REQUIRE(handle_hit_record(program, hit));
 
         for (const auto& call : sbt.getCallableRecords())
-            REQUIRE(handle_other_record(program, call, program.nextCallableRecord()));
+            REQUIRE(handle_other_record(program, call, program.nextCallableRecord(), spv::ExecutionModelCallableKHR));
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROGRAM;

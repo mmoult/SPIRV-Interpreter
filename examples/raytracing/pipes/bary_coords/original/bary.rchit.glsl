@@ -3,12 +3,12 @@
 
 layout(set = 0, binding = 1, std140) uniform _37_39
 {
-    vec4 _m0[20];
+    vec4 _m0[5];
 } _39;
 
 layout(set = 0, binding = 2, std430) buffer _11_13
 {
-    vec4 _m0[20];
+    vec4 _m0[5];
 } _13;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT _35;

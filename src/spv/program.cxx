@@ -14,6 +14,7 @@ module;
 
 #include "glm/ext.hpp"
 
+#define SPV_ENABLE_UTILITY_CODE
 #include "../../external/spirv.hpp"
 #include "../values/raytrace/trace.hpp"
 #include "../values/type.hpp"
@@ -359,24 +360,62 @@ public:
     void init(ValueMap& provided, bool single_invoc) noexcept(false) {
         entry = init(provided, data.getGlobal(), nullptr, single_invoc);
     }
-    void initRaytrace(RayTraceSubstage& stage) {
+    void initRaytrace(RayTraceSubstage& stage, spv::ExecutionModel expected) {
         stage.data = this->data.makeView();
         ValueMap extra_inputs;
-        // TODO: one thing I am concerned about is that non-const in/out vars should NOT be on the global data scope.
-        // That scope should be shared between all substage invocations, even if we need to run them recursively with
-        // different input values.
         unsigned entry = init(extra_inputs, *stage.data, &stage, false);
+        // Verify that the shader type matches the stage expected
+        if (auto found = insts[entry].getShaderStage(); found != expected) {
+            std::stringstream err;
+            err << "Shader substage parsed does not match the expected type! Expected ";
+            err << spv::ExecutionModelToString(expected) << ", but found ";
+            err << spv::ExecutionModelToString(found) << " instead.";
+            throw std::runtime_error(err.str());
+        }
         stage.entry = entry;
 
         // Connect any in/outs/specs from the substage to the main stage
-        for (unsigned in : stage.ins) {
-            bool found = false;
-            // for var in this->in
-                // check by location, then check by name
+        auto& global = this->data.getGlobal();
+        for (unsigned s_in : stage.ins) {
+            unsigned found = 0;
+            Variable& stage_in = *(*stage.data)[s_in].getVariable();
 
-            if (!found) {
-                // Create a new variable in this's data and turn in into an alias to it
+            bool stage_is_buffer = VarCompare::isBuffer(stage_in);
+            unsigned stage_binding = stage_in.getBinding();
+            unsigned stage_desc_set = stage_in.getDescriptorSet();
+            bool name_check = Variable::isUnset(stage_binding) && Variable::isUnset(stage_desc_set);
+
+            for (unsigned m_in : this->ins) {
+                Variable& main_in = *global[m_in].getVariable();
+                bool match = false;
+                if (name_check)
+                    match = (main_in.getName() == stage_in.getName());
+                else {
+                    bool main_is_buffer = VarCompare::isBuffer(main_in);
+                    unsigned main_binding = main_in.getBinding();
+                    unsigned main_desc_set = main_in.getDescriptorSet();
+
+                    match = (main_is_buffer == stage_is_buffer) &&
+                            (main_binding == stage_binding) &&
+                            (main_desc_set == stage_desc_set);
+                }
+
+                if (match) {
+                    found = m_in;
+                    break;
+                }
             }
+
+            if (found == 0) {
+                // Create a new variable in this's data and set it to found
+                found = data.allocateNew();
+                global[found].move((*stage.data)[s_in]);
+                this->ins.push_back(found);
+            }
+
+            // Connect stage_in to found in main by setting the former as an alias of the latter
+            // TODO replace with alias in the future
+            (*stage.data)[s_in].redefine(global[found], false);
         }
         for (unsigned spec : stage.specs) {
             // I don't think it is possible to have a specialization constant in an rt substage, is it?
@@ -384,7 +423,19 @@ public:
             throw std::runtime_error("The interpreter does not support spec constants in rt substages!");
         }
         for (unsigned out : stage.outs) {
+            // I don't believe it is possible to have any true outputs. Instead, we have many buffers, payloads, etc,
+            // which should be triggered for in variables first
 
+            // TODO: may want to remove this later
+            // Verify that all outs already exist on the in list
+            bool found = false;
+            for (unsigned in : stage.ins) {
+                if (in == out) {
+                    found = true;
+                    break;
+                }
+            }
+            assert(found);
         }
     }
 
