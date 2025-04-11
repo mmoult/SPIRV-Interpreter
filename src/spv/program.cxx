@@ -220,11 +220,8 @@ export class Program {
                             default:
                                 break;
                             }
-                        } else {
-                            // need to catch some builtins for rt substages here
-                            if (stage->handleStaticInst(inst))
-                                continue;
-                        }
+                        } else if (stage->handleStaticInst(inst))
+                            continue;
 
                         process_visible_io(inst);
                     }
@@ -242,7 +239,6 @@ export class Program {
 
             // Since we cannot guarantee the ordering of these variable's declarations, we must cache their locations
             // until all are processed.
-
             unsigned top_var;
             if (global_id_loc != 0)
                 top_var = global_id_loc;
@@ -260,6 +256,14 @@ export class Program {
 
         if (!entry_found)
             throw std::runtime_error("Program is missing entry function!");
+
+        // Load any connected rt substages
+        if (provided.contains(SBT_NAME) && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
+            // Read the shader binding table from the given value
+            sbt.copyFrom(provided[SBT_NAME]);
+            provided.erase(SBT_NAME);
+        }
+
         return entry;
     }
 
@@ -338,17 +342,63 @@ export class Program {
         rt_stage.cleanUp(launched_from);
     }
 
+public:
+    void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false) {
+        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
+        // This allows for a cleaner separation of data.
+        ProgramLoader load(buffer, length);
+        insts.addBreak(insts.size(), file_path);
+        uint32_t bound = load.parse(insts.getInstructions());
+        data.setBound(std::max(bound, data.getBound()));
+    }
+
+    unsigned getInstLength() const {
+        return insts.size();
+    }
+
+    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
+        entry = init(provided, data.getGlobal(), nullptr, single_invoc);
+    }
+    void initRaytrace(RayTraceSubstage& stage) {
+        stage.data = this->data.makeView();
+        ValueMap extra_inputs;
+        // TODO: one thing I am concerned about is that non-const in/out vars should NOT be on the global data scope.
+        // That scope should be shared between all substage invocations, even if we need to run them recursively with
+        // different input values.
+        unsigned entry = init(extra_inputs, *stage.data, &stage, false);
+        stage.entry = entry;
+
+        // Connect any in/outs/specs from the substage to the main stage
+        for (unsigned in : stage.ins) {
+            bool found = false;
+            // for var in this->in
+                // check by location, then check by name
+
+            if (!found) {
+                // Create a new variable in this's data and turn in into an alias to it
+            }
+        }
+        for (unsigned spec : stage.specs) {
+            // I don't think it is possible to have a specialization constant in an rt substage, is it?
+            // If so, I guess we can match on name?
+            throw std::runtime_error("The interpreter does not support spec constants in rt substages!");
+        }
+        for (unsigned out : stage.outs) {
+
+        }
+    }
+
+    const ShaderBindingTable& getShaderBindingTable() const {
+        return sbt;
+    }
+
     /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
     /// @param provided map of names to values
     /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
     ///               default values.
-    void checkInputs(
-        ValueMap& provided,
-        DataView& global,  // needed for fetching variables
-        std::vector<unsigned>& ins,
-        std::vector<unsigned>& specs,
-        bool unused
-    ) noexcept(false) {
+    void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
+        DataView& global = this->data.getGlobal();
+
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
         for (const auto in : ins)
@@ -362,14 +412,10 @@ export class Program {
         for (const auto spec : specs)
             specConsts.push_back(global[spec].getVariable());
 
+        // Similarly to specialization constants, SBT data, if given, should have already been processed and removed.
+
         // Next go through variables defined and verify they match needed
         for (const auto& [name, val] : provided) {
-            if (name == SBT_NAME && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
-                // Read the shader binding table from the given value
-                sbt.copyFrom(val);
-                continue;
-            }
-
             VarCompare compare(name);
             compare.init();
 
@@ -432,42 +478,6 @@ export class Program {
             error << "!";
             throw std::runtime_error(error.str());
         }
-    }
-
-public:
-    void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false) {
-        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
-        // This allows for a cleaner separation of data.
-        ProgramLoader load(buffer, length);
-        insts.addBreak(insts.size(), file_path);
-        uint32_t bound = load.parse(insts.getInstructions());
-        data.setBound(std::max(bound, data.getBound()));
-    }
-
-    unsigned getInstLength() const {
-        return insts.size();
-    }
-
-    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
-        entry = init(provided, data.getGlobal(), nullptr, single_invoc);
-    }
-    void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs, bool unused = false) {
-        unsigned entry = init(extra_inputs, *stage.data, &stage, false);
-        stage.entry = entry;
-        checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, unused);
-    }
-
-    const ShaderBindingTable& getShaderBindingTable() const {
-        return sbt;
-    }
-
-    /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
-    /// @param provided map of names to values
-    /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
-    ///               default values.
-    /// @return the shader binding table to process (if any), otherwise, nullptr
-    void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
-        checkInputs(provided, this->data.getGlobal(), this->ins, this->specs, unused);
     }
 
     std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true) {

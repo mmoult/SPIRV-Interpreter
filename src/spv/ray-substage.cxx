@@ -217,11 +217,4 @@ public:
             frame.getHitAttribute()->copyFrom(*var->getVal());
         }
     }
-
-    ValueMap getInputs() const {
-        auto input_map = getVariables(ins);
-        auto spec_consts = getVariables(specs);
-        input_map.insert(spec_consts.begin(), spec_consts.end());
-        return input_map;
-    }
 };

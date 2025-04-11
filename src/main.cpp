@@ -105,46 +105,24 @@ ReturnCode parse_spv(Program& program, std::string program_path) {
     return ReturnCode::OK;
 }
 
-ReturnCode
-handle_record(Program& program, const ShaderRecord& record, ValueFormat* preference, RayTraceSubstage& stage) {
-    parse_spv(program, record.shaderSource);
-    ValueMap extra_inputs;
-    if (!record.extraInput.empty()) {
-        ValueFormat* format = determine_format(record.extraInput, preference, false);
-        if (auto ret = load_file(extra_inputs, record.extraInput, format); ret != ReturnCode::OK)
-            return ret;
-    }
-    stage.data = program.getDataManager().makeView();
+bool handle_record(Program& program, const std::string& source, RayTraceSubstage& stage) {
+    if (source.empty())
+        return false;
+    parse_spv(program, source);
     // Should delete the view after the record is done, but since it exists until main is exited, don't bother
-    program.initRaytrace(stage, extra_inputs);
-    return ReturnCode::OK;
+    program.initRaytrace(stage);
+    return true;
 }
 
-ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueFormat* preference) {
-    // Not all three are required to be present, but at least one is, and input may not be specified if shader isn't.
-
+ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit) {
+    // Not all three are required to be present, but at least one is.
     bool present = false;
-#define CHECK_INPUT(TEST, STAGE) \
-    if (TEST.shaderSource.empty()) { \
-        if (!TEST.extraInput.empty()) { \
-            std::cerr << "Shader binding hit record may not specify input, \"" << TEST.extraInput; \
-            std::cerr << "\" without a corresponding shader!" << std::endl; \
-            return ReturnCode::BAD_PROG_INPUT; \
-        } \
-    } else { \
-        present = true; \
-        if (auto ret = handle_record(program, TEST, preference, STAGE); ret != ReturnCode::OK) \
-            return ret; \
-    }
+
     // Note, we must create records even if the shader is empty because that is how we keep the groups aligned in a
-    // single list (by 3's, where any, closest, intersection).
-    RayTraceSubstage& any = program.nextHitRecord();
-    CHECK_INPUT(hit.any, any);
-    RayTraceSubstage& closest = program.nextHitRecord();
-    CHECK_INPUT(hit.closest, closest);
-    RayTraceSubstage& intersection = program.nextHitRecord();
-    CHECK_INPUT(hit.intersection, intersection);
-#undef CHECK_INPUT
+    // single list (by 3's, where {any, closest, intersection} go together).
+    present |= handle_record(program, hit.any, program.nextHitRecord());
+    present |= handle_record(program, hit.closest, program.nextHitRecord());
+    present |= handle_record(program, hit.intersection, program.nextHitRecord());
 
     if (!present) {
         std::cerr << "Shader binding hit record needs at least one shader but has none!" << std::endl;
@@ -152,6 +130,13 @@ ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueF
     }
 
     return ReturnCode::OK;
+}
+
+ReturnCode handle_other_record(Program& program, const std::string& source, RayTraceSubstage& stage) {
+    if (handle_record(program, source, stage))
+        return ReturnCode::OK;
+    std::cerr << "Shader record source must be non-empty!" << std::endl;
+    return ReturnCode::BAD_PROG_INPUT;
 }
 
 int main(int argc, char* argv[]) {
@@ -208,15 +193,6 @@ int main(int argc, char* argv[]) {
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
     ArgParse::Flag quiet;
     parser.addOption(&quiet, "quiet", "Suppress all runtime warnings.", "q");
-
-    [[deprecated("rt template will be made obsolete by new location I/O features")]]
-    ArgParse::Flag rt_template;
-    parser.addOption(
-        &rt_template,
-        "raytrace",
-        "Treat the input as a ray tracing substage when creating an input template. Enables --template implicitly.",
-        "r"
-    );
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
     ArgParse::Flag single_invoc;
@@ -289,7 +265,7 @@ int main(int argc, char* argv[]) {
     // Peform the rest of the option actions
     if (debug.enabled)
         verbose.enabled = true;
-    if ((generate.enabled || rt_template.enabled) && !template_arg.hasValue())
+    if (generate.enabled && !template_arg.hasValue())
         template_arg.setValue("-");
     suppress_warnings = quiet.enabled;
 
@@ -331,15 +307,21 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    RayTraceSubstage dummy;
     try {
-        if (!rt_template.enabled)
-            program.init(inputs, single_invoc.enabled);
-        else {
-            auto& manager = program.getDataManager();
-            dummy.data = &manager.getGlobal();
-            program.initRaytrace(dummy, inputs, true);
-        }
+        program.init(inputs, single_invoc.enabled);
+
+        // May need to process info given from shader binding table, if any
+        // Any exceptions are from problematic substage code - bad program
+        // Any bad returns are from incorrect SBT data - bad input
+        const ShaderBindingTable& sbt = program.getShaderBindingTable();
+        for (const auto& miss : sbt.getMissRecords())
+            REQUIRE(handle_other_record(program, miss, program.nextMissRecord()));
+
+        for (const auto& hit : sbt.getHitRecords())
+            REQUIRE(handle_hit_record(program, hit));
+
+        for (const auto& call : sbt.getCallableRecords())
+            REQUIRE(handle_other_record(program, call, program.nextCallableRecord()));
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROGRAM;
@@ -354,7 +336,7 @@ int main(int argc, char* argv[]) {
         format2->setTemplate(!generate.enabled);
 
         std::stringstream ss;
-        auto prog_ins = (!rt_template.enabled) ? program.getInputs(location.enabled) : dummy.getInputs();
+        auto prog_ins = program.getInputs(location.enabled);
         format2->printFile(ss, prog_ins);
 
         if (itemplate == "-") {
@@ -374,17 +356,6 @@ int main(int argc, char* argv[]) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROG_INPUT;
     }
-
-    // May need to process info given from shader binding table, if any
-    const ShaderBindingTable& sbt = program.getShaderBindingTable();
-    for (const auto& miss : sbt.getMissRecords())
-        REQUIRE(handle_record(program, miss, format, program.nextMissRecord()));
-
-    for (const auto& hit : sbt.getHitRecords())
-        REQUIRE(handle_hit_record(program, hit, format));
-
-    for (const auto& call : sbt.getCallableRecords())
-        REQUIRE(handle_record(program, call, format, program.nextCallableRecord()));
 
 #undef REQUIRE
 
