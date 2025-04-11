@@ -1,4 +1,7 @@
 {
-	"gl_LaunchIDEXT" : [ 10, 35, 7 ],
-	"outColor" : [ 0.0, 0.0, 0.0 ]
+	"Result" : {
+		"rem_result" : [ 0.0, 0.0, 0.0, 0.0 ],
+		"mod_result" : [ 0.0, 0.0, 0.0, 0.0 ]
+	},
+	"gl_LaunchIDEXT" : [ 3, 3, 3 ]
 }

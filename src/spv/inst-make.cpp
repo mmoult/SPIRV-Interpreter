@@ -1340,21 +1340,26 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::INT);
         break;
     }
-    case spv::OpFRem:  // 140
-    case spv::OpFMod: {  // 141
-        BinOp fx = [this](const Primitive* a, const Primitive* b) {
+    case spv::OpFRem: {  // 140
+        BinOp fx = [](const Primitive* a, const Primitive* b) {
             if (b->data.fp32 == 0.0) {
-                if (this->opcode == spv::OpFRem)
-                    Console::warn("FRem undefined since divisor is 0!");
-                else
-                    Console::warn("FMod undefined since divisor is 0!");
+                Console::warn("FRem undefined since divisor is 0!");
                 return std::nanf("1");
             }
-            auto res = std::fmod(a->data.fp32, b->data.fp32);
-            return std::copysign(res, (this->opcode == spv::OpFRem) ? a->data.fp32 : b->data.fp32);
+            return a->data.fp32 - b->data.fp32 * std::trunc(a->data.fp32 / b->data.fp32);
         };
-        // The two float modulus operators are very similar. The only difference is which sign the result must match:
-        // OpFRem matches numerator, OpFMod matches denominator
+        OpDst dst {checkRef(dst_type_at, data_len), result_at};
+        element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
+        break;
+    }
+    case spv::OpFMod: {  // 141
+        BinOp fx = [](const Primitive* a, const Primitive* b) {
+            if (b->data.fp32 == 0.0) {
+                Console::warn("FMod undefined since divisor is 0!");
+                return std::nanf("1");
+            }
+            return a->data.fp32 - b->data.fp32 * std::floor(a->data.fp32 / b->data.fp32);
+        };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
         break;
@@ -2359,11 +2364,12 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         break;
     }
     case GLSLstd450FMix: {  // 46
+        //   GLSL's FMix = x * (1 - a) + y * a
+        // This is the same as:
+        //   std::lerp   = x + a(y - x)
+        // However, we cannot use std::lerp because it has NaN edge behavior which isn't described in the SPIR-V spec.
         TernOp fx = [](const Primitive* x, const Primitive* y, const Primitive* a) {
-            // Linear interpolation. Two equivalent expressions:
-            // - std::lerp   = x + a(y - x)
-            // - GLSL's FMix = x * (1 - a) + y * a
-            return std::lerp(x->data.fp32, y->data.fp32, a->data.fp32);
+            return x->data.fp32 * (1.0f - a->data.fp32) + y->data.fp32 * a->data.fp32;
         };
         E_TERN_OP(FLOAT, fx);
         break;

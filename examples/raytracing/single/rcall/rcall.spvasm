@@ -1,0 +1,93 @@
+; SPIR-V
+; Version: 1.6
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 50
+; Schema: 0
+               OpCapability RayTracingKHR
+               OpExtension "SPV_KHR_ray_tracing"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint CallableKHR %main "main" %gl_LaunchIDEXT %_
+               OpSource GLSL 460
+               OpSourceExtension "GL_EXT_ray_tracing"
+               OpName %main "main"
+               OpName %pos "pos"
+               OpName %gl_LaunchIDEXT "gl_LaunchIDEXT"
+               OpName %Result "Result"
+               OpMemberName %Result 0 "rem_result"
+               OpMemberName %Result 1 "mod_result"
+               OpName %_ ""
+               OpDecorate %gl_LaunchIDEXT BuiltIn LaunchIdKHR
+               OpDecorate %Result Block
+       %void = OpTypeVoid
+          %8 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v3float = OpTypeVector %float 3
+%_ptr_Function_v3float = OpTypePointer Function %v3float
+       %uint = OpTypeInt 32 0
+     %v3uint = OpTypeVector %uint 3
+%_ptr_Input_v3uint = OpTypePointer Input %v3uint
+%gl_LaunchIDEXT = OpVariable %_ptr_Input_v3uint Input
+    %v4float = OpTypeVector %float 4
+     %Result = OpTypeStruct %v4float %v4float
+%_ptr_IncomingCallableDataKHR_Result = OpTypePointer IncomingCallableDataKHR %Result
+          %_ = OpVariable %_ptr_IncomingCallableDataKHR_Result IncomingCallableDataKHR
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+     %uint_0 = OpConstant %uint 0
+%_ptr_Function_float = OpTypePointer Function %float
+  %float_1_8 = OpConstant %float 1.79999995
+ %float_n1_8 = OpConstant %float -1.79999995
+     %uint_1 = OpConstant %uint 1
+     %uint_2 = OpConstant %uint 2
+%_ptr_IncomingCallableDataKHR_v4float = OpTypePointer IncomingCallableDataKHR %v4float
+      %int_1 = OpConstant %int 1
+       %main = OpFunction %void None %8
+         %27 = OpLabel
+        %pos = OpVariable %_ptr_Function_v3float Function
+         %28 = OpLoad %v3uint %gl_LaunchIDEXT
+         %29 = OpConvertUToF %v3float %28
+               OpStore %pos %29
+
+         %30 = OpAccessChain %_ptr_Function_float %pos %uint_0
+         %31 = OpAccessChain %_ptr_Function_float %pos %uint_1
+         %32 = OpAccessChain %_ptr_Function_float %pos %uint_2
+
+         %33 = OpLoad %float %30        ; %pos.x
+         %34 = OpLoad %float %31        ; %pos.y
+         %35 = OpFNegate %float %34     ; -%pos.y
+         %36 = OpLoad %float %32        ; %pos.z
+         %37 = OpFNegate %float %36     ; -%pos.z
+
+; Test the four possible combinations:
+;  3.0  %  1.8
+;    q = 1 => r + 1.8 = 3.0 => r = 1.2       FRem,FMod
+;    q = 2 => r + 3.6 = 3.0 => r = -0.6
+; -3.0  %  1.8
+;    q = -1 => r - 1.8 = -3.0 => r = -1.2    FRem
+;    q = -2 => r - 3.6 = -3.0 => r = 0.6     FMod
+;  3.0  % -1.8
+;    q = -1 => r + 1.8 = 3.0 => r = 1.2      FRem
+;    q = -2 => r + 3.6 = 3.0 => r = -0.6     FMod
+; -3.0  % -1.8
+;    q = 1 => r - 1.8 = -3.0 => r = -1.2     FRem,FMod
+;    q = 2 => r - 3.6 = -3.0 => r = 0.6
+
+         %38 = OpFRem %float %33 %float_1_8
+         %39 = OpFRem %float %35 %float_1_8
+         %40 = OpFRem %float %36 %float_n1_8
+         %41 = OpFRem %float %37 %float_n1_8
+         %42 = OpCompositeConstruct %v4float %38 %39 %40 %41
+         %43 = OpAccessChain %_ptr_IncomingCallableDataKHR_v4float %_ %int_0
+               OpStore %43 %42
+
+         %44 = OpFMod %float %33 %float_1_8
+         %45 = OpFMod %float %35 %float_1_8
+         %46 = OpFMod %float %36 %float_n1_8
+         %47 = OpFMod %float %37 %float_n1_8
+         %48 = OpCompositeConstruct %v4float %44 %45 %46 %47
+         %49 = OpAccessChain %_ptr_IncomingCallableDataKHR_v4float %_ %int_1
+               OpStore %49 %48
+
+               OpReturn
+               OpFunctionEnd
