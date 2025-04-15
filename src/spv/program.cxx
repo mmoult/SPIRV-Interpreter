@@ -380,6 +380,10 @@ public:
             unsigned found = 0;
             Variable& stage_in = *(*stage.data)[s_in].getVariable();
 
+            if (stage_in.getStorageClass() == spv::StorageClassShaderRecordBufferKHR) {
+                // TODO Verify that this exists in the stage-specific input data
+            }
+
             bool stage_is_buffer = VarCompare::isBuffer(stage_in);
             unsigned stage_binding = stage_in.getBinding();
             unsigned stage_desc_set = stage_in.getDescriptorSet();
@@ -410,7 +414,10 @@ public:
                 // Create a new variable in this's data and set it to found
                 found = data.allocateNew();
                 global[found].move((*stage.data)[s_in]);
+                // Copy this variable to the main interface (potentially in and out):
                 this->ins.push_back(found);
+                if (const auto& vec = stage.outs; std::find(vec.begin(), vec.end(), s_in) != vec.end())
+                    this->outs.push_back(found);
             }
 
             // Connect stage_in to found in main by setting the former as an alias of the latter
