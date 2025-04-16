@@ -208,7 +208,7 @@ private:
                     break;
                 }
                 value << c;
-            } else if (c == '\n' || c == '#' || c == ':')  // start of comment is effectively newline
+            } else if (c == '\n' || c == '#' || c == ':' || c == ',' || c == ']' || c == '}')
                 break;
             else {
                 if (first) {

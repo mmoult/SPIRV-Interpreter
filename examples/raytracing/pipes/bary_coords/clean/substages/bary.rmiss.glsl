@@ -7,7 +7,6 @@ layout(set = 0, binding = 2, std430) buffer _11_13
 } _13;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT _32;
-layout(location = 0) rayPayloadInEXT vec3 _29;
 
 void main()
 {

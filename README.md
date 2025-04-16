@@ -4,8 +4,6 @@ An interpreter for SPIR-V shaders/kernels, which aims to support the full
 [SPIR-V specification](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html). Outputs results of running the
 program for given inputs.
 
-Use `-h` or `--help` on the `spirv-run` executable to see command line arguments and flags.
-
 ## Features
 - Support for vertex, fragment, compute, hull, and raytracing shaders
 - Specify inputs and print outputs in YAML or JSON
@@ -13,7 +11,7 @@ Use `-h` or `--help` on the `spirv-run` executable to see command line arguments
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 61 test examples, and counting
+- 63 test examples, and counting
 
 ## Limitations
 
@@ -51,6 +49,10 @@ assuming you have [cmake](https://github.com/Kitware/CMake) version ≥ 3.28 and
 [ninja](https://github.com/ninja-build/ninja) version ≥ 1.11 installed.
 
 After building, you should find the `spirv-run` executable at `build/src/spirv-run`.
+
+## Use
+Use `-h` or `--help` on the `spirv-run` executable to see the definitive list of command line arguments and flags. Some
+options (especially the more complex ones) have more information described in [Usage Help](usage-help.md).
 
 ## Testing
 The project has two complementary approaches to testing:

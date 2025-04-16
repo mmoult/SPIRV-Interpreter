@@ -1,11 +1,11 @@
 '@shader-binding-table':
   miss_records:
-  - rmiss.spv
+  - { shader: "substages/rmiss.spv", input: "" }
   hit_group_records:
   -
-    any: ""
-    closest: rchit.spv
-    intersection: ""
+    any: { shader: "", input: "" }
+    closest: { shader: "substages/rchit.spv", input: "" }
+    intersection: { shader: "", input: "" }
   callable_records: []
 
 _16:
@@ -54,7 +54,5 @@ _45:
   - [ 0.0, 0.0, 0.0, 0.0 ]
   - [ 0.0, 0.0, 0.0, 0.0 ]
   - [ 0.0, 0.0, 0.0, 0.0 ]
-
-_41: [ 0.0, 0.0, 0.0 ]
 
 gl_LaunchIDEXT: [ 3, 2, 1 ]

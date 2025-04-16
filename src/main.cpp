@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 
 #include "../external/spirv.hpp"
@@ -106,24 +107,58 @@ ReturnCode parse_spv(Program& program, std::string program_path) {
     return ReturnCode::OK;
 }
 
-bool handle_record(Program& program, const std::string& source, RayTraceSubstage& stage, spv::ExecutionModel expected) {
-    if (source.empty())
-        return false;
-    parse_spv(program, source);
+ReturnCode handle_record(
+    Program& program,
+    const ShaderRecord& record,
+    ValueFormat* preference,
+    RayTraceSubstage& stage,
+    spv::ExecutionModel expected,
+    bool unused
+) {
+    parse_spv(program, record.shaderSource);
+    ValueMap extra_inputs;
+    if (!record.extraInput.empty()) {
+        ValueFormat* format = determine_format(record.extraInput, preference, false);
+        if (auto ret = load_file(extra_inputs, record.extraInput, format); ret != ReturnCode::OK)
+            return ret;
+    }
     // Should delete the view after the record is done, but since it exists until main is exited, don't bother
-    program.initRaytrace(stage, expected);
-    return true;
+    program.initRaytrace(stage, expected, extra_inputs, unused);
+    return ReturnCode::OK;
 }
 
-ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit) {
+ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueFormat* preference, bool unused) {
     // Not all three are required to be present, but at least one is.
     bool present = false;
 
+    auto check_input = [&](const ShaderRecord& test, RayTraceSubstage& substage, spv::ExecutionModel stage) {
+        if (test.shaderSource.empty()) {
+            if (!test.extraInput.empty()) {
+                std::cerr << "Shader binding hit record may not specify input, \"" << test.extraInput;
+                std::cerr << "\" without a corresponding shader!" << std::endl;
+                return std::optional(ReturnCode::BAD_PROG_INPUT);
+            }
+        } else {
+            present = true;
+            if (ReturnCode ret = handle_record(program, test, preference, substage, stage, unused);
+                ret != ReturnCode::OK)
+                return std::optional(ret);
+        }
+        return std::optional<ReturnCode>();
+    };
+
+#define CHECK_INPUT(TEST, SUBSTAGE, TYPE) \
+    { \
+        auto res = check_input(TEST, SUBSTAGE, TYPE); \
+        if (res.has_value()) \
+            return *res; \
+    }
+
     // Note, we must create records even if the shader is empty because that is how we keep the groups aligned in a
     // single list (by 3's, where {any, closest, intersection} go together).
-    present |= handle_record(program, hit.any, program.nextHitRecord(), spv::ExecutionModelAnyHitKHR);
-    present |= handle_record(program, hit.closest, program.nextHitRecord(), spv::ExecutionModelClosestHitKHR);
-    present |= handle_record(program, hit.intersection, program.nextHitRecord(), spv::ExecutionModelIntersectionKHR);
+    CHECK_INPUT(hit.any, program.nextHitRecord(), spv::ExecutionModelAnyHitKHR);
+    CHECK_INPUT(hit.closest, program.nextHitRecord(), spv::ExecutionModelClosestHitKHR);
+    CHECK_INPUT(hit.intersection, program.nextHitRecord(), spv::ExecutionModelIntersectionKHR);
 
     if (!present) {
         std::cerr << "Shader binding hit record needs at least one shader but has none!" << std::endl;
@@ -131,18 +166,6 @@ ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit) {
     }
 
     return ReturnCode::OK;
-}
-
-ReturnCode handle_other_record(
-    Program& program,
-    const std::string& source,
-    RayTraceSubstage& stage,
-    spv::ExecutionModel expected
-) {
-    if (handle_record(program, source, stage, expected))
-        return ReturnCode::OK;
-    std::cerr << "Shader record source must be non-empty!" << std::endl;
-    return ReturnCode::BAD_PROG_INPUT;
 }
 
 int main(int argc, char* argv[]) {
@@ -199,6 +222,13 @@ int main(int argc, char* argv[]) {
     parser.addOption(&verbose, "print", "Enable verbose printing.", "p");
     ArgParse::Flag quiet;
     parser.addOption(&quiet, "quiet", "Suppress all runtime warnings.", "q");
+    ArgParse::Flag rt_template;
+    parser.addOption(
+        &rt_template,
+        "raytrace",
+        "Treat the input as a ray tracing substage when creating an input template. Enables --template implicitly.",
+        "r"
+    );
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
     ArgParse::Flag single_invoc;
@@ -271,7 +301,7 @@ int main(int argc, char* argv[]) {
     // Peform the rest of the option actions
     if (debug.enabled)
         verbose.enabled = true;
-    if (generate.enabled && !template_arg.hasValue())
+    if ((generate.enabled || rt_template.enabled) && !template_arg.hasValue())
         template_arg.setValue("-");
     suppress_warnings = quiet.enabled;
 
@@ -313,21 +343,42 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    RayTraceSubstage dummy;
     try {
-        program.init(inputs, single_invoc.enabled);
+        if (!rt_template.enabled) {
+            program.init(inputs, single_invoc.enabled);
 
-        // May need to process info given from shader binding table, if any
-        // Any exceptions are from problematic substage code - bad program
-        // Any bad returns are from incorrect SBT data - bad input
-        const ShaderBindingTable& sbt = program.getShaderBindingTable();
-        for (const auto& miss : sbt.getMissRecords())
-            REQUIRE(handle_other_record(program, miss, program.nextMissRecord(), spv::ExecutionModelMissKHR));
+            // May need to process info given from shader binding table, if any
+            // Any exceptions are from problematic substage code - bad program
+            // Any bad returns are from incorrect SBT data - bad input
+            const ShaderBindingTable& sbt = program.getShaderBindingTable();
+            for (const auto& miss : sbt.getMissRecords())
+                REQUIRE(handle_record(
+                    program,
+                    miss,
+                    format,
+                    program.nextMissRecord(),
+                    spv::ExecutionModelMissKHR,
+                    unused.enabled
+                ));
 
-        for (const auto& hit : sbt.getHitRecords())
-            REQUIRE(handle_hit_record(program, hit));
+            for (const auto& hit : sbt.getHitRecords())
+                REQUIRE(handle_hit_record(program, hit, format, unused.enabled));
 
-        for (const auto& call : sbt.getCallableRecords())
-            REQUIRE(handle_other_record(program, call, program.nextCallableRecord(), spv::ExecutionModelCallableKHR));
+            for (const auto& call : sbt.getCallableRecords())
+                REQUIRE(handle_record(
+                    program,
+                    call,
+                    format,
+                    program.nextCallableRecord(),
+                    spv::ExecutionModelCallableKHR,
+                    unused.enabled
+                ));
+        } else {
+            // Run an initialization of our dummy with program's values
+            dummy.data = &program.getDataManager().getGlobal();
+            program.init(inputs, *dummy.data, &dummy, false);
+        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PROGRAM;
@@ -342,7 +393,7 @@ int main(int argc, char* argv[]) {
         format2->setTemplate(!generate.enabled);
 
         std::stringstream ss;
-        auto prog_ins = program.getInputs(location.enabled);
+        auto prog_ins = (!rt_template.enabled) ? program.getInputs(location.enabled) : dummy.getRecordInputs();
         format2->printFile(ss, prog_ins);
 
         if (itemplate == "-") {

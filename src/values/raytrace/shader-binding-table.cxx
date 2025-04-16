@@ -23,54 +23,79 @@ const std::string& extract_string(const Value* record, const std::string& type) 
     return static_cast<const String*>(record)->get();
 }
 
-export struct HitGroupRecord {
-    inline static const std::vector<std::string> names {"any", "closest", "intersection"};
+export struct ShaderRecord {
+    inline static const std::vector<std::string> names {"shader", "input"};
 
-    std::string any;
-    std::string closest;
-    std::string intersection;
+    std::string shaderSource;
+    std::string extraInput;
+
+    ShaderRecord() : shaderSource(""), extraInput("") {}
+    ShaderRecord(std::string src, std::string input = "") : shaderSource(src), extraInput(input) {}
 
     void copyFrom(const Value* other) {
-        const Struct& str = Statics::extractStruct(other, "HitGroupRecord", names);
-        any = extract_string(str[0], "any hit");
-        closest = extract_string(str[1], "closest hit");
-        intersection = extract_string(str[2], "intersection hit");
+        const Struct& str = Statics::extractStruct(other, "ShaderRecord", names);
+        shaderSource = Statics::extractString(str[0], "shader");
+        extraInput = Statics::extractString(str[1], "input");
     }
 
     [[nodiscard]] Struct* toStruct() const {
-        std::vector<Value*> fields {new String(any), new String(closest), new String(intersection)};
+        std::vector<Value*> elements {new String(shaderSource), new String(extraInput)};
+        return new Struct(elements, names);
+    }
+};
+
+export struct HitGroupRecord {
+    inline static const std::vector<std::string> names {"any", "closest", "intersection"};
+
+    ShaderRecord any;
+    ShaderRecord closest;
+    ShaderRecord intersection;
+
+    void copyFrom(const Value* other) {
+        const Struct& str = Statics::extractStruct(other, "HitGroupRecord", names);
+        any.copyFrom(str[0]);
+        closest.copyFrom(str[1]);
+        intersection.copyFrom(str[2]);
+    }
+
+    [[nodiscard]] Struct* toStruct() const {
+        std::vector<Value*> fields {any.toStruct(), closest.toStruct(), intersection.toStruct()};
         return new Struct(fields, names);
     }
 };
 
 export class ShaderBindingTable {
 private:
-    std::vector<std::string> miss;
+    std::vector<ShaderRecord> miss;
     std::vector<HitGroupRecord> hit;
-    std::vector<std::string> callable;
+    std::vector<ShaderRecord> callable;
 
     // Internal type data to be used later
     inline static const std::vector<std::string> names {"miss_records", "hit_group_records", "callable_records"};
     inline static const Type stringType = Type::string();
+    inline static Type shaderRecordType;
     inline static Type hitGroupType;
 
 public:
     ShaderBindingTable() {
         // Initialize statics: Will create the types needed for later toStruct calls
-        if (hitGroupType.getBase() != DataType::STRUCT) {
-            const std::vector<const Type*> hit_sub {&stringType, &stringType, &stringType};
+        if (shaderRecordType.getBase() != DataType::STRUCT) {
+            const std::vector<const Type*> rec_sub {&stringType, &stringType};
+            const std::vector<std::string> rec_name {"shader", "input"};
+            shaderRecordType = Type::structure(rec_sub, rec_name);
+            const std::vector<const Type*> hit_sub {&shaderRecordType, &shaderRecordType, &shaderRecordType};
             const std::vector<std::string> hit_name {"any", "closest", "intersection"};
             hitGroupType = Type::structure(hit_sub, hit_name);
         }
     }
 
-    const std::vector<std::string>& getMissRecords() const {
+    const std::vector<ShaderRecord>& getMissRecords() const {
         return miss;
     }
     const std::vector<HitGroupRecord>& getHitRecords() const {
         return hit;
     }
-    const std::vector<std::string>& getCallableRecords() const {
+    const std::vector<ShaderRecord>& getCallableRecords() const {
         return callable;
     }
 
@@ -78,11 +103,11 @@ public:
         std::vector<Value*> fields(3, nullptr);
 
         if (miss.empty()) {
-            fields[0] = new Array(stringType, 0);
+            fields[0] = new Array(shaderRecordType, 0);
         } else {
             std::vector<Value*> records;
             for (const auto& record : miss)
-                records.push_back(new String(record));
+                records.push_back(record.toStruct());
             fields[0] = new Array(records);
         }
 
@@ -96,11 +121,11 @@ public:
         }
 
         if (callable.empty()) {
-            fields[2] = new Array(stringType, 0);
+            fields[2] = new Array(shaderRecordType, 0);
         } else {
             std::vector<Value*> records;
             for (const auto& record : callable)
-                records.push_back(new String(record));
+                records.push_back(record.toStruct());
             fields[2] = new Array(records);
         }
 
@@ -114,7 +139,7 @@ public:
         const Array& miss_r = Statics::extractArray(str[0], names[0]);
         miss.resize(miss_r.getSize());
         for (unsigned i = 0; i < miss_r.getSize(); ++i)
-            miss[i] = extract_string(miss_r[i], "miss");
+            miss[i].copyFrom(miss_r[i]);
 
         const Array& hit_r = Statics::extractArray(str[1], names[1]);
         hit.resize(hit_r.getSize());
@@ -124,7 +149,7 @@ public:
         const Array& call_r = Statics::extractArray(str[2], names[2]);
         callable.resize(call_r.getSize());
         for (unsigned i = 0; i < call_r.getSize(); ++i)
-            callable[i] = extract_string(call_r[i], "callable");
+            callable[i].copyFrom(call_r[i]);
     }
 
     bool isEmpty() const {

@@ -199,15 +199,15 @@ public:
             break;
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
-        case SC::StorageClassCallableDataKHR:
         case SC::StorageClassIncomingCallableDataKHR:
-        case SC::StorageClassRayPayloadKHR:
         case SC::StorageClassIncomingRayPayloadKHR:
             ins.push_back(id);
             if (var.isWritable())
                 outs.push_back(id);
             break;
         case SC::StorageClassOutput:
+        case SC::StorageClassCallableDataKHR:
+        case SC::StorageClassRayPayloadKHR:
             outs.push_back(id);
             break;
         case SC::StorageClassHitAttributeKHR:
