@@ -154,8 +154,7 @@ export class Program {
         }
     };
 
-    RayTraceSubstage& getSubstage(RtStageKind stage, Frame& launched_from) {
-        unsigned index = launched_from.getRtIndex();
+    RayTraceSubstage& getSubstage(RtStageKind stage, unsigned index) {
         unsigned updated = index;
         std::vector<RayTraceSubstage>* list = nullptr;
         switch (stage) {
@@ -187,12 +186,20 @@ export class Program {
             err << "Index " << index << " is out of bounds for raytracing substage \"" << to_string(stage) << "\"!";
             throw std::runtime_error(err.str());
         }
-        return (*list)[updated];
+        // Even though the index is within bounds, there are empty spots in hit rcords. Verify this substage isn't empty
+        // by checking that its data is non-null
+        RayTraceSubstage& ret = (*list)[updated];
+        if (ret.data == nullptr) {
+            std::stringstream err;
+            err << "Index " << index << " does not contain a valid raytracing substage \"" << to_string(stage) << "\"!";
+            throw std::runtime_error(err.str());
+        }
+        return ret;
     }
 
     void launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
         Frame& launched_from = *frame_stack.back();
-        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
+        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from.getRtIndex());
         // fill in builtins into the data
         AccelStruct& as = *launched_from.getAccelStruct();
 
@@ -225,7 +232,7 @@ export class Program {
         frame_stack.push_back(new Frame(ep.getLocation(), entry_args, 0, data));
     }
     void completeSubstage(RtStageKind stage, Frame& launched_from) {
-        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
+        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from.getRtIndex());
         rt_stage.cleanUp(launched_from);
     }
 
