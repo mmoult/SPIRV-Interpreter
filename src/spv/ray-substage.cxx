@@ -201,6 +201,21 @@ public:
         return nullptr;
     }
 
+    /// @brief Get a map of the record input, used primarily for generating templates
+    /// Although an overwhelming majority of values in the substage should be derived from a location or a builtin,
+    /// there is an allowance to record-specific values. These values need to be passed per-substage.
+    ValueMap getRecordInputs() const {
+        ValueMap input_map;
+        for (unsigned v : ins) {
+            const auto& var = *(*data)[v].getVariable();
+            if (var.getStorageClass() == spv::StorageClassShaderRecordBufferKHR)
+                input_map.emplace(var.getName(), var.getVal());
+        }
+        auto spec_consts = getVariables(specs);
+        input_map.insert(spec_consts.begin(), spec_consts.end());
+        return input_map;
+    }
+
     void cleanUp(Frame& frame) const {
         DataView& dat = *frame.getRtData();
         // Save from the frame rt result into the payload (as necessary)
@@ -216,12 +231,5 @@ public:
             assert(var != nullptr);
             frame.getHitAttribute()->copyFrom(*var->getVal());
         }
-    }
-
-    ValueMap getInputs() const {
-        auto input_map = getVariables(ins);
-        auto spec_consts = getVariables(specs);
-        input_map.insert(spec_consts.begin(), spec_consts.end());
-        return input_map;
     }
 };

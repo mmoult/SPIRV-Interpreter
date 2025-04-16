@@ -14,6 +14,7 @@ module;
 
 #include "glm/ext.hpp"
 
+#define SPV_ENABLE_UTILITY_CODE
 #include "../../external/spirv.hpp"
 #include "../values/raytrace/trace.hpp"
 #include "../values/type.hpp"
@@ -153,6 +154,102 @@ export class Program {
         }
     };
 
+    RayTraceSubstage& getSubstage(RtStageKind stage, unsigned index) {
+        unsigned updated = index;
+        std::vector<RayTraceSubstage>* list = nullptr;
+        switch (stage) {
+        default:  // including NONE
+            throw std::runtime_error("Cannot get raytracing substage for unsupported type!");
+            break;
+        case RtStageKind::ANY_HIT:
+            list = &hits;
+            updated = index * 3 + 0;
+            break;
+        case RtStageKind::CLOSEST:
+            list = &hits;
+            updated = index * 3 + 1;
+            break;
+        case RtStageKind::INTERSECTION:
+            list = &hits;
+            updated = index * 3 + 2;
+            break;
+        case RtStageKind::MISS:
+            list = &misses;
+            break;
+        case RtStageKind::CALLABLE:
+            list = &callables;
+            break;
+        }
+
+        if (updated >= list->size()) {
+            std::stringstream err;
+            err << "Index " << index << " is out of bounds for raytracing substage \"" << to_string(stage) << "\"!";
+            throw std::runtime_error(err.str());
+        }
+        // Even though the index is within bounds, there are empty spots in hit rcords. Verify this substage isn't empty
+        // by checking that its data is non-null
+        RayTraceSubstage& ret = (*list)[updated];
+        if (ret.data == nullptr) {
+            std::stringstream err;
+            err << "Index " << index << " does not contain a valid raytracing substage \"" << to_string(stage) << "\"!";
+            throw std::runtime_error(err.str());
+        }
+        return ret;
+    }
+
+    void launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
+        Frame& launched_from = *frame_stack.back();
+        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from.getRtIndex());
+        // fill in builtins into the data
+        AccelStruct& as = *launched_from.getAccelStruct();
+
+        const InstanceNode* instance = nullptr;
+        glm::vec2 barycentrics(0.0);
+        if (stage != RtStageKind::MISS) {
+            Intersection& cand = (stage == RtStageKind::CLOSEST) ? as.getCommitted() : as.getCandidate();
+            instance = cand.instance;
+            barycentrics = cand.barycentrics;
+        }
+        // the instruction which called launchSubstage is responsible for cleaning up the data too.
+        DataView& data = *rt_stage.data->clone();
+        launched_from.setRtData(data);
+        rt_stage.setUpInputs(data, as, *launched_from.getRtResult(), instance);
+
+        Value* hit_attrib = rt_stage.setUpHitAttribute(stage, data, barycentrics, launched_from.getHitAttribute());
+        if (hit_attrib != nullptr) {
+            // We should not be generating a new hit attribute if there already was one. The setUpHitAttribute function
+            // currently prevents this categorically, but the following assert is a good future-proof for memory safety.
+            assert(launched_from.getHitAttribute() == nullptr);
+            launched_from.setHitAttribute(hit_attrib);
+        }
+        // Load from the extra input file
+        const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
+        std::vector<Data*> entry_args;  // no formal arguments to the substage's main
+
+        // Note: a frame assumes that it owns its data (and will therefore delete it upons deconstruction). We avoid
+        // this problem by making a change to instruction's execute and preventing data delete if the frame before has
+        // a raytracing trigger enabled.
+        frame_stack.push_back(new Frame(ep.getLocation(), entry_args, 0, data));
+    }
+    void completeSubstage(RtStageKind stage, Frame& launched_from) {
+        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from.getRtIndex());
+        rt_stage.cleanUp(launched_from);
+    }
+
+public:
+    void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false) {
+        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
+        // This allows for a cleaner separation of data.
+        ProgramLoader load(buffer, length);
+        insts.addBreak(insts.size(), file_path);
+        uint32_t bound = load.parse(insts.getInstructions());
+        data.setBound(std::max(bound, data.getBound()));
+    }
+
+    unsigned getInstLength() const {
+        return insts.size();
+    }
+
     unsigned init(ValueMap& provided, DataView& global, RayTraceSubstage* stage, bool single_invoc) {
         unsigned entry = 0;
         std::vector<unsigned>& ins = (stage == nullptr) ? this->ins : stage->ins;
@@ -220,11 +317,8 @@ export class Program {
                             default:
                                 break;
                             }
-                        } else {
-                            // need to catch some builtins for rt substages here
-                            if (stage->handleStaticInst(inst))
-                                continue;
-                        }
+                        } else if (stage->handleStaticInst(inst))
+                            continue;
 
                         process_visible_io(inst);
                     }
@@ -242,7 +336,6 @@ export class Program {
 
             // Since we cannot guarantee the ordering of these variable's declarations, we must cache their locations
             // until all are processed.
-
             unsigned top_var;
             if (global_id_loc != 0)
                 top_var = global_id_loc;
@@ -260,95 +353,137 @@ export class Program {
 
         if (!entry_found)
             throw std::runtime_error("Program is missing entry function!");
+
+        // Load any connected rt substages
+        if (provided.contains(SBT_NAME) && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
+            // Read the shader binding table from the given value
+            sbt.copyFrom(provided[SBT_NAME]);
+            provided.erase(SBT_NAME);
+        }
+
         return entry;
     }
+    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
+        entry = init(provided, data.getGlobal(), nullptr, single_invoc);
+    }
 
-    RayTraceSubstage& getSubstage(RtStageKind stage, Frame& launched_from) {
-        unsigned index = launched_from.getRtIndex();
-        unsigned updated = index;
-        std::vector<RayTraceSubstage>* list = nullptr;
-        switch (stage) {
-        default:  // including NONE
-            throw std::runtime_error("Cannot get raytracing substage for unsupported type!");
-            break;
-        case RtStageKind::ANY_HIT:
-            list = &hits;
-            updated = index * 3 + 0;
-            break;
-        case RtStageKind::CLOSEST:
-            list = &hits;
-            updated = index * 3 + 1;
-            break;
-        case RtStageKind::INTERSECTION:
-            list = &hits;
-            updated = index * 3 + 2;
-            break;
-        case RtStageKind::MISS:
-            list = &misses;
-            break;
-        case RtStageKind::CALLABLE:
-            list = &callables;
-            break;
-        }
-
-        if (updated >= list->size()) {
+    /// @brief Initialize the raytracing substage passed in as stage
+    /// Set variables in the stage (which must match the expected type) with the inputs from the main program and from
+    /// extra shader record values.
+    /// @param stage the stage to initialize
+    /// @param expected the expected substage shader type
+    /// @param extra_inputs the shader record values, if any
+    /// @param unused whether to allow lenient input checking- default values are used if they don't appear in any
+    ///               input. (Useful if the variable is unused by the shader logic.)
+    void initRaytrace(RayTraceSubstage& stage, spv::ExecutionModel expected, ValueMap& extra_inputs, bool unused) {
+        stage.data = this->data.makeView();
+        unsigned entry = init(extra_inputs, *stage.data, &stage, false);
+        // Verify that the shader type matches the stage expected
+        if (auto found = insts[entry].getShaderStage(); found != expected) {
             std::stringstream err;
-            err << "Index " << index << " is out of bounds for raytracing substage \"" << to_string(stage) << "\"!";
+            err << "Shader substage parsed does not match the expected type! Expected ";
+            err << spv::ExecutionModelToString(expected) << ", but found ";
+            err << spv::ExecutionModelToString(found) << " instead.";
             throw std::runtime_error(err.str());
         }
-        return (*list)[updated];
+        stage.entry = entry;
+
+        // Connect any in/outs/specs from the substage to the main stage
+        auto& global = this->data.getGlobal();
+        for (unsigned s_in : stage.ins) {
+            unsigned found = 0;
+            Variable& stage_in = *(*stage.data)[s_in].getVariable();
+
+            if (stage_in.getStorageClass() == spv::StorageClassShaderRecordBufferKHR) {
+                // Verify that this exists in the stage-specific input data
+                const auto& name = stage_in.getName();
+                if (extra_inputs.contains(name)) {
+                    stage_in.getVal()->copyFrom(*extra_inputs[name]);
+                    extra_inputs.erase(name);
+                } else if (!unused) {
+                    std::stringstream error;
+                    error << "Missing shader record variable \"" << name << "\" in setup!";
+                    throw std::runtime_error(error.str());
+                }
+                continue;
+            }
+
+            bool stage_is_buffer = VarCompare::isBuffer(stage_in);
+            unsigned stage_binding = stage_in.getBinding();
+            unsigned stage_desc_set = stage_in.getDescriptorSet();
+            bool name_check = Variable::isUnset(stage_binding) && Variable::isUnset(stage_desc_set);
+
+            for (unsigned m_in : this->ins) {
+                Variable& main_in = *global[m_in].getVariable();
+                bool match = false;
+                if (name_check)
+                    match = (main_in.getName() == stage_in.getName());
+                else {
+                    bool main_is_buffer = VarCompare::isBuffer(main_in);
+                    unsigned main_binding = main_in.getBinding();
+                    unsigned main_desc_set = main_in.getDescriptorSet();
+
+                    match = (main_is_buffer == stage_is_buffer) && (main_binding == stage_binding) &&
+                            (main_desc_set == stage_desc_set);
+                }
+
+                if (match) {
+                    found = m_in;
+                    break;
+                }
+            }
+
+            if (found == 0) {
+                // Create a new variable in this's data and set it to found
+                found = data.allocateNew();
+                global[found].move((*stage.data)[s_in]);
+                // Copy this variable to the main interface (potentially in and out):
+                this->ins.push_back(found);
+                if (const auto& vec = stage.outs; std::find(vec.begin(), vec.end(), s_in) != vec.end())
+                    this->outs.push_back(found);
+            }
+
+            // Connect stage_in to found in main by setting the former as an alias of the latter
+            // TODO replace with alias in the future
+            (*stage.data)[s_in].redefine(global[found], false);
+        }
+        for (unsigned spec : stage.specs) {
+            // I don't think it is possible to have a specialization constant in an rt substage, is it?
+            // If so, I guess we can match on name from the extra input?
+            throw std::runtime_error("The interpreter does not support spec constants in rt substages!");
+        }
+        for (unsigned out : stage.outs) {
+            // I don't believe it is possible to have any true outputs. Instead, we have many buffers, payloads, etc,
+            // which should be triggered for in variables first
+
+            // TODO: is there a good way to check this?
+        }
+
+        if (!extra_inputs.empty()) {
+            unsigned extra = extra_inputs.size();
+            std::stringstream err;
+            err << "Shader record input specifies " << extra_inputs.size() << " variable";
+            if (extra > 1)
+                err << 's';
+            err << " not present in the program interface!";
+            for (const auto& [name, val] : extra_inputs) {
+                err << " \"" << name << '"';
+            }
+            throw std::runtime_error(err.str());
+        }
     }
 
-    void launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
-        Frame& launched_from = *frame_stack.back();
-        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
-        // fill in builtins into the data
-        AccelStruct& as = *launched_from.getAccelStruct();
-
-        const InstanceNode* instance = nullptr;
-        glm::vec2 barycentrics(0.0);
-        if (stage != RtStageKind::MISS) {
-            Intersection& cand = (stage == RtStageKind::CLOSEST) ? as.getCommitted() : as.getCandidate();
-            instance = cand.instance;
-            barycentrics = cand.barycentrics;
-        }
-        // the instruction which called launchSubstage is responsible for cleaning up the data too.
-        DataView& data = *rt_stage.data->clone();
-        launched_from.setRtData(data);
-        rt_stage.setUpInputs(data, as, *launched_from.getRtResult(), instance);
-
-        Value* hit_attrib = rt_stage.setUpHitAttribute(stage, data, barycentrics, launched_from.getHitAttribute());
-        if (hit_attrib != nullptr) {
-            // We should not be generating a new hit attribute if there already was one. The setUpHitAttribute function
-            // currently prevents this categorically, but the following assert is a good future-proof for memory safety.
-            assert(launched_from.getHitAttribute() == nullptr);
-            launched_from.setHitAttribute(hit_attrib);
-        }
-        // Load from the extra input file
-        const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
-        std::vector<Data*> entry_args;  // no formal arguments to the substage's main
-
-        // Note: a frame assumes that it owns its data (and will therefore delete it upons deconstruction). We avoid
-        // this problem by making a change to instruction's execute and preventing data delete if the frame before has
-        // a raytracing trigger enabled.
-        frame_stack.push_back(new Frame(ep.getLocation(), entry_args, 0, data));
-    }
-    void completeSubstage(RtStageKind stage, Frame& launched_from) {
-        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from);
-        rt_stage.cleanUp(launched_from);
+    const ShaderBindingTable& getShaderBindingTable() const {
+        return sbt;
     }
 
     /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
     /// @param provided map of names to values
     /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
     ///               default values.
-    void checkInputs(
-        ValueMap& provided,
-        DataView& global,  // needed for fetching variables
-        std::vector<unsigned>& ins,
-        std::vector<unsigned>& specs,
-        bool unused
-    ) noexcept(false) {
+    void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
+        DataView& global = this->data.getGlobal();
+
         // First, create a list of variables needed as inputs
         std::vector<Variable*> inputs;
         for (const auto in : ins)
@@ -362,14 +497,10 @@ export class Program {
         for (const auto spec : specs)
             specConsts.push_back(global[spec].getVariable());
 
+        // Similarly to specialization constants, SBT data, if given, should have already been processed and removed.
+
         // Next go through variables defined and verify they match needed
         for (const auto& [name, val] : provided) {
-            if (name == SBT_NAME && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
-                // Read the shader binding table from the given value
-                sbt.copyFrom(val);
-                continue;
-            }
-
             VarCompare compare(name);
             compare.init();
 
@@ -432,42 +563,6 @@ export class Program {
             error << "!";
             throw std::runtime_error(error.str());
         }
-    }
-
-public:
-    void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false) {
-        // Delegate parsing to a nested loader class. The loader has some fields which are not needed after parsing.
-        // This allows for a cleaner separation of data.
-        ProgramLoader load(buffer, length);
-        insts.addBreak(insts.size(), file_path);
-        uint32_t bound = load.parse(insts.getInstructions());
-        data.setBound(std::max(bound, data.getBound()));
-    }
-
-    unsigned getInstLength() const {
-        return insts.size();
-    }
-
-    void init(ValueMap& provided, bool single_invoc) noexcept(false) {
-        entry = init(provided, data.getGlobal(), nullptr, single_invoc);
-    }
-    void initRaytrace(RayTraceSubstage& stage, ValueMap& extra_inputs, bool unused = false) {
-        unsigned entry = init(extra_inputs, *stage.data, &stage, false);
-        stage.entry = entry;
-        checkInputs(extra_inputs, *stage.data, stage.ins, stage.specs, unused);
-    }
-
-    const ShaderBindingTable& getShaderBindingTable() const {
-        return sbt;
-    }
-
-    /// @brief Copies inputs from the provided map to their matching variables, verifying that inputs match expected.
-    /// @param provided map of names to values
-    /// @param unused whether it is appropriate for some variables to be missing- in which case, they are filled with
-    ///               default values.
-    /// @return the shader binding table to process (if any), otherwise, nullptr
-    void checkInputs(ValueMap& provided, bool unused) noexcept(false) {
-        checkInputs(provided, this->data.getGlobal(), this->ins, this->specs, unused);
     }
 
     std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true) {

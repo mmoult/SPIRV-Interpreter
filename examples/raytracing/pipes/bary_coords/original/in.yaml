@@ -1,0 +1,58 @@
+'@shader-binding-table':
+  miss_records:
+  - { shader: "substages/rmiss.spv", input: "" }
+  hit_group_records:
+  -
+    any: { shader: "", input: "" }
+    closest: { shader: "substages/rchit.spv", input: "" }
+    intersection: { shader: "", input: "" }
+  callable_records: []
+
+_16:
+  _m0:
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 1.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+
+_32:
+  tlas: [ 0, 0 ]
+  box_nodes:
+  -
+    min_bounds: [ 0.8, -1.0, -1.0 ]
+    max_bounds: [ 1.2, 1.0, 1.0 ]
+    child_nodes:
+    - [ 1, 0 ]
+  instance_nodes:
+  -
+    world_to_obj:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+    - [ 0.0, 0.0, 0.0 ]
+    child_node: [ 2, 0 ]
+    id: 0
+    custom_index: 0
+    mask: 255
+    sbt_record_offset: 0
+  triangle_nodes:
+  -
+    geometry_index: 0
+    primitive_index: 0
+    opaque: true
+    vertices:
+    - [ 1.0, 1.0, -1.0 ]
+    - [ 0.8, 0.0, 1.0 ]
+    - [ 1.2, -1.0, -1.0 ]
+  procedural_nodes: []
+
+_45:
+  _m0:
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+  - [ 0.0, 0.0, 0.0, 0.0 ]
+
+gl_LaunchIDEXT: [ 3, 2, 1 ]

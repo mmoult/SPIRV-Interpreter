@@ -6,6 +6,7 @@
 module;
 #include <algorithm>  // for std::max
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -63,10 +64,10 @@ export class Image : public Value {
                     throw std::runtime_error("Image component exceeds maximum legal value (4321)!");
             }
 
-            unsigned scale = 1000;
-            unsigned i = 0;
             count = 0;
-            while (scale > 0) {  // must init all indices even if in becomes 0
+            unsigned scale = 1000;
+            for (unsigned i = 0; i < 4; ++i) {
+                // must init all indices even if in becomes 0 (channels only guaranteed to start at 0 in debug builds)
                 unsigned factor = in / scale;
                 if (factor > 0) {
                     if (check && factor > 4)
@@ -74,7 +75,7 @@ export class Image : public Value {
                     in -= (factor * scale);
                     ++count;
                 }
-                (*this)[i++] = factor;
+                (*this)[i] = factor;
                 scale /= 10;
             }
 
@@ -138,12 +139,32 @@ export class Image : public Value {
             for (unsigned i = 0; i < 4; ++i) {
                 unsigned n = other[i];
                 unsigned t = (*this)[i];
-                if (n == 0 != t == 0)
-                    throw std::runtime_error(
-                        "Cannot copy image from another with an incompatible components value! Order of active "
-                        "channels may vary, but which channels are active must be the same."
-                    );
+                if (n == 0 != t == 0) {
+                    std::stringstream err;
+                    err << "Cannot copy image from another with an incompatible components value! Order of active ";
+                    err << "channels may vary, but which channels are active must be the same. Attempt to copy ";
+                    err << other << " to " << *this;
+                    throw std::runtime_error(err.str());
+                }
             }
+        }
+
+        friend std::ostream& operator<<(std::ostream& os, const Component& comp) {
+            if (comp.count == 0)
+                os << "Unknown";
+            else {
+                for (unsigned i = 1; i < 4; ++i) {
+                    if (comp.r == i)
+                        os << 'R';
+                    else if (comp.g == i)
+                        os << 'G';
+                    else if (comp.b == i)
+                        os << 'B';
+                    else if (comp.a == i)
+                        os << 'A';
+                }
+            }
+            return os;
         }
     };
     /// @brief the format of how pixel components are represented in `data`

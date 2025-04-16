@@ -14,6 +14,15 @@ import value.aggregate;
 import value.statics;
 import value.string;
 
+const std::string& extract_string(const Value* record, const std::string& type) {
+    if (record->getType().getBase() != DataType::STRING) {
+        std::stringstream err;
+        err << "Type of " << type << " record must be a string!";
+        throw std::runtime_error(err.str());
+    }
+    return static_cast<const String*>(record)->get();
+}
+
 export struct ShaderRecord {
     inline static const std::vector<std::string> names {"shader", "input"};
 
@@ -43,7 +52,7 @@ export struct HitGroupRecord {
     ShaderRecord intersection;
 
     void copyFrom(const Value* other) {
-        const Struct& str = Statics::extractStruct(other, "ShaderRecord", names);
+        const Struct& str = Statics::extractStruct(other, "HitGroupRecord", names);
         any.copyFrom(str[0]);
         closest.copyFrom(str[1]);
         intersection.copyFrom(str[2]);
@@ -69,7 +78,7 @@ private:
 
 public:
     ShaderBindingTable() {
-        // Will create the types needed for later toStruct calls
+        // Initialize statics: Will create the types needed for later toStruct calls
         if (shaderRecordType.getBase() != DataType::STRUCT) {
             const std::vector<const Type*> rec_sub {&stringType, &stringType};
             const std::vector<std::string> rec_name {"shader", "input"};

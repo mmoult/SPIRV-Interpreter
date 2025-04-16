@@ -324,8 +324,16 @@ public:
     }
 
     Data clone() const {
-        if (!own)
-            throw std::runtime_error("Cannot clone weak data!");
+        // NOTE: If this data does not own its value, then cloning it will *not* grant ownership for the clone. This
+        // should be ok since we only use weak data for RT where we are referencing the main stage which we know will
+        // outlive any cloned substage.
+        if (!own && type != DType::UNDEFINED) {
+            Data other;
+            other.raw = this->raw;
+            other.own = false;
+            other.type = this->type;
+            return other;
+        }
 
         switch (type) {
         default:
@@ -348,5 +356,13 @@ public:
         case DType::TYPE:
             return Data(new Type(*static_cast<Type*>(raw)));
         }
+    }
+
+    /// @brief Move the data held by other into this, transferring ownership
+    /// @param other transferred from. Cleared before return.
+    void move(Data& other) {
+        redefine(other);
+        other.own = false;
+        other.clear();
     }
 };

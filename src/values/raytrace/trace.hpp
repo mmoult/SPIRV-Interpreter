@@ -27,7 +27,11 @@ struct Intersection {
     glm::mat4 objToWorld = glm::mat4(1.0);
 
     const InstanceNode* instance = nullptr;  // Most recent instance intersected
+    /// Index within the shader binding table. See:
+    /// https://docs.vulkan.org/spec/latest/chapters/raytracing.html#shader-binding-table-indexing-rules
     int geometryIndex = -1;
+    /// Index automatically assigned by the driver or BVH builder. Should be unique. See:
+    /// https://learn.microsoft.com/en-us/windows/win32/direct3d12/primitiveindex
     int primitiveIndex = -1;
     float hitT = std::numeric_limits<float>::max();
     glm::vec2 barycentrics = glm::vec2(0.0f, 0.0f);

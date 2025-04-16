@@ -199,7 +199,6 @@ public:
             break;
         case SC::StorageClassCrossWorkgroup:
         case SC::StorageClassStorageBuffer:
-        case SC::StorageClassCallableDataKHR:
         case SC::StorageClassIncomingCallableDataKHR:
         case SC::StorageClassIncomingRayPayloadKHR:
             ins.push_back(id);
@@ -207,6 +206,7 @@ public:
                 outs.push_back(id);
             break;
         case SC::StorageClassOutput:
+        case SC::StorageClassCallableDataKHR:
         case SC::StorageClassRayPayloadKHR:
             outs.push_back(id);
             break;
