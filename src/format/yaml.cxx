@@ -25,7 +25,7 @@ import value.raytrace.accelStruct;
 import value.sampler;
 import value.string;
 
-export class Yaml : public ValueFormat {
+export class Yaml final : public ValueFormat {
 
 private:
     /// @brief Skips whitespace

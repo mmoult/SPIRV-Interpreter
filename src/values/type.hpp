@@ -66,7 +66,7 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
 // necessary forward reference
 class Value;
 
-class Type : public Valuable {
+class Type final : public Valuable {
     DataType base;
     unsigned subSize;
     // memory for subElement and subList elements is NOT managed by the Type

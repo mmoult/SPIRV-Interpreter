@@ -13,7 +13,7 @@ module;
 export module value.pointer;
 import value.aggregate;
 
-export class Pointer : public Value {
+export class Pointer final : public Value {
     /// @brief an index in Data which all indices point into
     unsigned head;
     /// @brief A list of indices for recursively extracting from the Value at head

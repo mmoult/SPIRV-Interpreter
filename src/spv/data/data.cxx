@@ -17,7 +17,7 @@ import value.aggregate;
 import value.primitive;
 import value.string;
 
-export class Variable : public Valuable {
+export class Variable final : public Valuable {
     /// The variable owns this value. When it is set, another value is copied over and decorations (such as relaxed
     /// precision or type conversions) are applied.
     Value* val;
@@ -201,7 +201,7 @@ public:
     }
 };
 
-export struct EntryPoint : public Function {
+export struct EntryPoint final : public Function {
     // Workgroup size in three dimensions:
     unsigned sizeX = 1;
     unsigned sizeY = 1;

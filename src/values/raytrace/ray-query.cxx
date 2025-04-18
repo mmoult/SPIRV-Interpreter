@@ -20,7 +20,7 @@ import value.aggregate;
 import value.primitive;
 import value.string;
 
-export class RayQuery : public Value {
+export class RayQuery final : public Value {
 private:
     AccelStruct accelStruct;
 

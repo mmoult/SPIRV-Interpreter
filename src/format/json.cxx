@@ -24,7 +24,7 @@ import value.raytrace.accelStruct;
 import value.sampler;
 import value.string;
 
-export class Json : public ValueFormat {
+export class Json final : public ValueFormat {
 private:
     // Note: We take some liberties with JSON format:
     // 1. JSON doesn't have comments, but // and /* */ are common, so we will parse (but *never* output) them

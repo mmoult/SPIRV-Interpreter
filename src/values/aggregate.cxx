@@ -103,7 +103,7 @@ public:
             elements[i]->copyFrom(*other.elements[i]);
     }
 
-    virtual void copyReinterp(const Value& other) noexcept(false) override {
+    void copyReinterp(const Value& other) noexcept(false) override {
         if (!tryCopyFrom(other))
             throw std::runtime_error("Could not copy reinterp to aggregate!");
     }
@@ -121,7 +121,7 @@ public:
     }
 };
 
-export class Array : public Aggregate {
+export class Array final : public Aggregate {
 protected:
     std::string getTypeName() const override {
         return "array";
@@ -189,7 +189,7 @@ public:
     }
 };
 
-export class Struct : public Aggregate {
+export class Struct final : public Aggregate {
 protected:
     std::string getTypeName() const override {
         return "struct";

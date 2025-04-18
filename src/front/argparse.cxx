@@ -24,19 +24,19 @@ struct Option {
     virtual std::string getArgNames() = 0;
 };
 
-struct Flag : public Option {
+struct Flag final : public Option {
     bool enabled = false;
 
     virtual ~Flag() = default;
-    virtual unsigned getNumArgs() override {
+    unsigned getNumArgs() override {
         enabled = true;
         return 0;
     }
-    virtual bool handle(const std::string& arg) override {
+    bool handle(const std::string& arg) override {
         assert(false);
         return false;  // flags may not use arguments!
     }
-    virtual std::string getArgNames() override {
+    std::string getArgNames() override {
         return "";
     }
 };
@@ -69,10 +69,10 @@ public:
         isSet = true;
     }
 
-    virtual unsigned getNumArgs() override {
+    unsigned getNumArgs() override {
         return 1;
     }
-    virtual bool handle(const std::string& arg) override {
+    bool handle(const std::string& arg) override {
         if (const auto topt = isValid(arg); topt.has_value()) {
             setValue(*topt);
             return true;
@@ -80,7 +80,7 @@ public:
         return false;
     }
 
-    virtual std::string getArgNames() override {
+    std::string getArgNames() override {
         return argName;
     }
 
@@ -94,9 +94,9 @@ public:
     }
 };
 
-class StringOption : public UnaryOption<std::string> {
+class StringOption final : public UnaryOption<std::string> {
 protected:
-    virtual std::optional<std::string> isValid(std::string str) override {
+    std::optional<std::string> isValid(std::string str) override {
         return {str};
     }
 
@@ -105,9 +105,9 @@ public:
     StringOption(const std::string& arg_name, const std::string& def_value) : UnaryOption(arg_name, def_value) {}
 };
 
-class UintOption : public UnaryOption<unsigned> {
+class UintOption final : public UnaryOption<unsigned> {
 protected:
-    virtual std::optional<unsigned> isValid(std::string str) override {
+    std::optional<unsigned> isValid(std::string str) override {
         try {
             int parsed = std::stoi(str, nullptr);
             if (parsed <= 0) {

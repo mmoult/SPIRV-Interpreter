@@ -11,7 +11,7 @@ module;
 #include "value.hpp"
 export module value.string;
 
-export class String : public Value {
+export class String final : public Value {
     std::string internal;
 
 public:

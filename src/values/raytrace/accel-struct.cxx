@@ -25,7 +25,7 @@ import value.primitive;
 import value.statics;
 import value.string;
 
-export class AccelStruct : public Value {
+export class AccelStruct final : public Value {
 private:
     bool ownNodes = false;
     std::vector<Node*> bvh;

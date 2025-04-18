@@ -23,7 +23,7 @@ import value.primitive;
 import value.statics;
 import value.string;
 
-export class Image : public Value {
+export class Image final : public Value {
     /// Dimensions of the image. xx is the length of x, yy the length of y, zz the len of z
     unsigned xx, yy, zz;
 

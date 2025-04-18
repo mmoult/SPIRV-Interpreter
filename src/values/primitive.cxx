@@ -15,7 +15,7 @@ module;
 export module value.primitive;
 import util.compare;
 
-export struct Primitive : public Value {
+export struct Primitive final : public Value {
 
     union {
         float fp32;
