@@ -53,7 +53,7 @@ IntersectionProperties raySphereIntersection(
         if (hit_t < ray_t_min || hit_t > ray_t_max)
         {
             // Set it to the other solution
-            hit_t = (-b - sqrt(discriminant)) / (2.0 * a);
+            hit_t = (-b + sqrt(discriminant)) / (2.0 * a);
         }
 
         if (hit_t < ray_t_min || hit_t > ray_t_max)
