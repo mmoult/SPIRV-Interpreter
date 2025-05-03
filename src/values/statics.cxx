@@ -20,6 +20,7 @@ import value.string;
 
 export struct Statics {
 
+    inline static const Type voidType = Type();
     inline static const Type uintType = Type::primitive(DataType::UINT);
     inline static const Type boolType = Type::primitive(DataType::BOOL);
     inline static const Type fp32Type = Type::primitive(DataType::FLOAT);

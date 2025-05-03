@@ -445,7 +445,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                     case DataType::UINT:
                     case DataType::INT: {
                         Primitive& val = static_cast<Primitive&>(*curr);
-                        val.copyFrom(Primitive(intersect_once ? 1 : 0));
+                        val.copyFrom(Primitive(intersect_once ? 1u : 0u));
                         break;
                     }
                     case DataType::BOOL: {

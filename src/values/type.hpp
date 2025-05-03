@@ -272,11 +272,29 @@ public:
     /// @brief Returns the type which is general to all elements
     /// Must follow the same conversion rules as void Value::copyFrom(const Value& new_val)
     /// @param elements the elements to find the most general type for
+    /// @param created a list of created types to be deleted after the call
     /// @return the general type common to all elements
     /// @throws if no such union type can be found
-    static Type unionOf(std::vector<const Value*> elements) noexcept(false);
+    static Type unionOf(std::vector<const Value*> elements, std::vector<const Type*> created) noexcept(false);
 
-    Type unionOf(const Type& other) const noexcept(false);
+    /// @brief Returns the type which is general to this and other
+    /// Must follow the same conversion rules as void Value::copyFrom(const Value& new_val)
+    /// @param other the other type
+    /// @param created a list of created types to be deleted after the call
+    /// @return the general type common between this and other
+    /// @throws if no such union type can be found
+    Type unionOf(const Type& other, std::vector<const Type*> created) const noexcept(false);
+
+    void replaceSubElement(const Type* sub_element) {
+        assert(sub_element != nullptr);
+        assert(this->subElement != nullptr);
+        this->subElement = sub_element;
+    }
+    void replaceFieldType(const Type* sub_element, unsigned index) {
+        assert(sub_element != nullptr);
+        assert(subList.size() > index);
+        subList[index] = sub_element;
+    }
 
     inline DataType getBase() const {
         return base;

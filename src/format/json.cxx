@@ -129,7 +129,7 @@ private:
         return name.str();
     }
 
-    Value* parseValue(LineHandler& handler) {
+    [[nodiscard]] Value* parseValue(LineHandler& handler) {
         auto cc0 = skipWhitespace(handler);
         if (!cc0.has_value())
             throw std::runtime_error("Missing value!");
@@ -423,7 +423,7 @@ protected:
         verifyBlank(handler);
     }
 
-    std::tuple<std::string, Value*> parseVariable(LineHandler& handler) noexcept(false) override {
+    [[nodiscard]] std::tuple<std::string, Value*> parseVariable(LineHandler& handler) noexcept(false) override {
         auto cc0 = skipWhitespace(handler);
         if (cc0.value_or(0) != '"')
             throw std::runtime_error("Named value in JSON input must begin with '\"'!");

@@ -54,7 +54,8 @@ private:
         }
     }
 
-    std::tuple<std::string, Value*> parseVariable(LineHandler& handler, unsigned min_indent, bool end_check = true) {
+    [[nodiscard]] std::tuple<std::string, Value*>
+    parseVariable(LineHandler& handler, unsigned min_indent, bool end_check = true) {
         std::string key = parseString(handler);
         auto cc = skipWhitespace(handler, true);
         if (cc.value_or(0) != ':') {
@@ -70,7 +71,8 @@ private:
         return {key, val};
     }
 
-    std::tuple<Value*, bool> parseAgg(LineHandler& handler, unsigned indent, bool list, std::string seen_name = "") {
+    [[nodiscard]] std::tuple<Value*, bool>
+    parseAgg(LineHandler& handler, unsigned indent, bool list, std::string seen_name = "") {
         std::vector<const Value*> elements;
         std::vector<std::string> names;
         // We have already seen the indent at the start of the first element
@@ -131,7 +133,7 @@ private:
         return {list ? constructArrayFrom(elements) : constructStructFrom(names, elements), true};
     }
 
-    Value* parseInlineAgg(LineHandler& handler, bool list) {
+    [[nodiscard]] Value* parseInlineAgg(LineHandler& handler, bool list) {
         // skip over the [ or {, which has already been seen
         handler.skip();
         std::vector<const Value*> elements;
@@ -527,7 +529,7 @@ private:
         return indent;
     }
 
-    std::tuple<Value*, bool> parseValue(LineHandler& handler, unsigned min_indent) {
+    [[nodiscard]] std::tuple<Value*, bool> parseValue(LineHandler& handler, unsigned min_indent) {
         unsigned added_indent = countIndent(handler, true);
         auto cc = handler.peek();
         if (cc.has_value()) {
@@ -584,7 +586,7 @@ protected:
         return SpecialFloatResult::F_NONE;
     }
 
-    std::tuple<std::string, Value*> parseVariable(LineHandler& handler) override {
+    [[nodiscard]] std::tuple<std::string, Value*> parseVariable(LineHandler& handler) override {
         unsigned indent = countIndent(handler);
         return parseVariable(handler, indent);
     }

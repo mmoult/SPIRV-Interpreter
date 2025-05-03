@@ -80,6 +80,20 @@ public:
         }
     }
 
+    // Infer the type from the children elements. Useful if the subelement type currently stored was a temporary.
+    void inferType() {
+        if (type.getBase() == DataType::ARRAY) {
+            // Must be at least one array element to perform this action!
+            assert(!elements.empty());
+            type.replaceSubElement(&elements[0]->getType());
+        } else {
+            assert(type.getBase() == DataType::STRUCT);
+            // Replace each of the sub elements with the field's type
+            for (unsigned i = 0; i < elements.size(); ++i)
+                type.replaceFieldType(&elements[0]->getType(), i);
+        }
+    }
+
     const Value* operator[](unsigned i) const {
         return elements[i];
     }

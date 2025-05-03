@@ -70,12 +70,12 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     }
 }
 
-Type Type::unionOf(std::vector<const Value*> elements) {
+Type Type::unionOf(std::vector<const Value*> elements, std::vector<const Type*> created) {
     if (elements.empty())
         throw std::invalid_argument("Cannot find union of types in empty vector!");
     Type t = elements[0]->getType();
     for (unsigned i = 1; i < elements.size(); ++i)
-        t = t.unionOf(elements[i]->getType());
+        t = t.unionOf(elements[i]->getType(), created);
     return t;
 }
 
@@ -121,109 +121,143 @@ bool Type::operator==(const Type& rhs) const {
     }
 }
 
-Type Type::unionOf(const Type& other) const noexcept(false) {
-    Type t = *this;
-    std::string base_str;
-    switch (base) {
+Type Type::unionOf(const Type& other, std::vector<const Type*> created) const noexcept(false) {
+    // Union should not care about the ordering of types. ie, a.unionOf(b) == b.unionOf(a)
+    // To accomplish this, we "order" the two types by base before running any comparisons
+
+    bool this_small = this->base <= other.base;
+    const Type& small = this_small ? *this : other;
+    const Type& large = this_small ? other : *this;
+
+    static_assert(
+        (DataType::FLOAT < DataType::UINT) && (DataType::UINT < DataType::INT) && (DataType::INT < DataType::BOOL),
+        "Below logic depends on type ordering!"
+    );
+
+    switch (small.base) {
     default:
-        throw std::invalid_argument("Unsupported type for unionOf!");
-    case DataType::VOID:
-        if (other.base == base)
-            break;
-        throw std::invalid_argument("Cannot find union of void and non-void types!");
-    // Primitive types
-    case DataType::UINT:
-        // UINT can convert to any of the other primitives
-        switch (other.base) {
-        case DataType::UINT:
-        case DataType::BOOL:
-        case DataType::FLOAT:
-        case DataType::INT:
-            t.base = other.base;
-            t.subSize = std::min(subSize, other.subSize);
-            break;
+        throw std::invalid_argument("Cannot find union with unsupported types!");
+    case DataType::FLOAT:
+        // Float takes precedence over several types
+        switch (large.base) {
         default:
-            throw std::invalid_argument("Cannot find union between UINT and non-primitive type!");
+            break;
+        case DataType::FLOAT:
+        case DataType::UINT:
+        case DataType::INT: {
+            Type t = small;
+            t.subSize = std::max(small.subSize, large.subSize);
+            return t;
+        }
         }
         break;
-    case DataType::BOOL:
-        if (base_str.empty())
-            base_str = "Bool";
-        [[fallthrough]];
-    case DataType::FLOAT:
-        if (base_str.empty())
-            base_str = "Float";
-        [[fallthrough]];
-    case DataType::INT: {
-        if (base_str.empty())
-            base_str = "Int";
-
-        // Shared logic for other primitives
-        if (other.base == base || other.base == DataType::UINT) {  // UINT -> X
-            // Select the more specific of precisions
-            t.subSize = std::min(subSize, other.subSize);
+    case DataType::UINT:
+        // uint yields to a couple of types
+        switch (large.base) {
+        default:
             break;
+        case DataType::UINT:
+        case DataType::INT:
+        case DataType::BOOL: {
+            Type t = large;
+            t.subSize = std::max(small.subSize, large.subSize);
+            return t;
         }
-        std::stringstream error;
-        error << "Cannot find union between " << base_str << " and type which is neither that nor UINT!";
-        throw std::invalid_argument(error.str());
+        }
+        break;
+    case DataType::INT:
+    case DataType::BOOL:
+    case DataType::STRING: {
+        if (large.base == small.base) {
+            Type t = small;
+            t.subSize = std::max(small.subSize, large.subSize);
+            return t;
+        }
+        break;
     }
     case DataType::ARRAY: {
-        if (other.base != base && other.subElement->base != DataType::VOID && subElement->base != DataType::VOID)
-            throw std::invalid_argument("Cannot find union of array and non-array types!");
+        if (large.base != DataType::ARRAY)
+            break;
+
+        if (small == large)
+            return small;
 
         // Assume a void type array will become the other array type if it's a non-void type
-        if (other.subElement->base == DataType::VOID || subElement->base == DataType::VOID) {
-            if (other.subElement->base == DataType::VOID && subElement->base == DataType::VOID)
-                return Type::array(0, *(new Type()));
-            else if (other.subElement->base == DataType::VOID)
-                return Type::array(0, *(new Type((*subElement))));
-            else if (subElement->base == DataType::VOID)
-                return Type::array(0, *(new Type((*other.subElement))));
+        if (small.subElement->base == DataType::VOID)
+            return large;
+        else if (large.subElement->base == DataType::VOID)
+            return small;
+
+        // If the element count does not match, assume this is a runtime array (use 0 size)
+        bool runtime_size = (small.subSize != large.subSize);
+
+        // Try to use pre-existent objects to minimize the creation and deletion of extra type objects
+        const Type* sub_el = nullptr;
+        Type sub = small.subElement->unionOf(*large.subElement, created);
+        if (sub == *small.subElement) {
+            if (!runtime_size)
+                return small;
+            sub_el = small.subElement;
+        } else if (sub == *large.subElement) {
+            if (!runtime_size)
+                return large;
+            sub_el = large.subElement;
+        } else {
+            // Transfer the unioned type to the heap and save to our list
+            sub_el = new Type(sub);
+            created.push_back(sub_el);
         }
 
-        // Find the union of their subElements
-        const unsigned new_size = (other.subSize == 0 || subSize == 0 || other.subSize != subSize) ? 0 : subSize;
-        Type sub = subElement->unionOf(*other.subElement);
-
-        // Because the subElement is a const pointer, we need for the sub to be equal to one or the other so we can
-        // borrow it as the subElement for the new unioned type
-        if (sub == *subElement && subSize == new_size)
-            return *this;
-        else if (sub == *other.subElement && other.subSize == new_size)
-            return other;
-        else  // Create a new unioned type
-            return Type::array(new_size, *(new Type(sub)));
+        assert(runtime_size);
+        return Type::array(0, *sub_el);
     }
     case DataType::STRUCT: {
-        // TODO more complex logic to compare nonequivalent types
-        // The issue is data management- we may need to construct a new type, but if that type is discarded or
-        // superseded, data is leaked. The function may need an extra argument of new datas to be deleted if the value
-        // is discarded
+        if (large.base != DataType::STRUCT)
+            break;
+        if (small == large)
+            return small;
 
-        // Check if the two structs are the same
-        if (*this == other)
-            return *this;
-
-        // Try to create a unioned struct
-        if (subList.size() == other.subList.size()) {
-            std::vector<const Type*> new_sub_list;
-            for (unsigned i = 0; i < subList.size(); ++i)
-                new_sub_list.push_back(new Type(subList[i]->unionOf(*other.subList[i])));
-            return *(new Type(Type::structure(new_sub_list, nameList)));
+        // The field count and names for these fields must match to get a reasonable union
+        unsigned num_fields = small.subList.size();
+        if (num_fields != large.subList.size()) {
+            std::stringstream error;
+            error << "Cannot find union between two structure types of different sizes!";
+            throw std::invalid_argument(error.str());
         }
 
-        throw std::runtime_error("Cannot currently take union of different struct types!");
+        for (unsigned i = 0; i < num_fields; ++i) {
+            if (small.nameList[i] != large.nameList[i]) {
+                std::stringstream error;
+                error << "Cannot find union between two structure types with differently named fields! ";
+                error << "Names \"" << small.nameList[i] << "\" and \"" << large.nameList[i] << "\" differ.";
+                throw std::invalid_argument(error.str());
+            }
+        }
+
+        std::vector<const Type*> sub_elements;
+        sub_elements.reserve(num_fields);
+        // Now that we suspect a union is possible, try to union all individual types to produce the result
+        for (unsigned i = 0; i < num_fields; ++i) {
+            const Type* sm = small.subList[i];
+            const Type* lg = large.subList[i];
+            Type unioned = sm->unionOf(*lg, created);
+            if (unioned == *sm)
+                sub_elements.push_back(sm);
+            else if (unioned == *lg)
+                sub_elements.push_back(lg);
+            else {
+                Type* create = new Type(unioned);
+                created.push_back(create);
+                sub_elements.push_back(create);
+            }
+        }
+        return Type::structure(sub_elements, small.getNames());
     }
-    case DataType::STRING: {
-        // TODO
-        if (base == other.base)
-            break;
-        throw std::runtime_error("Cannot find union of string and non-string types!");
     }
-        // TODO support other types
-    }
-    return t;
+
+    std::stringstream error;
+    error << "Cannot find union between " << small.base << " and " << large.base << " types!";
+    throw std::invalid_argument(error.str());
 }
 
 [[nodiscard]] Value* Type::asValue() const {
