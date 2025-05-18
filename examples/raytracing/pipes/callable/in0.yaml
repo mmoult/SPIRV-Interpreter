@@ -1,0 +1,93 @@
+'@shader-binding-table':
+  miss_records:
+  - { shader: "spv/miss.spv", input: "" }
+  hit_group_records:
+  -
+    any: { shader: "", input: "" }
+    closest: { shader: "spv/closest.spv", input: "" }
+    intersection: { shader: "", input: "" }
+  callable_records:
+  - { shader: "spv/simple.spv", input: "" }
+  - { shader: "spv/line.spv", input: "" }
+  - { shader: "spv/checker.spv", input: "" }
+
+LaunchIdKHR: [ 2, 1, 0 ]
+
+LaunchSizeKHR: [ 3, 3, 1 ]
+
+cam:
+  cam:
+    viewInverse:
+      data:
+      - [ 1, 0, 0, 0.0 ]
+      - [ 0, 1, 0, 0.0 ]
+      - [ 0, 0, 1, 0.0 ]
+      - [ 1.0, 2.0, 3.0, 1.0 ]
+    projInverse:
+      data:
+      - [ 1.0, 0, 0, 0 ]
+      - [ 0, 1.0, 0, 0 ]
+      - [ 0, 0, 1.0, 0 ]
+      - [ 2, -1, -1, 1.0 ]
+
+image:
+  ref: ""
+  dim: [ 4, 4 ]
+  mipmaps: 1
+  comps: 1234
+  data: [
+    0.0, 0.0, 0.0, 0.0,  # (0, 0)
+    0.0, 0.0, 0.0, 0.0,  # (1, 0)
+    0.0, 0.0, 0.0, 0.0,  # (2, 0)
+    0.0, 0.0, 0.0, 0.0,  # (3, 0)
+    0.0, 0.0, 0.0, 0.0,  # (0, 1)
+    0.0, 0.0, 0.0, 0.0,  # (1, 1)
+    0.0, 0.0, 0.0, 0.0,  # (2, 1)
+    0.0, 0.0, 0.0, 0.0,  # (3, 1)
+    0.0, 0.0, 0.0, 0.0,  # (0, 2)
+    0.0, 0.0, 0.0, 0.0,  # (1, 2)
+    0.0, 0.0, 0.0, 0.0,  # (2, 2)
+    0.0, 0.0, 0.0, 0.0,  # (3, 2)
+    0.0, 0.0, 0.0, 0.0,  # (0, 3)
+    0.0, 0.0, 0.0, 0.0,  # (1, 3)
+    0.0, 0.0, 0.0, 0.0,  # (2, 3)
+    0.0, 0.0, 0.0, 0.0,  # (3, 3)
+  ]
+
+rs:
+  tlas: [ 0, 0 ]
+  box_nodes:
+  -
+    min_bounds: [ -2.3, -1.4, -1 ]
+    max_bounds: [ 4.745316, 6, 6.2 ]
+    child_nodes:
+    - [ 2, 0 ]
+    - [ 2, 1 ]
+    - [ 2, 2 ]
+  instance_nodes: []
+  triangle_nodes:
+  -
+    geometry_index: 0
+    primitive_index: 0
+    opaque: true
+    vertices:
+    - [ -2.0, 4.0, 3.2 ]
+    - [ 2.0, 6.0, 0.4 ]
+    - [ 3.0, 2.0, 4.5 ]
+  -
+    geometry_index: 1
+    primitive_index: 1
+    opaque: true
+    vertices:
+    - [ -2.3, 1.2, 6.2 ]
+    - [ -0.5, -1.4, 1.0 ]
+    - [ 1.8, -0.9, 4.5 ]
+  -
+    geometry_index: 2
+    primitive_index: 2
+    opaque: true
+    vertices:
+    - [ 2.0, -1, -1 ]
+    - [ 3, 4, 0.5 ]
+    - [ -2, 3.0, 0 ]
+  procedural_nodes: []

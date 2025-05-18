@@ -115,7 +115,8 @@ ReturnCode handle_record(
     spv::ExecutionModel expected,
     bool unused
 ) {
-    parse_spv(program, record.shaderSource);
+    if (auto ret = parse_spv(program, record.shaderSource); ret != ReturnCode::OK)
+        return ret;
     ValueMap extra_inputs;
     if (!record.extraInput.empty()) {
         ValueFormat* format = determine_format(record.extraInput, preference, false);

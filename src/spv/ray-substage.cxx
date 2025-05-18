@@ -33,6 +33,7 @@ export struct RayTraceSubstage {
     std::vector<unsigned> rayTMax;
     std::vector<unsigned> rayTMin;
     std::vector<unsigned> instanceCustomIndex;
+    std::vector<unsigned> geomIndex;
 
     // The location of the output payload, which should be the only variable with storage class IncomingRayPayloadKHR.
     // Note: it is called "incoming" because the payload is input (and may be modified) before output.
@@ -41,6 +42,10 @@ export struct RayTraceSubstage {
     // The spec says there can only be one hit attribute variable (if any). Only writable in intersection, but readable
     // in any-hit, closest-hit, intersection (although undefined before first write).
     unsigned hitAttribute = 0;
+
+    // The acceleration struct from which this substage was generated. Used to set up rt fields in any recursive stage.
+    AccelStruct* callingAs = nullptr;
+
 
     ValueMap getVariables(const std::vector<unsigned>& vars) const {
         ValueMap ret;
@@ -87,6 +92,9 @@ public:
         case spv::BuiltIn::BuiltInInstanceCustomIndexKHR:
             instanceCustomIndex.push_back(loc);
             return true;
+        case spv::BuiltIn::BuiltInRayGeometryIndexKHR:
+            geomIndex.push_back(loc);
+            return true;
         default:
             break;
         }
@@ -97,7 +105,7 @@ public:
             return true;
         }
         spv::StorageClass storage = var.getStorageClass();
-        if (storage == spv::StorageClassIncomingRayPayloadKHR) {
+        if (storage == spv::StorageClassIncomingRayPayloadKHR || storage == spv::StorageClassIncomingCallableDataNV) {
             payload = loc;
             return true;
         } else if (storage == spv::StorageClassHitAttributeKHR) {
@@ -108,43 +116,73 @@ public:
     }
 
     /// @brief Set up all inputs except the hit attribute, which takes some special processing
-    void setUpInputs(DataView& dat, AccelStruct& as, Value& payload, const InstanceNode* instance) const {
-        std::vector<Primitive> origin = as.getWorldRayOrigin();
-        for (unsigned loc : worldRayOrigin) {
-            Variable* var = dat[loc].getVariable();
-            assert(var != nullptr);
-            copy_into(var->getVal(), origin);
+    void setUpInputs(DataView& dat, AccelStruct* as, Value& payload, const InstanceNode* instance) const {
+#define REQUIRE_AS(VAR_TYPE) \
+    if (as == nullptr) { \
+        throw std::runtime_error("Cannot set up " VAR_TYPE " variable without an acceleration struct in the frame!"); \
+    }
+
+        if (!worldRayOrigin.empty()) {
+            REQUIRE_AS("world ray origin");
+            std::vector<Primitive> origin = as->getWorldRayOrigin();
+            for (unsigned loc : worldRayOrigin) {
+                Variable* var = dat[loc].getVariable();
+                assert(var != nullptr);
+                copy_into(var->getVal(), origin);
+            }
         }
-        std::vector<Primitive> direction = as.getWorldRayDirection();
-        for (unsigned loc : worldRayDirection) {
-            Variable* var = dat[loc].getVariable();
-            assert(var != nullptr);
-            copy_into(var->getVal(), direction);
+        if (!worldRayDirection.empty()) {
+            REQUIRE_AS("world ray direction");
+            std::vector<Primitive> direction = as->getWorldRayDirection();
+            for (unsigned loc : worldRayDirection) {
+                Variable* var = dat[loc].getVariable();
+                assert(var != nullptr);
+                copy_into(var->getVal(), direction);
+            }
         }
-        const Trace& trace = as.getTrace();
-        Primitive tmax(trace.rayTMax);
-        for (unsigned loc : rayTMax) {
-            Variable* var = dat[loc].getVariable();
-            assert(var != nullptr);
-            var->getVal()->copyFrom(tmax);
+        if (!rayTMax.empty()) {
+            REQUIRE_AS("ray t maximum");
+            const Trace& trace = as->getTrace();
+            Primitive tmax(trace.rayTMax);
+            for (unsigned loc : rayTMax) {
+                Variable* var = dat[loc].getVariable();
+                assert(var != nullptr);
+                var->getVal()->copyFrom(tmax);
+            }
         }
-        Primitive tmin(trace.rayTMin);
-        for (unsigned loc : rayTMin) {
-            Variable* var = dat[loc].getVariable();
-            assert(var != nullptr);
-            var->getVal()->copyFrom(tmin);
+        if (!rayTMin.empty()) {
+            REQUIRE_AS("ray t minimum");
+            const Trace& trace = as->getTrace();
+            Primitive tmin(trace.rayTMin);
+            for (unsigned loc : rayTMin) {
+                Variable* var = dat[loc].getVariable();
+                assert(var != nullptr);
+                var->getVal()->copyFrom(tmin);
+            }
         }
-        Primitive customIdx((instance == nullptr) ? 0 : instance->getCustomIndex());
+        if (!geomIndex.empty()) {
+            REQUIRE_AS("geometry index");
+            const Trace& trace = as->getTrace();
+            const Intersection& sect = trace.hasCommitted() ? trace.getCommitted() : trace.getCandidate();
+            Primitive geom_index(static_cast<unsigned>(sect.geometryIndex));
+            for (unsigned loc : geomIndex) {
+                Variable* var = dat[loc].getVariable();
+                assert(var != nullptr);
+                var->getVal()->copyFrom(geom_index);
+            }
+        }
+        Primitive custom_idx((instance == nullptr) ? 0 : instance->getCustomIndex());
         for (unsigned loc : instanceCustomIndex) {
             Variable* var = dat[loc].getVariable();
             assert(var != nullptr);
-            var->getVal()->copyFrom(customIdx);
+            var->getVal()->copyFrom(custom_idx);
         }
 
         if (accelStruct != 0) {
+            REQUIRE_AS("acceleration struct");
             Variable* var = dat[accelStruct].getVariable();
             assert(var != nullptr);
-            var->getVal()->copyFrom(as);
+            var->getVal()->copyFrom(*as);
         }
         if (unsigned tpayload = this->payload; tpayload != 0) {
             try {
@@ -220,7 +258,7 @@ public:
         DataView& dat = *frame.getRtData();
         // Save from the frame rt result into the payload (as necessary)
         auto stage = frame.getRtTrigger();
-        if ((stage == RtStageKind::CLOSEST || stage == RtStageKind::MISS) && payload != 0) {
+        if (payload != 0) {
             Variable* var = dat[payload].getVariable();
             assert(var != nullptr);
             frame.getRtResult()->copyFrom(*var->getVal());

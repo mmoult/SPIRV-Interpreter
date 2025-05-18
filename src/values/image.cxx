@@ -522,6 +522,8 @@ public:
             const auto& prim = static_cast<const Primitive&>(*val);
             if (base == DataType::INT)
                 return static_cast<float>(prim.data.i32);
+            if (base == DataType::UINT)
+                return static_cast<float>(prim.data.u32);
             assert(base == DataType::FLOAT);
             return prim.data.fp32;
         };

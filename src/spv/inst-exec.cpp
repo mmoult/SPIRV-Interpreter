@@ -98,16 +98,21 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         result_at = std::get<unsigned>(operands[idx].raw);
     }
 
-    // Pops the current frame and returns whether there are any more frames after
+    // Pops the current frame and returns whether we should increment the PC
     auto pop_frame = [&frame_stack]() {
-        // If the frame before is a raytracing launch, don't delete the frame's data
         bool pop_to_rt = false;
         if (frame_stack.size() > 1) {
-            const Frame* prev = frame_stack[frame_stack.size() - 2];
-            if (prev->getRtTrigger() != RtStageKind::NONE) {
+            Frame* prev = frame_stack[frame_stack.size() - 2];
+            auto stage = prev->getRtTrigger();
+            pop_to_rt = stage != RtStageKind::NONE;
+
+            if (stage == RtStageKind::CALLABLE)
+                // Since we will be returning to the previous frame, mark it as returning
+                // Callable requires this extra processing since it allows direct recursion
+                prev->prepareReturn();
+            // If the frame before is a raytracing launch, don't delete the frame's data
+            else if (stage != RtStageKind::NONE)
                 frame_stack.back()->removeData();
-                pop_to_rt = true;
-            }
         }
         delete frame_stack.back();
         frame_stack.pop_back();
@@ -476,15 +481,19 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         frame.disableRaytrace();
         break;
     }
-    // case spv::OpExecuteCallableKHR: { // 4446
-    //  TODO: implement callable shader execution
-    // const unsigned index_sbt = static_cast<Primitive&>(*getValue(0, data)).data.u32;
-    // const auto shader_args = getFromPointer(1, data);
-    // std::cout << "WARNING: OpExecuteCallableKHR instruction does nothing as the moment!" << std::endl;
-    // std::cout << "Invoking callable shader at SBT index = (" << index_sbt << ") with argument of type ("
-    //           << shader_args->getType().getBase() << ")" << std::endl;
-    // break;
-    //}
+    case spv::OpExecuteCallableKHR: {  // 4446
+        if (!frame.isCallableReturn()) {
+            const Primitive& index_sbt_prim = static_cast<const Primitive&>(*getValue(0, data));
+            assert(index_sbt_prim.getType().getBase() == DataType::UINT);
+            const unsigned index_sbt = index_sbt_prim.data.u32;
+            auto& call_data = *getVariable(1, data);
+            frame.triggerCallable(index_sbt, call_data.getVal(), frame.getFromAs());
+            // return to this instruction after exit to clean up
+            inc_pc = false;
+        } else
+            frame.disableRaytrace();
+        break;
+    }
     case spv::OpIgnoreIntersectionKHR:  // 4448
     case spv::OpTerminateRayKHR: {  // 4449
         // OpIgnoreIntersectionKHR: ignores/rejects this potential intersection. Continues intersection searching above

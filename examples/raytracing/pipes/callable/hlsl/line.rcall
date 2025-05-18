@@ -9,6 +9,5 @@ struct CallData
 void main(inout CallData data)
 {
     // Generate a line pattern
-	float2 pos = float2(DispatchRaysIndex().xy / 8);
-	data.outColor = float3(pos.y % 2.0);
+	data.outColor = float3(DispatchRaysIndex().y % 0.75);
 }

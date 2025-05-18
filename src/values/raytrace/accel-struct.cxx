@@ -188,8 +188,10 @@ public:
                 Intersection& candidate = trace.getCandidate();
                 if (candidate.type == Intersection::Type::Triangle)
                     confirmIntersection();
-                else  // ... == Intersection::Type::AABB
+                else {
+                    assert(candidate.type == Intersection::Type::AABB);
                     generateIntersection(candidate.hitT);
+                }
             }
         } while (found_primitive == Ternary::YES);
 

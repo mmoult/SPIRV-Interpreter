@@ -955,6 +955,24 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             Value* val = getValue(i, data);
             values.push_back(val);
         }
+        // If the result type is an array, we may need to unpack some values to reach the desired count
+        // "If constructing a vector, the total number of components in all the operands must equal the number of
+        //  components in Result Type."
+        if (ret->getBase() == DataType::ARRAY) {
+            unsigned expected = ret->getSize();
+            if (values.size() < expected) {
+                std::vector<const Value*> replacement;
+                for (const Value* val : values) {
+                    if (val->getType().getBase() == DataType::ARRAY) {
+                        const auto& arr = static_cast<const Array&>(*val);
+                        for (const Value* el : arr)
+                            replacement.push_back(el);
+                    } else
+                        replacement.push_back(val);
+                }
+                values = replacement;
+            }
+        }
         auto* val = ret->construct(values);
 
         if (opcode != spv::OpSpecConstantComposite) {

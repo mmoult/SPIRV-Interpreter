@@ -10,6 +10,7 @@ module;
 #include "data/manager.hpp"
 export module spv.frame;
 import value.raytrace.accelStruct;
+import value.primitive;
 
 export enum RtStageKind { NONE, ANY_HIT, CLOSEST, INTERSECTION, MISS, CALLABLE };
 export const char* to_string(RtStageKind kind) {
@@ -50,6 +51,7 @@ export class Frame {
 
     /// @brief The view of data for this frame.
     DataView* view;
+    AccelStruct* fromAs;
 
     /// The argument index to use next
     unsigned argCount;
@@ -64,6 +66,7 @@ export class Frame {
         // - the payload (for closest hit, miss)
         // - bool hit data (for intersection)
         // - [intersection_valid: bool, continue_search: bool] (for any hit)
+        // - callable_data for callable substages
         Value* result = nullptr;
         Value* hitAttribute = nullptr;
         // the data which is a duplicate of the substage's
@@ -71,13 +74,14 @@ export class Frame {
     } rt;
 
 public:
-    Frame(unsigned pc, std::vector<Data*>& args, unsigned ret_at, DataView& data)
+    Frame(unsigned pc, std::vector<Data*>& args, unsigned ret_at, DataView& data, AccelStruct* from_as = nullptr)
         : pc(pc)
         , curLabel(0)
         , lastLabel(0)
         , args(args)
         , retAt(ret_at)
         , view(data.getSource()->makeView(&data))
+        , fromAs(from_as)
         , argCount(0)
         , first(true) {}
     Frame(const Frame&) = delete;
@@ -157,6 +161,22 @@ public:
             this->rt.data = nullptr;
         }
     }
+    void triggerCallable(unsigned index, Value* callable, AccelStruct* as) {
+        this->rt.trigger = RtStageKind::CALLABLE;
+        this->rt.index = index;
+        this->rt.as = as;
+        this->rt.result = callable;
+
+        // hit attribute is never used by callable, so we reuse it to track whether this frame is entry or exit
+        Primitive dummy(0);
+        this->rt.hitAttribute = static_cast<Value*>(&dummy);
+
+        if (this->rt.data != nullptr) {
+            delete this->rt.data;
+            this->rt.data = nullptr;
+        }
+    }
+
     void disableRaytrace() {
         this->rt.trigger = RtStageKind::NONE;
         this->rt.index = 0;
@@ -164,6 +184,23 @@ public:
         this->rt.result = nullptr;
         delete this->rt.data;
         this->rt.data = nullptr;
+    }
+
+    bool isCallableReturn() const {
+        if (this->rt.trigger == RtStageKind::NONE)
+            return false;
+        assert(this->rt.trigger == RtStageKind::CALLABLE);
+        return rt.hitAttribute == nullptr;
+    }
+    void prepareReturn() {
+        assert(this->rt.trigger == RtStageKind::CALLABLE);
+        rt.hitAttribute = nullptr;
+    }
+
+    // Stages may invoke callable shaders without using an explicit acceleration struct, however, if the stage called
+    // from has some acceleration struct, that is what should be used to initialize builtins and what not.
+    AccelStruct* getFromAs() const {
+        return this->fromAs;
     }
 
     unsigned getRtIndex() const {
