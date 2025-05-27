@@ -19,10 +19,6 @@ import value.aggregate;
 import value.primitive;
 import value.statics;
 
-// These also are an unwanted Vulkan/SPIR-V dependency.
-static constexpr unsigned HIT_KIND_FRONT_FACING_TRIANGLE_KHR = 0xFE;
-static constexpr unsigned HIT_KIND_BACK_FACING_TRIANGLE_KHR = 0xFF;
-
 const Type& BoxNode::getType() {
     if (type.getBase() != DataType::VOID)
         return type;
@@ -36,17 +32,16 @@ const Type& BoxNode::getType() {
 
 Ternary BoxNode::step(Trace* trace_p) const {
     Trace& trace = *trace_p;
-    Intersection& candidate = trace.getCandidate();
+    const Intersection candidate = trace.getCandidate();
     auto ray_pos = candidate.getRayPos(trace_p);
     auto ray_dir = candidate.getRayDir(trace_p);
 
-    const bool result = ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, minBounds, maxBounds);
     // If the ray intersects the bounding box, then add its children to be evaluated.
-    if (result) {
+    if (ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, minBounds, maxBounds)) {
         for (const auto& child_ref : children) {
-            // Have to refetch the candidate each iteration since expanding the candidates list may have invalidated
-            // the previous reference.
-            Intersection& cand = trace.candidates.emplace_back(trace.getCandidate());
+            // Most of the fields are the same (such as origin and direction), so copy from parent
+            Intersection& cand = trace.candidates.emplace_back(candidate);
+            // With exception of the next node to search, which must be updated.
             cand.search = child_ref.ptr;
         }
     }
@@ -214,10 +209,9 @@ Ternary TriangleNode::step(Trace* trace_p) const {
     candidate.hitT = t;
     candidate.barycentrics = glm::vec2(u, v);
     candidate.isOpaque = this->opaque;
-    candidate.enteredTriangleFrontFace = entered_front;
     candidate.geometryIndex = this->geomIndex;
     candidate.primitiveIndex = this->primIndex;
-    candidate.hitKind = entered_front ? HIT_KIND_FRONT_FACING_TRIANGLE_KHR : HIT_KIND_BACK_FACING_TRIANGLE_KHR;
+    candidate.hitKind = entered_front ? HitKind::FRONT_FACING_TRIANGLE : HitKind::BACK_FACING_TRIANGLE;
     candidate.type = Intersection::Type::Triangle;
     return (this->opaque || !trace.useSBT) ? Ternary::YES : Ternary::MAYBE;
 }

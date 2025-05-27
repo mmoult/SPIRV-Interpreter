@@ -1,23 +1,17 @@
-Test# Result   (Ray Flags)                   Description
+Test  Result  (Ray Flags)                   Description
 --------------------------------------------------------------------------------
-0     MISS     (none)                        average miss
-1     HIT      (none)                        average hit
-2     MISS     (none)                        reduced ray distance
-3     HIT      (none)                        increased ray distance
-4     MISS     (none)                        cull mask; invisible instance
-5     HIT      (opaque)                      hit only non-opaque geometry
-6     HIT      (no opaque)                   hit only opaque geometry
-7     HIT      (terminate on first hit)      hit non-opaque in front of opaque
-8     HIT      (skip closest hit shader)     hit
-9     HIT      (cull back facing triangles)  hit front
-10    MISS     (cull back facing triangles)  hit back
-11    MISS     (cull front facing triangles) hit front
-12    HIT      (cull front facing triangles) hit back
-13    MISS     (cull opaque)                 hit only opaque
-14    HIT      (cull opaque)                 hit only non-opaque
-15    HIT      (cull no opaque)              hit only opaque
-16    MISS     (cull no opaque)              hit only non-opaque
-17    MISS     (skip triangles)              hit only triangles
-18    HIT      (skip triangles)              ray goes through triangles to procedural
-19    MISS     (skip AABBs)                  hit only procedurals
-20    HIT      (skip AABBs)                  ray goes through procedurals to triangles
+ 0    MISS    (none)                        average miss
+ 1    HIT     (none)                        average hit
+ 2    MISS    (none)                        reduced ray distance
+ 3    HIT     (none)                        increased ray distance
+ 4    MISS    (none)                        cull mask; invisible instance
+ 5    HIT     (opaque)                      hit only non-opaque geometry
+ 6    HIT     (no opaque)                   hit only opaque geometry
+ 7    HIT     (terminate on first hit)      hit non-opaque in front of opaque
+ 8    HIT     (skip closest hit shader)     hit
+ 9    HIT     (cull back facing triangles)  hit front, passing through back
+10    HIT     (cull front facing triangles) hit back, passing through front
+11    HIT     (cull opaque)                 hit only opaque, passing through non-opaque
+12    HIT     (cull no opaque)              hit only non-opaque, passing through opaque
+13    HIT     (skip triangles)              ray goes through triangle to procedural
+14    HIT     (skip AABBs)                  ray goes through procedural to triangle

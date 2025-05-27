@@ -1,21 +1,39 @@
-#version 460 core
+#version 460
 #extension GL_EXT_ray_tracing : require
-#extension GL_EXT_ray_flags_primitive_culling : enable
 
-layout(set = 0, binding = 0) uniform accelerationStructureEXT accelStruct;
+layout(set = 1, binding = 0, std140) uniform RayProperties
+{
+    uint flags;
+    uint cullMask;
+    vec3 origin;
+    vec3 direction;
+    float tMin;
+    float tMax;
+} ray;
 
-layout(location = 0) in uint rayFlags;
-layout(location = 1) in uint cullMask;
-layout(location = 2) in uint offsetSBT;
-layout(location = 3) in uint strideSBT;
-layout(location = 4) in uint missIndex;
-layout(location = 5) in vec3 rayOrigin;
-layout(location = 6) in float rayTMin;
-layout(location = 7) in vec3 rayDirection;
-layout(location = 8) in float rayTMax;
-layout(location = 9) rayPayloadEXT vec3 payload;
+layout(set = 0, binding = 0) uniform accelerationStructureEXT as;
+layout(location = 0) rayPayloadEXT uvec4 payload;
+
+layout(set = 3, binding = 2, std430) buffer OutData
+{
+    float hitT;
+    // ids: geometry index and primitive index
+    uvec2 ids;
+    // Possible values include:
+    // - HitKindFrontFacingTriangleKHR = 0xFEU
+    // - HitKindBackFacingTriangleKHR  = 0xFFU
+    // - HitKindLssPrimitiveNV
+    // - HitKindSpherePrimitiveNV
+    uint hitKind;
+} out_buf;
 
 void main()
 {
-    traceRayEXT(accelStruct, rayFlags, cullMask, offsetSBT, strideSBT, missIndex, rayOrigin, rayTMin, rayDirection, rayTMax, 9);
+    traceRayEXT(as, ray.flags, ray.cullMask, 0u, 0u, 0u, ray.origin, ray.tMin, ray.direction, ray.tMax, 0);
+
+    // For testing purposes, the interpreter has non-standard behavior for single rgen shaders without any connected
+    // SBT. We convert from the "payload" fields into the output:
+    out_buf.hitT = uintBitsToFloat(payload.x);
+    out_buf.ids = payload.yz;
+    out_buf.hitKind = payload.w;
 }

@@ -305,7 +305,7 @@ public:
     /// @return whether the intersection was entered from the front face of a triangle.
     bool getIntersectionFrontFace(bool get_committed) const {
         const Intersection& intersect = trace.candidates[get_committed ? trace.committed : trace.candidate];
-        return intersect.type == Intersection::Type::Triangle && intersect.enteredTriangleFrontFace;
+        return intersect.type == Intersection::Type::Triangle && intersect.hitKind == HitKind::FRONT_FACING_TRIANGLE;
     }
 
     /// @brief Get whether the intersection is an opaque procedural.

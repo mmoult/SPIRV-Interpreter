@@ -14,3 +14,7 @@ glm::vec3 Intersection::getRayDir(const Trace* trace) const {
     glm::vec4 dir = worldToObj * glm::vec4(trace->rayDirection.x, trace->rayDirection.y, trace->rayDirection.z, 0.0);
     return glm::vec3(dir.x, dir.y, dir.z);
 }
+
+bool Intersection::isValidHit() const {
+    return hitT != std::numeric_limits<float>::infinity();
+}

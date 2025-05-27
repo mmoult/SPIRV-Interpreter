@@ -1,0 +1,158 @@
+wall:
+  data:
+  - strip:
+    - [0, 0, 0]
+    - [2, 0, -0.5]
+    - [2, 4, 0]
+    color: [180, 0, 0]
+  - strip:
+    - [2, 0, -0.5]
+    - [3, 2, 0]
+    - [2, 4, 0]
+    color: [0, 180, 0]
+  - strip:
+    - [0, 4, 1]
+    - [1, 2, 0]
+    - [2, 4, 0]
+    color: [180, 0, 180]
+
+see_thru:
+  strip:
+  - [0, 0, 0]
+  - [2, 0, 0]
+  - [1, 0, 1.5]
+  opaque: false
+  color: [255, 210, 210]
+
+procedural:
+  min: [0, 0, 0]
+  max: [3, 2, 1]
+  color: [70, 119, 255]
+
+pinwheel:
+  color: [250, 225, 0]
+  data:
+  - strip:
+    - [-1, 0.25, 1]
+    - [1, -0.25, -1]
+    - [1, 0.5, 2]
+  - strip:
+    - [1, 0.25, 1]
+    - [1, -0.25, -1]
+    - [2, -0.25, -1]
+  - strip:
+    - [-1, 0.25, 1]
+    - [-1, -0.5, -2]
+    - [1, -0.25, -1]
+  - strip:
+    - [-1, -0.25, -1]
+    - [-1, 0.25, 1]
+    - [-2, 0.25, 1]
+
+sharp:
+  strip:
+  - [0, 5, 0]
+  - [0, 0, -1]
+  - [0, -4, 3]
+
+data:
+- # ray0
+  origin: [1, 1, -1]
+  direction: [0.8, -0.5, -0.6]
+  max: 5
+- # ray1
+  origin: [-1, -0.4, 0]
+  direction: [-1, 0.2, -0.4]
+  max: 5
+- # ray2
+  origin: [-1, -0.4, -0.5]
+  direction: [-1, 0.2, -0.4]
+  max: 1
+- # ray3
+  origin: [3.8, 0.2, 0.1]
+  direction: [-1, 0.2, -0.45]
+  max: 10
+- # ray4
+  origin: [0, 0, 0]
+  direction: [0, -1, 0.3]
+  max: 5
+- # ray5
+  origin: [0, 0, 0]
+  direction: [0.3, 1, -0.2]
+  max: 5
+- # ray6
+  origin: [0, 0.9, -3.5]
+  direction: [-1, 0.3, 0.5]
+  max: 5
+- # ray7
+  origin: [0, 0, -2.4]
+  direction: [-1, 0, 0]
+  max: 5
+- # ray8
+  origin: [0, 0, 0.2]
+  direction: [0, -0.7071, 0.7071]
+  max: 5
+- # ray9
+  origin: [0.4, 1.5, 1.8]
+  direction: [0.7071, -0.4, 0.4]
+  max: 5
+- # ray10
+  origin: [0, 0, 0]
+  direction: [1, 0.6, 0.6]
+  max: 5
+- # ray11
+  origin: [0, 0.3, -0.1]
+  direction: [-1, 0, -0.2]
+  max: 5
+- # ray12
+  origin: [-2, 3.2, -1.9]
+  direction: [-1, -0.1, 0.5]
+  max: 2
+- # ray13
+  origin: [-0.5, -3, 0]
+  direction: [0, 0, -1]
+  max: 5
+- # ray14
+  origin: [2.5, -3, 0]
+  direction: [0, 0, -1]
+  max: 5
+
+- rotate: [0, -45, 0]
+  translate: [0.8, 0.2, 3]
+  instance: wall
+- rotate: [20, -95, 0]
+  translate: [-3.2, -0.1, 0]
+  instance: wall
+- scale: [1.5, 1.4, 1.6]
+  rotate: [0, 0, 45]
+  translate: [-1, -3, -4]
+  instance: procedural
+- scale: [1.2, 1.2, 1.0]
+  translate: [0, 3, -1]
+  instance: see_thru
+- translate: [0, -3, 2]
+  instance: pinwheel
+  mask: 1
+- translate: [-1.2, 1.5, -1.0]
+  instance: see_thru
+  rotate: [0, 0, 75]
+- rotate: [70, 150, 70]
+  translate: [3.5, 0, 2.2]
+  instance: pinwheel
+- scale: [0.5, 0.3, 0.5]
+  translate: [1, 1, 0]
+  instance: sharp
+  color: [0, 200, 170]
+- rotate: [0, 0, 70]
+  translate: [-4, 4, -2]
+  instance: see_thru
+- scale: [0.8, 0.8, 0.8]
+  rotate: [0, 90, 0]
+  translate: [3, -3, -4.2]
+  instance: sharp
+  color: [0, 88, 70]
+- scale: [0.8, 0.6, 0.8]
+  rotate: [0, -90, 0]
+  translate: [-1.2, -3, -2]
+  instance: sharp
+  color: [0, 88, 70]

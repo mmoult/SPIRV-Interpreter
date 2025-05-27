@@ -10,11 +10,17 @@
 
 #include "glm/ext.hpp"
 
-#include "../value.hpp"
 #include "node.hpp"
 import spv.rayFlags;
 
 struct Trace;
+
+// This is an unfortunate Vulkan/SPIR-V dependency since the exact values are declared
+enum HitKind: unsigned {
+    UNHIT = 0x00,
+    FRONT_FACING_TRIANGLE = 0xFE,
+    BACK_FACING_TRIANGLE = 0xFF,
+};
 
 struct Intersection {
     enum class Type { None, Triangle, Generated, AABB };
@@ -29,18 +35,18 @@ struct Intersection {
     const InstanceNode* instance = nullptr;  // Most recent instance intersected
     /// Index within the shader binding table. See:
     /// https://docs.vulkan.org/spec/latest/chapters/raytracing.html#shader-binding-table-indexing-rules
-    int geometryIndex = -1;
+    unsigned geometryIndex = 0;
     /// Index automatically assigned by the driver or BVH builder. Should be unique. See:
     /// https://learn.microsoft.com/en-us/windows/win32/direct3d12/primitiveindex
-    int primitiveIndex = -1;
-    float hitT = std::numeric_limits<float>::max();
+    unsigned primitiveIndex = 0;
+    float hitT = std::numeric_limits<float>::infinity();
     glm::vec2 barycentrics = glm::vec2(0.0f, 0.0f);
     bool isOpaque = true;
-    bool enteredTriangleFrontFace = false;
-    unsigned hitKind = std::numeric_limits<unsigned>::max();
+    HitKind hitKind = HitKind::UNHIT;
 
     glm::vec3 getRayPos(const Trace* trace) const;
     glm::vec3 getRayDir(const Trace* trace) const;
+    bool isValidHit() const;
 
     Intersection(const Node* search) : search(search) {}
 };

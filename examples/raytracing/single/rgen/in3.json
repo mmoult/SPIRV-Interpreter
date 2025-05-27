@@ -1,154 +1,303 @@
 {
-    "rayFlags" : 0, // None
-    "cullMask" : 255, // 0xFF
-    "offsetSBT" : 0,
-    "strideSBT" : 0,
-    "missIndex" : 0,
-    "rayOrigin" : [ 0.0, 0.0, 23.6 ],
-    "rayTMin" : 0.0,
-    "rayDirection" : [ 0.03, 0.07, -1.3 ],
-    "rayTMax" : 20.0,
+	"out_buf" : {
+		"hitT" : "NaN",
+		"ids" : [ 0, 0 ],
+		"hitKind" : 0
+	},
+	"ray" : {
+		"flags" : 0, // None
+		"cullMask" : 255, // 0xFF
+		"origin" : [ 3.8, 0.2, 0.1 ],
+		"direction" : [ -1, 0.2, -0.45 ],
+		"tMin" : 0.0,
+		"tMax" : 10.0
+	},
 
-    "accelStruct" : {
-        "tlas" : [ 0, 0 ],
-        "box_nodes" : [
-            { // tlas
-                "min_bounds" : [ -4.0, -4.0, -7.0 ],
-                "max_bounds" : [ 2.0, 6.0, 6.0 ],
-                "child_nodes" : [ [ 0, 1 ], [ 0, 2 ] ]
-            },
-            {
-                "min_bounds" : [ -4.0, -4.0, -7.0 ],
-                "max_bounds" : [ 2.0, 6.0, -1.0 ],
-                "child_nodes" : [ [ 1, 0 ], [ 1, 1 ] ]
-            },
-            {
-                "min_bounds" : [ -4.0, -4.0, 1.0 ],
-                "max_bounds" : [ 2.0, 6.0, 5.0 ],
-                "child_nodes" : [ [ 1, 2 ], [ 1, 3 ] ]
-            },
-
-            {
-                "min_bounds" : [ -4.0, -2.0, -1.0 ],
-                "max_bounds" : [ 2.0, 2.0, 2.0 ],
-                "child_nodes" : [ [ 0, 4 ], [ 0, 5 ] ]
-            },
-            {
-                "min_bounds" : [ 0.0, -2.0, 0.0 ],
-                "max_bounds" : [ 2.0, 2.0, 2.0 ],
-                "child_nodes" : [ [ 2, 0 ], [ 2, 1 ] ]
-            },
-            {
-                "min_bounds" : [ -4.0, -2.0, -1.0 ],
-                "max_bounds" : [ 0.0, 0.0, 2.0 ],
-                "child_nodes" : [ [ 2, 2 ], [ 3, 0 ] ]
-            },
-            {
-                "min_bounds" : [ 0.0, 0.0, -0.1 ],
-                "max_bounds" : [ 1.0, 1.0, 0.1 ],
-                "child_nodes" : [ [ 2, 4 ], [ 2, 5 ] ]
-            }
-        ],
-        "instance_nodes" : [
-            {
-                "world_to_obj" : [
-                    [ 1.0, 0.0, 0.0 ],
-                    [ 0.0, 1.0, 0.0 ],
-                    [ 0.0, 0.0, 1.0 ],
-                    [ 0.0, -2.8, 5.0 ]
-                ],
-                "child_node" : [ 0, 3 ],
-                "id" : 0,
-                "custom_index" : 0,
-                "mask" : 255,
-                "sbt_record_offset" : 0
-            },
-            {
-                "world_to_obj" : [
-                    [ 1.0, 0.0, 0.0 ],
-                    [ 0.0, 1.0, 0.0 ],
-                    [ 0.0, 0.0, 1.0 ],
-                    [ -0.5, -1.74, 1.36 ]
-                ],
-                "child_node" : [ 2, 3 ],
-                "id" : 1,
-                "custom_index" : 1,
-                "mask" : 1,
-                "sbt_record_offset" : 0
-            },
-            {
-                "world_to_obj" : [
-                    [ 0.3536, 0.0, 0.3536 ],
-                    [ 0.0, 0.5, 0.0 ],
-                    [ -0.3536, 0.0, 0.3536 ],
-                    [ 2.0860, 1.02, -0.1718 ]
-                ],
-                "child_node" : [ 0, 6 ],
-                "id" : 2,
-                "custom_index" : 2,
-                "mask" : 255,
-                "sbt_record_offset" : 0
-            },
-            {
-                "world_to_obj" : [
-                    [ 1.0, 0.0, 0.0 ],
-                    [ 0.0, 1.0, 0.0 ],
-                    [ 0.0, 0.0, 1.0 ],
-                    [ 0.5, 1.74, -1.36 ]
-                ],
-                "child_node" : [ 2, 3 ],
-                "id" : 3,
-                "custom_index" : 3,
-                "mask" : 1,
-                "sbt_record_offset" : 0
-            }
-        ],
-        "triangle_nodes" : [
-            {
-                "geometry_index" : 0,
-                "primitive_index" : 0,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, 2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ 2.0, 0.0, 0.0 ] ]
-            },
-            {
-                "geometry_index" : 0,
-                "primitive_index" : 1,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 2.0, 0.0, 0.0 ], [ 0.0, 0.0, 0.0 ] ]
-            },
-            {
-                "geometry_index" : 0,
-                "primitive_index" : 2,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, -2.0, 2.0 ], [ 0.0, 0.0, 0.0 ], [ -2.0, 0.0, 0.0 ] ]
-            },
-            {
-                "geometry_index" : 0,
-                "primitive_index" : 0,
-                "opaque" : false,
-                "vertices" : [ [ 0.0, 1.5, 0.0 ], [ -1.25, -1.25, 0.0 ], [ 1.5, 0.0, 0.0 ] ]
-            },
-            {
-                "geometry_index" : 0,
-                "primitive_index" : 0,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 1.0, 1.0, 0.0 ], [ 1.0, 0.0, 0.0 ] ]
-            },
-            {
-                "geometry_index" : 0,
-                "primitive_index" : 1,
-                "opaque" : true,
-                "vertices" : [ [ 0.0, 0.0, 0.0 ], [ 0.0, 1.0, 0.0 ], [ 1.0, 1.0, 0.0 ] ]
-            }
-        ],
-        "procedural_nodes" : [
-            {
-                "min_bounds" : [ -3.5, -1.0, -1.0 ],
-                "max_bounds" : [ -2.5, 0.0, 0.0 ],
-                "opaque" : true,
-                "geometry_index" : 1,
-                "primitive_index" : 0
-            }
-        ]
-    }
+	"as" : {
+		"tlas" : [ 0, 0 ],
+		"box_nodes" : [
+			{
+				"min_bounds" : [ -6.2, -6.2, -5 ],
+				"max_bounds" : [ 5.499295106126734, 5, 4.755766938222354 ],
+				"child_nodes" : [
+					[ 1, 0 ],
+					[ 1, 1 ],
+					[ 1, 2 ],
+					[ 1, 3 ],
+					[ 1, 4 ],
+					[ 1, 5 ],
+					[ 1, 6 ],
+					[ 1, 7 ],
+					[ 1, 8 ],
+					[ 1, 9 ],
+					[ 1, 10 ]
+				]
+			},
+			{
+				"min_bounds" : [ 0, 0, -0.5 ],
+				"max_bounds" : [ 3.0, 4, 1 ],
+				"child_nodes" : [
+					[ 2, 0 ],
+					[ 2, 1 ],
+					[ 2, 2 ]
+				]
+			},
+			{
+				"min_bounds" : [ -2, -0.5, -2 ],
+				"max_bounds" : [ 2, 0.5, 2 ],
+				"child_nodes" : [
+					[ 2, 4 ],
+					[ 2, 5 ],
+					[ 2, 6 ],
+					[ 2, 7 ]
+				]
+			}
+		],
+		"instance_nodes" : [
+			{
+				"world_to_obj" : [
+					[ 0.7071067811865476, 0, 0.7071067811865475 ],
+					[ 0.0, 1, 0 ],
+					[ -0.7071067811865475, 0, 0.7071067811865476 ],
+					[ 1.5556349186104041, -0.2, -2.6870057685088806 ]
+				],
+				"child_node" : [ 0, 1 ],
+				"id" : 0,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ -0.08715574274765824, 0, 0.9961946980917455 ],
+					[ -0.34071865342161006, 0.9396926207859084, -0.02980901962620918 ],
+					[ -0.9361168066628592, -0.3420201433256687, -0.08189960831908939 ],
+					[ -0.31297024213466734, 0.09396926207859085, 3.184842131930965 ]
+				],
+				"child_node" : [ 0, 1 ],
+				"id" : 1,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 0.4714045207910317, 0.4714045207910316, 0 ],
+					[ -0.5050762722761053, 0.5050762722761054, 0 ],
+					[ 0, 0, 0.625 ],
+					[ -1.0438242960372843, 1.9866333376193477, 2.5 ]
+				],
+				"child_node" : [ 3, 0 ],
+				"id" : 2,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 0.8333333333333334, 0, 0 ],
+					[ 0, 0.8333333333333334, 0 ],
+					[ 0.0, 0, 1 ],
+					[ -0, -2.5, 1 ]
+				],
+				"child_node" : [ 2, 3 ],
+				"id" : 3,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 1.0, 0, 0 ],
+					[ 0.0, 1, 0 ],
+					[ 0.0, 0, 1 ],
+					[ -0, 3, -2 ]
+				],
+				"child_node" : [ 0, 2 ],
+				"id" : 4,
+				"custom_index" : 0,
+				"mask" : 1,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 0.25881904510252074, 0.9659258262890683, 0 ],
+					[ -0.9659258262890683, 0.25881904510252074, 0 ],
+					[ 0.0, 0, 1 ],
+					[ 1.7594715935566274, 0.7708824238931009, 1 ]
+				],
+				"child_node" : [ 2, 3 ],
+				"id" : 5,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ -0.29619813272602397, -0.8137976813493737, -0.49999999999999994 ],
+					[ -0.1606969024216349, 0.5584888892202555, -0.8137976813493737 ],
+					[ 0.9415111107797444, -0.1606969024216349, -0.29619813272602397 ],
+					[ -1.034630979174354, 3.201825070050405, 2.4016358919972527 ]
+				],
+				"child_node" : [ 0, 2 ],
+				"id" : 6,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 2.0, 0, 0 ],
+					[ 0, 3.3333333333333335, 0 ],
+					[ 0.0, 0, 2 ],
+					[ -2, -3.3333333333333335, -0 ]
+				],
+				"child_node" : [ 2, 8 ],
+				"id" : 7,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 0.3420201433256688, 0.9396926207859083, 0 ],
+					[ -0.9396926207859083, 0.3420201433256688, 0 ],
+					[ 0.0, 0, 1 ],
+					[ 5.126851056446308, 2.390689909840958, 2 ]
+				],
+				"child_node" : [ 2, 3 ],
+				"id" : 8,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 0.0, 0, -1.25 ],
+					[ 0, 1.25, 0 ],
+					[ 1.25, 0, 0.0 ],
+					[ 5.25, 3.75, 3.75 ]
+				],
+				"child_node" : [ 2, 8 ],
+				"id" : 9,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			},
+			{
+				"world_to_obj" : [
+					[ 0.0, 0, 1.25 ],
+					[ 0, 1.6666666666666667, 0 ],
+					[ -1.25, 0, 0.0 ],
+					[ -2.5, 5, 1.5 ]
+				],
+				"child_node" : [ 2, 8 ],
+				"id" : 10,
+				"custom_index" : 0,
+				"mask" : 255,
+				"sbt_record_offset" : 0
+			}
+		],
+		"triangle_nodes" : [
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 0,
+				"opaque" : true,
+				"vertices" : [
+					[ 0.0, 0, 0 ],
+					[ 2.0, 0, -0.5 ],
+					[ 2.0, 4, 0 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 1,
+				"opaque" : true,
+				"vertices" : [
+					[ 2.0, 0, -0.5 ],
+					[ 3.0, 2, 0 ],
+					[ 2.0, 4, 0 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 2,
+				"opaque" : true,
+				"vertices" : [
+					[ 0.0, 4, 1 ],
+					[ 1.0, 2, 0 ],
+					[ 2.0, 4, 0 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 3,
+				"opaque" : false,
+				"vertices" : [
+					[ 0.0, 0, 0 ],
+					[ 2.0, 0, 0 ],
+					[ 1.0, 0, 1.5 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 4,
+				"opaque" : true,
+				"vertices" : [
+					[ -1, 0.25, 1 ],
+					[ 1, -0.25, -1 ],
+					[ 1, 0.5, 2 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 5,
+				"opaque" : true,
+				"vertices" : [
+					[ 1, 0.25, 1 ],
+					[ 1, -0.25, -1 ],
+					[ 2, -0.25, -1 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 6,
+				"opaque" : true,
+				"vertices" : [
+					[ -1, 0.25, 1 ],
+					[ -1, -0.5, -2 ],
+					[ 1, -0.25, -1 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 7,
+				"opaque" : true,
+				"vertices" : [
+					[ -1, -0.25, -1 ],
+					[ -1, 0.25, 1 ],
+					[ -2, 0.25, 1 ]
+				]
+			},
+			{
+				"geometry_index" : 0,
+				"primitive_index" : 8,
+				"opaque" : true,
+				"vertices" : [
+					[ 0.0, 5, 0 ],
+					[ 0.0, 0, -1 ],
+					[ 0.0, -4, 3 ]
+				]
+			}
+		],
+		"procedural_nodes" : [
+			{
+				"min_bounds" : [ 0.0, 0, 0 ],
+				"max_bounds" : [ 3.0, 2, 1 ],
+				"opaque" : false,
+				"geometry_index" : 0,
+				"primitive_index" : 6
+			}
+		]
+	}
 }

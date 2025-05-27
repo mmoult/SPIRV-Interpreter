@@ -22,7 +22,7 @@ export module util.intersection;
 /// @param ray_t_max ray maximum distance to intersection.
 /// @param min_bounds AABB minimum bounds as a 3-D point.
 /// @param max_bounds AABB maximum bounds as a 3-D point.
-/// @return whether the ray intersected an AABB or is inside of it.
+/// @return whether any part of the ray is within the AABB
 export bool ray_AABB_intersect(
     const glm::vec3& ray_origin,
     const glm::vec3& ray_direction,

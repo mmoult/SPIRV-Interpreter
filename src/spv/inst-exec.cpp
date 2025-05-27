@@ -391,6 +391,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             // Return whether at least one intersection was made
             Ternary status = as.traceRay(frame.getRtTrigger() != RtStageKind::NONE);
             if (status == Ternary::MAYBE) {
+                assert(use_sbt);
                 // We need to launch a substage here
                 // Type must be triangle or intersection
                 invoke_substage_shader(
@@ -432,36 +433,80 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
 
             // If the expected shader was missing from the SBT or if we shouldn't use the SBT, fill in default
             if (!used_sbt) {
-                bool intersect_once = status == Ternary::YES;
                 std::stack<Value*> frontier;
                 frontier.push(payload);
+
+                unsigned dummy_idx = -1;
+                Intersection sect(nullptr);
+                if (status == Ternary::YES)
+                    sect = trace.getCommitted();
 
                 while (!frontier.empty()) {
                     Value* curr = frontier.top();
                     frontier.pop();
 
-                    switch (curr->getType().getBase()) {
-                    default: {
+                    auto base = curr->getType().getBase();
+                    if (base == DataType::ARRAY || base == DataType::STRUCT) {
+                        auto& agg = static_cast<Aggregate&>(*curr);
+                        // Must push elements in reverse order to get read out forwards from stack
+                        for (unsigned i = agg.getSize(); i-- > 0;)
+                            frontier.push(agg[i]);
+                        continue;
+                    } else if (!Primitive::isPrimitive(base)) {
                         std::stringstream err;
                         err << "Cannot fill data of unsupported payload type: " << curr->getType().getBase();
                         throw std::runtime_error(err.str());
                     }
-                    case DataType::FLOAT:
-                    case DataType::UINT:
-                    case DataType::INT: {
-                        Primitive& val = static_cast<Primitive&>(*curr);
-                        val.copyFrom(Primitive(intersect_once ? 1u : 0u));
+
+                    // Dummy payload holds these fields in this order (how many included dependent on payload size):
+                    // - hitT float (uint: reinterpreted hitT, bool: isHit)
+                    // - geom_index uint (bool: is non zero)
+                    // - prim_index uint (bool: is non zero)
+                    // - hit_kind uint (bool: is front)
+                    Primitive& val = static_cast<Primitive&>(*curr);
+                    ++dummy_idx;
+
+                    switch (dummy_idx) {
+                    case 0: {
+                        if (base == DataType::FLOAT) {
+                            Primitive pfloat(sect.hitT);
+                            val.copyFrom(pfloat);
+                        } else if (base == DataType::BOOL) {
+                            Primitive pbool(sect.isValidHit());
+                            val.copyFrom(pbool);
+                        } else {
+                            Primitive pfloat(sect.hitT);
+                            val.copyReinterp(pfloat);
+                        }
                         break;
                     }
-                    case DataType::BOOL: {
-                        Primitive& val = static_cast<Primitive&>(*curr);
-                        val.copyFrom(Primitive(intersect_once));
+                    case 1: {
+                        Primitive puint(sect.geometryIndex);
+                        val.copyFrom(puint);
                         break;
                     }
-                    case DataType::ARRAY:
-                    case DataType::STRUCT: {
-                        for (auto it : static_cast<const Aggregate&>(*curr))
-                            frontier.push(it);
+                    case 2: {
+                        Primitive puint(sect.primitiveIndex);
+                        val.copyFrom(puint);
+                        break;
+                    }
+                    case 3: {
+                        if (base == DataType::BOOL) {
+                            Primitive pbool(sect.hitKind == HitKind::FRONT_FACING_TRIANGLE);
+                            val.copyFrom(pbool);
+                        } else {
+                            Primitive puint(sect.hitKind);
+                            val.copyFrom(puint);
+                        }
+                        break;
+                    }
+                    default: {
+                        Primitive zero(0u);
+                        Primitive pfalse(false);
+                        if (base == DataType::BOOL)
+                            val.copyFrom(pfalse);
+                        else
+                            val.copyFrom(zero);
                         break;
                     }
                     }
@@ -607,7 +652,7 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
                 AccelStruct& as = *launch_frame->getAccelStruct();
                 const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
                 Intersection& candidate = as.getCandidate();
-                candidate.hitKind = hit_kind;
+                candidate.hitKind = HitKind(hit_kind);
                 candidate.hitT = t_hit;
             }
 
