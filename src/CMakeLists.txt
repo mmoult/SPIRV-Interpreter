@@ -28,7 +28,7 @@ target_sources(spv-interp
       util/array-math.cxx
       util/compare.cxx
       util/fpconvert.cxx
-      util/intersection.cxx
+      util/geom-math.cxx
       util/string.cxx
       util/ternary.cxx
       values/aggregate.cxx

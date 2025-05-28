@@ -13,7 +13,7 @@
 #include "../value.hpp"
 #include "trace.hpp"
 import util.arrayMath;
-import util.intersection;
+import util.geomMath;
 import util.ternary;
 import value.aggregate;
 import value.primitive;
@@ -37,7 +37,8 @@ Ternary BoxNode::step(Trace* trace_p) const {
     auto ray_dir = candidate.getRayDir(trace_p);
 
     // If the ray intersects the bounding box, then add its children to be evaluated.
-    if (ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, minBounds, maxBounds)) {
+    float low_t = GeomMath::ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, minBounds, maxBounds);
+    if (!std::isinf(low_t)) {
         for (const auto& child_ref : children) {
             // Most of the fields are the same (such as origin and direction), so copy from parent
             Intersection& cand = trace.candidates.emplace_back(candidate);
@@ -192,7 +193,7 @@ Ternary TriangleNode::step(Trace* trace_p) const {
     // u: Barycentric coordinate u
     // v: Barycentric coordinate v
     // entered_front: whether an intersection came from the front face
-    auto [found, t, u, v, entered_front] = ray_triangle_intersect(
+    auto [found, t, u, v, entered_front] = GeomMath::ray_triangle_intersect(
         ray_pos,
         ray_dir,
         trace.rayTMin,
@@ -286,17 +287,24 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
     auto ray_pos = candidate.getRayPos(trace_p);
     auto ray_dir = candidate.getRayDir(trace_p);
 
-    bool found = ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, this->minBounds, this->maxBounds);
-
-    if (!found)
+    float min_t = GeomMath::ray_AABB_intersect(ray_pos, ray_dir, trace.rayTMin, trace.rayTMax, minBounds, maxBounds);
+    if (std::isinf(min_t))
         return Ternary::NO;
 
-    // Assume that the intersection is successful, we can backpeddle if it turns out not to be true.
+    // Fill in candidate information in case we need it if this is a true intersection.
+    candidate.hitKind = HitKind::PENDING;
     candidate.isOpaque = this->opaque;
     candidate.geometryIndex = this->geomIndex;
     candidate.primitiveIndex = this->primIndex;
     candidate.type = Intersection::Type::AABB;
-    return trace.useSBT ? Ternary::MAYBE : Ternary::YES;
+
+    // If we have an SBT, launch the requisite intersection shader
+    if (trace.useSBT)
+        return Ternary::MAYBE;
+
+    // If not, assume there was an intersection and return appropriately
+    candidate.hitT = min_t;
+    return Ternary::YES;
 }
 
 [[nodiscard]] ProceduralNode* ProceduralNode::fromVal(const Value* val) {

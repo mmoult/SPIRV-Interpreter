@@ -11,7 +11,7 @@ Test  Result  (Ray Flags)                   Description
  8    HIT     (skip closest hit shader)     hit
  9    HIT     (cull back facing triangles)  hit front, passing through back
 10    HIT     (cull front facing triangles) hit back, passing through front
-11    HIT     (cull opaque)                 hit only opaque, passing through non-opaque
-12    HIT     (cull no opaque)              hit only non-opaque, passing through opaque
+11    HIT     (cull opaque)                 hit only non-opaque, passing through opaque
+12    HIT     (cull no opaque)              hit only opaque, passing through non-opaque
 13    HIT     (skip triangles)              ray goes through triangle to procedural
 14    HIT     (skip AABBs)                  ray goes through procedural to triangle

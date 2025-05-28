@@ -15,9 +15,10 @@ import spv.rayFlags;
 
 struct Trace;
 
-// This is an unfortunate Vulkan/SPIR-V dependency since the exact values are declared
-enum HitKind: unsigned {
+// This is an unfortunate Vulkan/SPIR-V dependency since the exact values are declared for front and back hits
+enum HitKind : unsigned {
     UNHIT = 0x00,
+    PENDING = 0x01,  // procedural pending intersection shader
     FRONT_FACING_TRIANGLE = 0xFE,
     BACK_FACING_TRIANGLE = 0xFF,
 };

@@ -11,19 +11,19 @@ module;
 
 #include "glm/ext.hpp"
 
-export module util.intersection;
+export module util.geomMath;
 
-/// @brief Adapted algorithm from "An Efficient and Robust Ray–Box Intersection Algorithm" by Amy Williams et al.,
-/// 2004. Check if a ray intersects an axis-aligned bounding box (AABB). If the ray is inside the box, it will be
-/// considered an intersection.
+export namespace GeomMath {
+
+/// @brief Check if a ray intersects or is within an axis-aligned bounding box (AABB)
 /// @param ray_origin ray origin.
 /// @param ray_direction ray direction.
 /// @param ray_t_min ray minimum distance to intersection.
 /// @param ray_t_max ray maximum distance to intersection.
 /// @param min_bounds AABB minimum bounds as a 3-D point.
 /// @param max_bounds AABB maximum bounds as a 3-D point.
-/// @return whether any part of the ray is within the AABB
-export bool ray_AABB_intersect(
+/// @return the minimum intersection time if any part of the ray is within the AABB. Infinity otherwise.
+float ray_AABB_intersect(
     const glm::vec3& ray_origin,
     const glm::vec3& ray_direction,
     const float ray_t_min,
@@ -31,70 +31,28 @@ export bool ray_AABB_intersect(
     const glm::vec3& min_bounds,
     const glm::vec3& max_bounds
 ) {
-    // Check if the ray if inside of the AABB; it is considered inside if right at the surface.
-    bool inside_aabb = ray_origin.x >= min_bounds.x && ray_origin.y >= min_bounds.y && ray_origin.z >= min_bounds.z &&
-                       ray_origin.x <= max_bounds.x && ray_origin.y <= max_bounds.y && ray_origin.z <= max_bounds.z;
-    if (inside_aabb)
-        return true;
+    constexpr float inf = std::numeric_limits<float>::infinity();
+    assert(ray_t_min <= ray_t_max);
 
-    // Otherwise, check if the ray intersects the surface of the AABB from the outside.
-    // Get the distances to the yz-plane intersections.
-    float t_min, t_max;
-    const float x_dir_reciprocal = 1.0f / ray_direction.x;
-    if (ray_direction.x >= 0) {
-        t_min = (min_bounds.x - ray_origin.x) * x_dir_reciprocal;
-        t_max = (max_bounds.x - ray_origin.x) * x_dir_reciprocal;
-    } else {
-        t_min = (max_bounds.x - ray_origin.x) * x_dir_reciprocal;
-        t_max = (min_bounds.x - ray_origin.x) * x_dir_reciprocal;
+    float t_min = ray_t_min;
+    float t_max = ray_t_max;
+    // Generate values of t for which the ray is within each axis of the box
+    for (unsigned i = 0; i < 3; ++i) {
+        // If this component is 0, the reciprocal will be infinite
+        float dir_recip = 1.0 / ray_direction[i];
+
+        float lo_plane_t = (min_bounds[i] - ray_origin[i]) * dir_recip;
+        float hi_plane_t = (max_bounds[i] - ray_origin[i]) * dir_recip;
+
+        bool pos_dir = ray_direction[i] >= 0.0;
+        t_min = std::max(t_min, pos_dir ? lo_plane_t : hi_plane_t);
+        t_max = std::min(t_max, pos_dir ? hi_plane_t : lo_plane_t);
+
+        if (t_min > t_max)
+            return inf;
     }
 
-    // Get the distances to the xz-plane intersections.
-    float ty_min, ty_max;
-    const float y_dir_reciprocal = 1.0f / ray_direction.y;
-    if (ray_direction.y >= 0) {
-        ty_min = (min_bounds.y - ray_origin.y) * y_dir_reciprocal;
-        ty_max = (max_bounds.y - ray_origin.y) * y_dir_reciprocal;
-    } else {
-        ty_min = (max_bounds.y - ray_origin.y) * y_dir_reciprocal;
-        ty_max = (min_bounds.y - ray_origin.y) * y_dir_reciprocal;
-    }
-
-    // Check if the ray missed the box.
-    // If the closest plane intersection is farther than the farthest xz-plane intersection, then the ray missed.
-    // If the closest xz-plane intersection is farther than the farthest plane intersection, then the ray missed.
-    if ((t_min > ty_max) || (ty_min > t_max))
-        return false;
-
-    // Get the larger of the minimums; the larger minimum is closer to the box.
-    // Get the smaller of the maximums; the smaller maximum is closer to the box.
-    t_min = std::max(t_min, ty_min);
-    t_max = std::min(t_max, ty_max);
-
-    // Get the distances to the xy-plane intersections.
-    float tz_min, tz_max;
-    const float z_dir_reciprocal = 1.0f / ray_direction.z;
-    if (ray_direction.z >= 0) {
-        tz_min = (min_bounds.z - ray_origin.z) * z_dir_reciprocal;
-        tz_max = (max_bounds.z - ray_origin.z) * z_dir_reciprocal;
-    } else {
-        tz_min = (max_bounds.z - ray_origin.z) * z_dir_reciprocal;
-        tz_max = (min_bounds.z - ray_origin.z) * z_dir_reciprocal;
-    }
-
-    // Check if the ray missed the box.
-    // If the closest plane intersection is farther than the farthest xy-plane intersection, then the ray missed.
-    // If the closest xy-plane intersection is farther than the farthest plane intersection, then the ray missed.
-    if ((t_min > tz_max) || (tz_min > t_max))
-        return false;
-
-    // Get the larger of the minimums; the larger minimum is closer to the box.
-    // Get the smaller of the maximums; the smaller maximum is closer to the box.
-    t_min = std::max(t_min, tz_min);
-    t_max = std::min(t_max, tz_max);
-
-    // Check if the intersection is within the ray's interval.
-    return ((t_min < ray_t_max) && (t_max > ray_t_min));
+    return t_min;
 }
 
 /// @brief Moller-Trumbore ray/triangle intersection algorithm. Check if a ray intersects a triangle.
@@ -107,7 +65,7 @@ export bool ray_AABB_intersect(
 /// @param cull_front_face whether to cull the front face of the triangle.
 /// @return tuple containing: (1) whether the triangle was intersected, (2) distance to intersection, (3)
 /// barycentric u, (4) barycentric v, and (5) whether the ray entered the through the triangle's front face.
-export std::tuple<bool, float, float, float, bool> ray_triangle_intersect(
+std::tuple<bool, float, float, float, bool> ray_triangle_intersect(
     const glm::vec3& ray_origin,
     const glm::vec3& ray_direction,
     const float ray_t_min,
@@ -159,3 +117,5 @@ export std::tuple<bool, float, float, float, bool> ray_triangle_intersect(
 
     return {true, t, u, v, intersect_front};
 }
+
+};  // namespace GeomMath

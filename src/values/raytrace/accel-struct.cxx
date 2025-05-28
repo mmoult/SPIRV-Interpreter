@@ -17,7 +17,7 @@ module;
 #include "trace.hpp"
 export module value.raytrace.accelStruct;
 import spv.rayFlags;
-import util.intersection;
+import util.geomMath;
 import util.string;
 import util.ternary;
 import value.aggregate;
