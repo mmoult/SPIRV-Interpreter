@@ -5,9 +5,9 @@ Test  Result  (Ray Flags)                   Description
  2    MISS    (none)                        reduced ray distance
  3    HIT     (none)                        increased ray distance
  4    MISS    (none)                        cull mask; invisible instance
- 5    HIT     (opaque)                      hit only non-opaque geometry
- 6    HIT     (no opaque)                   hit only opaque geometry
- 7    HIT     (terminate on first hit)      hit non-opaque in front of opaque
+ 5    HIT     (opaque)                      non-opaque geometry treated as opaque
+ 6    HIT     (no opaque)                   opaque geometry treated as non-opaque
+ 7    HIT     (terminate on first hit)      hit
  8    HIT     (skip closest hit shader)     hit
  9    HIT     (cull back facing triangles)  hit front, passing through back
 10    HIT     (cull front facing triangles) hit back, passing through front

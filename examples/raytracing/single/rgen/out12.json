@@ -1,8 +1,8 @@
 {
 	"out_buf" : {
-		"hitT" : "Infinity",
+		"hitT" : 3.31869,
 		"ids" : [ 0, 0 ],
-		"hitKind" : 0
+		"hitKind" : 254
 	},
-	"payload" : [ 2139095040, 0, 0, 0 ]
+	"payload" : [ 1079272823, 0, 0, 254 ]
 }
