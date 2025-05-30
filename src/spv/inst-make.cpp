@@ -2339,7 +2339,46 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             return fract;
         };
 
-        element_unary_op(DataType::FLOAT, checkRef(4, data_len), dst, data, op);
+        element_unary_op(DataType::FLOAT, checkRef(src_at, data_len), dst, data, op);
+        break;
+    }
+    case GLSLstd450ModfStruct: { // 36
+        const Value* src1 = data[checkRef(src_at, data_len)].getValue();
+
+        // Operate on a single primitive scalar or array of primitives
+        // Note, the logic of this case is very similar to element_unary_op, but it necessarily differs in the output
+        // construction, and thus, must be independent.
+        const Type& type = src1->getType();
+        std::vector<Primitive> prims;
+        assert(element_base(*src1) == DataType::FLOAT && "Cannot do ModfStruct operation on non-float input!");
+
+        Value* res = data[checkRef(dst_type_at, data_len)].getType()->construct();
+        // According to the spec, res must be an aggregate of fractions and wholes (in that order)
+        auto& agg = static_cast<Aggregate&>(*res);
+
+        auto op = [](const Value* input, Value* fract, Value* whole) {
+            Primitive f(0.0f);
+            Primitive w(0.0f);
+            f.data.fp32 = std::modf(static_cast<const Primitive*>(input)->data.fp32, &w.data.fp32);
+
+            fract->copyFrom(f);
+            whole->copyFrom(w);
+        };
+
+        if (type.getBase() == DataType::ARRAY) {
+            const Array& operand = *static_cast<const Array*>(src1);
+            unsigned asize = operand.getSize();
+            prims.reserve(asize * 2);
+
+            auto& fracts = static_cast<Aggregate&>(*agg[0]);
+            auto& wholes = static_cast<Aggregate&>(*agg[1]);
+
+            for (unsigned i = 0; i < asize; ++i)
+                op(operand[i], fracts[i], wholes[i]);
+        } else
+            op(src1, agg[0], agg[1]);
+
+        data[result_at].redefine(res);
         break;
     }
     case GLSLstd450FMin:  // 37
