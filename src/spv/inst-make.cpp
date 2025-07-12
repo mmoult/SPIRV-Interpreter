@@ -1954,6 +1954,31 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         //  data[result_at].redefine(res_type->construct(values));
         break;
     }
+    case spv::OpSDot: {  // 4450
+        const auto& op0 = static_cast<const Array&>(*getValue(src_at, data));
+        const auto& op1 = static_cast<const Array&>(*getValue(src_at + 1, data));
+        assert(op0.getType().getBase() == DataType::ARRAY && "The first operand to OpSDot must be an array!");
+        assert(op1.getType().getBase() == DataType::ARRAY && "The second operand to OpSDot must be an array!");
+        assert(
+            op0.getType().getElement().getBase() == DataType::INT && "The first operand to OpSDot must be a int array!"
+        );
+        assert(
+            op1.getType().getElement().getBase() == DataType::INT && "The second operand to OpSDot must be a int array!"
+        );
+        assert(op0.getSize() == op1.getSize() && "The operands to OpSDot must have matching sizes!");
+
+        int32_t dot_product = 0;
+        for (unsigned i = 0; i < op0.getSize(); ++i) {
+            const int32_t second_elem = static_cast<const Primitive*>(op1[i])->data.i32;
+            const int32_t this_elem = static_cast<const Primitive*>(op0[i])->data.i32;
+            dot_product += second_elem * this_elem;
+        }
+        Primitive tot_prim(dot_product);
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
+        break;
+    }
     case spv::OpTypeRayQueryKHR: {  // 4472
         data[result_at].redefine(new Type(Type::rayQuery()));
         break;

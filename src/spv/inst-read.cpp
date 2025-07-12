@@ -282,6 +282,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpPtrEqual:  // 401
     case spv::OpPtrNotEqual:  // 402
     case spv::OpExecuteCallableKHR:  // 4446
+    case spv::OpSDot:  // 4450
     case spv::OpRayQueryGenerateIntersectionKHR:  // 4475
     case spv::OpRayQueryGetIntersectionTypeKHR:  // 4479
     case spv::OpReportIntersectionKHR:  // 5334
