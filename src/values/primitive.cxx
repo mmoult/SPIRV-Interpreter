@@ -8,11 +8,13 @@ module;
 #include <cassert>
 #include <cmath>
 #include <cstdint>  // for uint32_t and int32_t
+#include <limits>
 #include <stdexcept>
 
 #include "type.hpp"
 #include "value.hpp"
 export module value.primitive;
+import front.console;
 import util.compare;
 
 export struct Primitive final : public Value {
@@ -92,6 +94,122 @@ public:
             default:
                 throw std::runtime_error("Cannot convert to float!");
             }
+
+            // modify the current value to match the allowed precision
+            if (uint32_t prec = type.getPrecision(); prec != 32) {
+                // TODO support lower precision other than FP16
+                if (prec <= 16) {
+                    // TODO: be mindful of rounding mode!
+                    auto trunc_mantissa = [&](uint32_t bits) {
+                        uint32_t mask = (0b1'11111111'11111111111111111111111 >> bits) << bits;
+                        uint32_t round_up = 0;
+                        if (bits < 23)  // cannot round up beyond mantissa
+                            round_up = ((1 << (bits - 1)) & data.u32) << 1;
+                        data.u32 = (data.u32 & mask) | round_up;
+                    };
+
+                    // Recall that our FP32 input has 1 sign bit, 8 exponent bits, and 23 mantissa bits:
+                    //   S EEEEEEEE MMMMMMMMMMMMMMMMMMMMMMM
+                    // We try to convert that to FP16, which has 1 sign bit, 5 exponent bits, and 10 mantissa bits:
+                    //   S EEEEE MMMMMMMMMM
+                    // Do the conversion in-place, since we emulate the FP16 value with FP32, but we want the FP32's
+                    // value to always match what the FP16 would hold.
+
+                    uint32_t exponent = (data.all >> 23) & 0xFF;
+                    if ((exponent & 0b10000000) > 0) {
+                        // First exponent bit is 1: |Input| >= 2.0 OR nan OR inf
+
+                        // Note, this is a little over 65504. TODO: work on rounding for the edge values
+                        if (exponent >= 0b10001111) {
+                            // |Input| > FP16_MAX{65504} OR nan OR inf
+                            // A nan input should produce a nan output
+                            // All other inputs should yield either inf or max, depending on rounding mode.
+
+                            // Check if all exponent bits are set:
+                            // 0b0'11111111'00000000000000000000000
+                            if (exponent == 0xFF) {
+                                // |Input| is nan OR inf
+                                // Check if any of mantissa bits are set, which indicates nan
+                                if ((data.all & 0x7FFFFF) > 0) {
+                                    // Force set a bit within the top 10 bits for obvious nan results
+                                    data.all |= 0x400000;
+                                }
+                                // else: inf in = inf out. we are done
+                            } else {
+                                // |Input| > FP16_MAX{65504}
+                                // TODO: rounding mode may make this max or inf
+                                data.fp32 = std::copysign(std::numeric_limits<float>::infinity(), data.fp32);
+                            }
+                        } else {
+                            // 2 <= |Input| <= FP16_MAX{65504}
+
+                            // We have a clever conversion trick- we can chop out the three highest exponent bits (not
+                            // including the leading bit) and correct the mantissa to produce an FP16 value.
+
+                            // The exponent bits are ok, now truncate the mantissa
+                            trunc_mantissa(13);
+                        }
+                    } else {
+                        // First exponent bit is 0: |Input| < 2.0
+
+                        // If the three high exponent bits (excluding leading) are set and at least one other bit, we
+                        // can convert to FP16 by removing them and truncating the mantissa. For example:
+                        //   0 01110101 01000011001000000000000
+                        //   =>
+                        //   0 00101 0100001101
+
+                        if ((exponent & 0b01110000) == 0b01110000 && (exponent & 0b00001111) > 0) {
+                            // 2^-14 <= |Input| < 2.0
+                            // Truncate the lower mantissa bits
+                            trunc_mantissa(13);
+                        } else if (exponent <= 0b01100101) {
+                            // Too small to be represented: 0 <= |Input| < 2^-24{0.000000059604644775390625}
+                            // TODO: rounding mode if not exactly 0
+                            data.all = 0;
+                        } else {
+                            // 0b01100110{102} >= Exponent >= 0b01110000{112}
+                            // 2^-24 <= |Input| < 2^-14{0.00006103515625}. Denormal mode required for FP16
+
+                            // There is an interesting property that we can insert a leading one into the previous
+                            // mantissa, shift it right some number of bits, and truncate to the upper 10, which yields
+                            // the FP16 mantissa we want.
+                            //
+                            // Example 1)
+                            //   0 01110000 01000011101010101000000
+                            // The exponent matches the upper bound. Insert a leading 1 and this is our new mantissa:
+                            //   101000011101010101000000
+                            // In this example, we don't require a shift. Lastly, truncate to the correct size:
+                            //   1010000111
+                            // And that forms our complete FP16 value:
+                            //   0 00000000 1010000111
+                            //
+                            // Example 2)
+                            //   0 01101100 10101010101010101010101
+                            // The exponent is 108, which is 4 away from 112. Thus, we will need to shift four times:
+                            //   0000110101010101010101010101
+                            // And truncate it down to:
+                            //   0 00000000 0000110101
+                            //
+                            // Example 3)
+                            //   0 01100110 11011111111111111111111
+                            // The exponent is 102, which is 10 away from 112. Thus, we need to shift 10 times:
+                            //   0000000000111011111111111111111111
+                            // Truncate down to the upper 10, but may want to round up on the next-most digit
+                            //   0 00000000 0000000001
+
+                            // 23 original mantissa bits converted into 10 FP16 mantissa bits. Recall the insertion of
+                            // the leading bit which knocks off one precision even for the upper bound of 112 exponent.
+                            uint32_t mask_off = std::min(113 - exponent, 10u) + 13;
+                            trunc_mantissa(mask_off);
+                        }
+                    }
+                }
+                if (prec != 16) {
+                    std::stringstream err;
+                    err << "The interpreter does not yet support float precision " << prec << "!";
+                    Console::warn(err.str());
+                }
+            }
             break;
         case UINT:
             switch (from_base) {
@@ -103,6 +221,10 @@ public:
                 // No float -> uint since if it was float, probably had decimal component
                 throw std::runtime_error("Cannot convert to uint!");
             }
+
+            // precision constraints are easy: filter out any disallowed bits
+            if (uint32_t prec = type.getPrecision(); prec < 32)
+                data.all &= (1 << prec) - 1;
             break;
         case INT:
             switch (from_base) {

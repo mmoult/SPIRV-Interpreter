@@ -48,7 +48,7 @@ float ray_AABB_intersect(
         t_min = std::max(t_min, pos_dir ? lo_plane_t : hi_plane_t);
         t_max = std::min(t_max, pos_dir ? hi_plane_t : lo_plane_t);
 
-        if (t_min > t_max)
+        if (t_min > t_max || std::isnan(lo_plane_t) || std::isnan(hi_plane_t))
             return inf;
     }
 
@@ -96,7 +96,8 @@ std::tuple<bool, float, float, float, bool> ray_triangle_intersect(
     const bool cull_back_face_and_entered_back = cull_back_face && determinant <= -epsilon;
     const bool cull_front_face_and_entered_front = cull_front_face && intersect_front;
     const bool ray_parallel_to_triangle = std::fabs(determinant) < epsilon;
-    if (cull_back_face_and_entered_back || cull_front_face_and_entered_front || ray_parallel_to_triangle)
+    if (std::isnan(determinant) || cull_back_face_and_entered_back || cull_front_face_and_entered_front ||
+        ray_parallel_to_triangle)
         return {false, 0.0f, 0.0f, 0.0f, intersect_front};
 
     float inverse_determinant = 1.0f / determinant;

@@ -1,0 +1,11 @@
+full:
+  val:
+  - 1.123456  # exact is 1.12345600128173828125 in FP32
+  - 65503.2   # exact value cannot be represented in FP16 since it is in the int range [1024, 65504]
+  - 1023.5    # value unchanged by FP16 conversion
+  - .NAN      # NaN must be preserved
+
+less:
+  step1: [ 0.0, 0.0, 0.0, 0.0 ]
+  step2: [ 0.0, 0.0 ]
+  step3: 0.0

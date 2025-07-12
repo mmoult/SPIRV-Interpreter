@@ -2342,7 +2342,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         element_unary_op(DataType::FLOAT, checkRef(src_at, data_len), dst, data, op);
         break;
     }
-    case GLSLstd450ModfStruct: { // 36
+    case GLSLstd450ModfStruct: {  // 36
         const Value* src1 = data[checkRef(src_at, data_len)].getValue();
 
         // Operate on a single primitive scalar or array of primitives
