@@ -25,6 +25,7 @@ import spv.frame;
 import spv.token;
 import util.ternary;
 import value.aggregate;
+import value.coopMatrix;
 import value.image;
 import value.primitive;
 import value.raytrace.accelStruct;
@@ -86,7 +87,14 @@ Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expecte
     return nullptr;
 }
 
-bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, bool use_sbt) const {
+bool Instruction::execute(
+    DataView& data,
+    std::vector<Frame*>& frame_stack,
+    unsigned invocation,
+    unsigned num_invocations,
+    bool verbose,
+    bool use_sbt
+) const {
     bool inc_pc = true;
     bool blocked = false;
     Frame& frame = *frame_stack.back();
@@ -566,6 +574,85 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
             to_change.copyFrom(no);
         }
         terminate_invocation();
+        break;
+    }
+    case spv::OpCooperativeMatrixLoadKHR: {  // 4457
+        Type* result_type = getType(0, data);
+        // TODO: the examples I am seeing are using one level lower than I would expect
+        Pointer& pointer = *static_cast<Pointer*>(getValue(2, data));
+        pointer.clipIndex();  // TODO this is very strange and looks incorrect.
+        Value* head = getHeadValue(pointer, data);
+        Value* ptr = pointer.dereference(*head);
+        bool row_major = static_cast<Primitive*>(getValue(3, data))->data.i32 == 0;
+        // TODO: stride doesn't seem to be used since rows and columns are already dictated by the type
+
+        uint32_t total_elements = result_type->getSize();
+        // Split those elements between all in the frame stack
+        uint32_t e_beg = (invocation * total_elements) / num_invocations;
+        uint32_t e_fin = ((invocation + 1) * total_elements) / num_invocations;
+
+        // The extension spec: https://github.khronos.org/SPIRV-Registry/extensions/KHR/SPV_KHR_cooperative_matrix.html
+        uint32_t rows = result_type->getNumRows();
+        uint32_t cols = total_elements / rows;
+
+        CoopMatrix* result = new CoopMatrix(result_type->getElement(), rows, cols);
+
+        std::vector<const Value*> elements;
+        for (uint32_t i = e_beg; i < e_fin; ++i) {
+            // Pointer can be either a scalar or a vector of the desired type
+            const Type& ptr_type = ptr->getType();
+            if (ptr_type.getBase() != DataType::ARRAY)
+                // Copy the scalar as many times as necessary
+                elements.push_back(ptr);
+            else {
+                // If the source and dest are both row-major, the index may be used as-is
+                // Otherwise, we need to get a new index:
+                // - Decompose the row-major index into a row and column position
+                // - Compose the position into a flat column-major index
+                unsigned index = row_major ? i : (((i % cols) * rows) + (i / cols));
+                const auto& arr = static_cast<const Array&>(*ptr);
+                elements.push_back(arr[index]);
+            }
+        }
+        result->addElements(elements);
+        data[result_at].redefine(result);
+        break;
+    }
+    case spv::OpCooperativeMatrixStoreKHR: {  // 4458
+        Pointer& pointer = *static_cast<Pointer*>(getValue(0, data));
+        pointer.clipIndex();  // TODO this is very strange and looks incorrect.
+        Value* head = getHeadValue(pointer, data);
+        Value* ptr = pointer.dereference(*head);  // ptr to store data into
+
+        CoopMatrix& mat = *static_cast<CoopMatrix*>(getValue(1, data));
+        bool row_major = static_cast<Primitive*>(getValue(2, data))->data.i32 == 0;
+        // TODO: stride doesn't seem to be used since rows and columns are already dictated by the type
+
+        const Type& mat_type = mat.getType();
+        uint32_t total_elements = mat_type.getSize();
+        // Split those elements between all in the frame stack
+        uint32_t e_beg = (invocation * total_elements) / num_invocations;
+
+        uint32_t rows = mat_type.getNumRows();
+        uint32_t cols = total_elements / rows;
+
+        // Pointer can be either a scalar or a vector of the desired type
+        const Type& ptr_type = ptr->getType();
+        if (ptr_type.getBase() != DataType::ARRAY)
+            // Copy the scalar value
+            ptr->copyFrom(*mat[mat.getSize() - 1]);
+        else {
+            auto& arr = static_cast<Array&>(*ptr);
+            for (uint32_t j = 0; j < mat.getSize(); ++j) {
+                // If the source and dest are both row-major, the index may be used as-is
+                // Otherwise, we need to get a new index:
+                // - Decompose the row-major index into a row and column position
+                // - Compose the position into a flat column-major index
+                uint32_t i = e_beg + j;
+                unsigned index = row_major ? i : (((i % cols) * rows) + (i / cols));
+                arr[index]->copyFrom(*mat[j]);
+            }
+        }
         break;
     }
     case spv::OpRayQueryInitializeKHR: {  // 4473

@@ -778,7 +778,7 @@ public:
             }
 
             unsigned frame_depth = frame_stack.size();
-            if (insts[i_at].execute(cur_data, frame_stack, verbose, use_sbt))
+            if (insts[i_at].execute(cur_data, frame_stack, next_invoc, live_threads.size(), verbose, use_sbt))
                 active_threads.erase(next_invoc);
 
             // print the result if verbose

@@ -32,6 +32,7 @@ target_sources(spv-interp
       util/string.cxx
       util/ternary.cxx
       values/aggregate.cxx
+      values/coopMatrix.cxx
       values/image.cxx
       values/pointer.cxx
       values/primitive.cxx

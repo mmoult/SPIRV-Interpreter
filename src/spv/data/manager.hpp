@@ -39,7 +39,7 @@ public:
     Data& operator[](unsigned index);
     const Data& operator[](unsigned index) const;
 
-    Data& local(unsigned index) {
+    inline Data& local(unsigned index) {
         return data[index];
     }
 

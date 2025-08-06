@@ -31,6 +31,7 @@ enum class DataType {
     RAY_QUERY,
     IMAGE,
     SAMPLER,  // image sampler, to be specific
+    COOP_MATRIX,
 };
 
 inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
@@ -56,6 +57,7 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
         SWITCH(RAY_QUERY)
         SWITCH(IMAGE)
         SWITCH(SAMPLER)
+        SWITCH(COOP_MATRIX)
     default:
         assert(false);  // unhandled case!
     }
@@ -76,13 +78,16 @@ class Type final : public Valuable {
     std::vector<std::string> nameList;
 
     std::string name;
-    bool bufferBlock = false;
+    union {
+        bool bufferBlock;  // for struct
+        unsigned rows;  // for cooperative matrix
+    };
 
     inline Type(DataType base, unsigned sub_size, const Type* sub_element)
-        : base(base), subSize(sub_size), subElement(sub_element) {}
+        : base(base), subSize(sub_size), subElement(sub_element), rows(0) {}
 
     inline Type(DataType base, const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list)
-        : base(base), subSize(0), subElement(nullptr), subList(sub_list), nameList(name_list) {}
+        : base(base), subSize(0), subElement(nullptr), subList(sub_list), nameList(name_list), rows(0) {}
 
     /// @brief Creates a value corresponding to this type, with optional inputs
     /// @param values an optional vector of values to use
@@ -118,6 +123,18 @@ public:
     ///                some time after the deallocation of this array
     static inline Type array(unsigned array_size, const Type& element) {
         return Type(DataType::ARRAY, array_size, &element);
+    }
+
+    /// @brief Construct a cooperative matrix type TODO
+    /// @param scope the scope that components are spread across. Currently unused
+    /// @param major the number of rows in the matrix
+    /// @param minor the number of columns in the matrix
+    /// @param element the type of each matrix element
+    static inline Type coopMatrix(unsigned scope, unsigned rows, unsigned cols, const Type& element) {
+        // The scope is a useful hint for compilation by indicating where the data should be stored. Not needed here.
+        Type ret(DataType::COOP_MATRIX, rows * cols, &element);
+        ret.rows = rows;
+        return ret;
     }
 
     /// @brief Construct a structure type
@@ -200,11 +217,14 @@ public:
     }
 
     inline const Type& getElement() const {
-        assert(base == DataType::ARRAY || base == DataType::IMAGE || base == DataType::SAMPLER);
+        assert(
+            base == DataType::ARRAY || base == DataType::IMAGE || base == DataType::SAMPLER ||
+            base == DataType::COOP_MATRIX
+        );
         return *subElement;
     }
     inline unsigned getSize() const {
-        assert(base == DataType::ARRAY);
+        assert(base == DataType::ARRAY || base == DataType::COOP_MATRIX);
         return subSize;
     }
 
@@ -258,10 +278,20 @@ public:
     }
 
     inline void setBufferBlock() {
+        assert(this->base == DataType::STRUCT);
         this->bufferBlock = true;
     }
     inline bool isBufferBlock() const {
-        return this->bufferBlock;
+        return this->base == DataType::STRUCT && this->bufferBlock;
+    }
+
+    inline void setNumRows(unsigned rows) {
+        assert(this->base == DataType::COOP_MATRIX);
+        this->rows = rows;
+    }
+    inline unsigned getNumRows() const {
+        assert(this->base == DataType::COOP_MATRIX);
+        return rows;
     }
 
     bool operator==(const Type& rhs) const;

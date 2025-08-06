@@ -345,7 +345,14 @@ public:
     /// @param verbose whether to print a verbose trace of execution
     /// @param use_sbt whether the shader binding table should be used for raytracing interactions
     /// @return whether the instruction execution blocks the invocation (such as by a barrier)
-    bool execute(DataView& data, std::vector<Frame*>& frame_stack, bool verbose, bool use_sbt) const;
+    bool execute(
+        DataView& data,
+        std::vector<Frame*>& frame_stack,
+        unsigned invocation,
+        unsigned num_invocations,
+        bool verbose,
+        bool use_sbt
+    ) const;
 
     void print() const;
 
