@@ -3,11 +3,16 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
+import platform
 import os
+
+executable_name = "spirv-run"
+if platform.system() == "Windows":
+    executable_name += ".exe"
 
 # Check that the interpreter has been built
 test_path = os.path.dirname(__file__)
-interp_path = os.path.abspath(os.path.join(test_path, "..", "build", "src", "spirv-run"))
+interp_path = os.path.abspath(os.path.join(test_path, "..", "build", "src", executable_name))
 if not os.path.isfile(interp_path):
     print("Could not find interpreter! Is it built?")
     print("Looking at:", interp_path)
