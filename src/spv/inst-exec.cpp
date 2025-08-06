@@ -171,15 +171,24 @@ bool Instruction::execute(DataView& data, std::vector<Frame*>& frame_stack, bool
         inc_pc = false;
         break;
     }
-    case spv::OpVariable:  // 59
+    case spv::OpVariable: {  // 59
         // This instruction has been run before (during the static pass), so we can assume here the variable already
-        // exists. Now, all we need to do is set the default value (in case not set before)
+        // exists at the global level.
+        // If the storage class requires it, we must transfer the variable down to the local scope. Also, we must set
+        // the default value (if any).
+        Variable* var = getVariable(1, data);
+        if (auto storage = var->getStorageClass();
+            storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction) {
+            // Create the variable for the local scope
+            var = new Variable(*var);
+            data.local(result_at).redefine(var);
+        }
         if (operands.size() > 3) {  // included default value
-            Variable* var = getVariable(1, data);
             Value* defaultVal = getValue(3, data);
             var->setVal(*defaultVal);
         }
         break;
+    }
     case spv::OpLoad: {  // 61
         Type* ret_type = getType(0, data);
         Value* from_val = getFromPointer(2, data);
