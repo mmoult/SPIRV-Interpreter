@@ -11,6 +11,7 @@
 
 #include "value.hpp"
 import value.aggregate;
+import value.coopMatrix;
 import value.image;
 import value.primitive;
 import value.raytrace.accelStruct;
@@ -67,6 +68,9 @@ Value* Type::construct(std::vector<const Value*>* values) const {
         return new Image(*this);
     case DataType::SAMPLER:
         return new Sampler(*this);
+    case DataType::COOP_MATRIX:
+        // construct an empty cooperative matrix which will be filled by a later OpStore
+        return new CoopMatrix(*subElement, rows, subSize / rows);
     }
 }
 
@@ -282,6 +286,7 @@ Type Type::unionOf(const Type& other, std::vector<const Type*> created) const no
         SIMPLE(RAY_QUERY, rayQuery);
         SIMPLE(IMAGE, image);
         SIMPLE(SAMPLER, sampler);
+        SIMPLE(COOP_MATRIX, cooperativeMatrix);
     default:
         assert(false);
         return nullptr;

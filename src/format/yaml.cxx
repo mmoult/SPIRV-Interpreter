@@ -360,8 +360,9 @@ private:
             else
                 out << " false";
             break;
-        case DataType::STRUCT:
-        case DataType::ARRAY: {
+        case DataType::ARRAY:
+        case DataType::COOP_MATRIX:
+        case DataType::STRUCT: {
             char open, close;
             bool is_struct = type_base == DataType::STRUCT;
             const std::vector<std::string>* names;
@@ -395,6 +396,7 @@ private:
 
             if (nested) {
                 if (agg_size == 0) {
+                    assert(templatize);
                     // This is a runtime array: we want to provide a dummy element for the template
                     const Type& e_type = agg.getType().getElement();
                     Value* dummy = e_type.construct();

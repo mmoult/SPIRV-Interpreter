@@ -1979,6 +1979,16 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(ret);
         break;
     }
+    case spv::OpTypeCooperativeMatrixKHR: {  // 4456
+        Type* sub = getType(1, data);
+        const auto& scope = static_cast<const Primitive&>(*getValue(src_at, data));
+        const auto& rows = static_cast<const Primitive&>(*getValue(src_at + 1, data));
+        const auto& cols = static_cast<const Primitive&>(*getValue(src_at + 2, data));
+        // We don't care about "MatrixUse" in the interpreter. It doesn't affect how we store the data.
+
+        data[result_at].redefine(new Type(Type::coopMatrix(scope.data.u32, rows.data.u32, cols.data.u32, *sub)));
+        break;
+    }
     case spv::OpTypeRayQueryKHR: {  // 4472
         data[result_at].redefine(new Type(Type::rayQuery()));
         break;

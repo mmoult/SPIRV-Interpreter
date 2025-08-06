@@ -316,6 +316,11 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::CONST);
         to_load.push_back(Type::REF);
         break;
+    case spv::OpTypeForwardPointer:  // 39
+    case spv::OpSelectionMerge:  // 247
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::CONST);
+        break;
     case spv::OpVariable:  // 59
         to_load.push_back(Type::CONST);
         optional.push_back(Type::REF);
@@ -323,6 +328,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpLoad:  // 61
         to_load.push_back(Type::REF);
         optional.push_back(Type::UINT);
+        repeating = Repeat::WHOLE;
         break;
     case spv::OpStore:  // 62
         to_load.push_back(Type::REF);
@@ -405,10 +411,6 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         optional.push_back(Type::UINT);
         repeating = Repeat::WHOLE;
         break;
-    case spv::OpSelectionMerge:  // 247
-        to_load.push_back(Type::REF);
-        to_load.push_back(Type::CONST);
-        break;
     case spv::OpBranchConditional:  // 250
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
@@ -432,6 +434,31 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpTraceRayKHR:  // 4445
         for (int i = 0; i < 11; ++i)
             to_load.push_back(Type::REF);
+        break;
+    case spv::OpTypeCooperativeMatrixKHR:  // 4456
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        break;
+    case spv::OpCooperativeMatrixLoadKHR:  // 4457
+        to_load.push_back(Type::REF);  // Pointer
+        to_load.push_back(Type::REF);  // Memory Layout
+        optional.push_back(Type::REF);  // Stride
+        optional.push_back(Type::UINT);  // Memory Operand
+        for (int i = 6; i < words.size(); i++)
+            optional.push_back(Type::UINT);
+        // repeating = Repeat::WHOLE;
+        break;
+    case spv::OpCooperativeMatrixStoreKHR:  // 4458
+        to_load.push_back(Type::REF);  // Pointer
+        to_load.push_back(Type::REF);  // Object
+        to_load.push_back(Type::REF);  // Memory Layout
+        optional.push_back(Type::REF);  // Stride
+        optional.push_back(Type::UINT);  // Memory Operand
+        for (int i = 5; i < words.size(); i++)
+            optional.push_back(Type::UINT);
         break;
     case spv::OpRayQueryInitializeKHR:  // 4473
         for (int i = 0; i < 8; ++i)

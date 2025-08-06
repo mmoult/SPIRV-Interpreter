@@ -51,13 +51,13 @@ public:
 
     void addElements(std::vector<const Value*>& es) noexcept(false) {
         // Test that the size matches the current type's:
-        unsigned tsize = getSize();
-        if (unsigned vecsize = es.size(); vecsize != tsize) {
+        unsigned vecsize = es.size();
+        if (unsigned tsize = getSize(); vecsize != tsize && tsize != 0) {
             std::stringstream err;
             err << "Could not add " << vecsize << " values to " << getTypeName() << " of size " << tsize << "!";
             throw std::runtime_error(err.str());
         }
-        for (unsigned i = 0; i < tsize; ++i) {
+        for (unsigned i = 0; i < vecsize; ++i) {
             // Construct an element from the element type, then copy data from e to it.
             const Type& typeAt = getTypeAt(i);
             Value* val = typeAt.construct();
@@ -135,7 +135,7 @@ public:
     }
 };
 
-export class Array final : public Aggregate {
+export class Array : public Aggregate {
 protected:
     std::string getTypeName() const override {
         return "array";
@@ -157,6 +157,9 @@ public:
     explicit Array(std::vector<Value*>& elements) : Aggregate(Type::array(elements.size(), elements[0]->getType())) {
         this->elements = elements;
     }
+
+    // Useful for subtype construction
+    explicit Array(const Type& type) : Aggregate(type) {}
 
     unsigned getSize() const override {
         unsigned tsize = type.getSize();
