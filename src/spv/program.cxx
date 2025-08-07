@@ -268,6 +268,8 @@ public:
         unsigned global_id_loc = 0;
         bool entry_found = false;  // whether the entry instruction has been found
         bool static_ctn = true;  // whether we can construct results statically (until first OpFunction)
+        std::vector<unsigned> vars;
+
         for (; location < insts.size(); ++location) {
             Instruction& inst = insts[location];
             auto opcode = inst.getOpcode();
@@ -295,6 +297,13 @@ public:
                     inst.makeResult(global, location, &decorations);
 
                     if (static_ctn) {
+                        // Add the variable to the list to have its value initialized later. This must be done since the
+                        // type may be a reference pointer.
+                        // Note: we don't need to worry about variable declarations in non-static contexts since they
+                        // will be executed dynamically (which will then populate the value).
+                        if (opcode == spv::OpVariable)
+                            vars.push_back(location);
+
                         // Some builtins need to be removed from the interface, in which case they continue,
                         // others just need to report results, in which they can be saved and break.
                         if (stage == nullptr) {
@@ -352,6 +361,14 @@ public:
                 process_visible_io(insts[top_var]);
         }
 
+        for (unsigned var : vars) {
+            // Had to delay initialization of static variable's value in case the pointer was forward declared
+            Instruction& inst = insts[var];
+            assert(inst.getOpcode() == spv::OpVariable);
+            Type* var_type = global[inst.getResultType()].getType();
+            global[inst.getResult()].getVariable()->initValue(*var_type);
+        }
+
         if (!entry_found)
             throw std::runtime_error("Program is missing entry function!");
 
@@ -399,7 +416,7 @@ public:
                 // Verify that this exists in the stage-specific input data
                 const auto& name = stage_in.getName();
                 if (extra_inputs.contains(name)) {
-                    stage_in.getVal()->copyFrom(*extra_inputs[name]);
+                    stage_in.getVal().copyFrom(*extra_inputs[name]);
                     extra_inputs.erase(name);
                 } else if (!unused) {
                     std::stringstream error;
@@ -513,7 +530,7 @@ public:
                 found = compare.isMatch(*var);
                 if (found) {
                     try {
-                        var->setVal(*val);
+                        var->getVal().copyFrom(*val);
                     } catch (const std::exception& e) {
                         std::stringstream err;
                         err << "Could not copy input variable \"" << name << "\" into program memory: ";
@@ -594,13 +611,13 @@ public:
                 // standard of type truth, although by definition the check values must be correct.
                 // Therefore, we construct a dummy with the output's type and copy values from the check
                 // into it, then compare for equality.
-                const Value* var_val = var->getVal();
-                const auto& v_type = var_val->getType();
+                const Value& var_val = var->getVal();
+                const auto& v_type = var_val.getType();
                 Value* dummy;
                 try {
                     dummy = v_type.construct();
                     dummy->copyFrom(*val);
-                    bool compare = dummy->equals(*var_val);
+                    bool compare = dummy->equals(var_val);
                     delete dummy;
                     if (!compare) {
                         std::stringstream err;
@@ -635,7 +652,7 @@ public:
         // Load the workgroup size from the variable, if provided
         if (workGroupSize != 0) {
             const Variable& workSizeVar = *static_cast<const Variable*>(global[workGroupSize].getVariable());
-            const Aggregate& sizeAgg = *static_cast<const Aggregate*>(workSizeVar.getVal());
+            const Aggregate& sizeAgg = static_cast<const Aggregate&>(workSizeVar.getVal());
             // Update the entry point
             EntryPoint& ep = entry_inst.getEntryPoint(global);
             ep.sizeX = static_cast<const Primitive*>(sizeAgg[0])->data.u32;
@@ -683,8 +700,8 @@ public:
                     // Because single invocation was specified and this variable is present, the value must have already
                     // been set in input. We must fetch the value to update the more specific invoc fields- local ID and
                     // local index
-                    assert(global_invoc_id->getVal()->getType().getBase() == DataType::ARRAY);
-                    const auto& ids = static_cast<const Array&>(*global_invoc_id->getVal());
+                    assert(global_invoc_id->getVal().getType().getBase() == DataType::ARRAY);
+                    const auto& ids = static_cast<const Array&>(global_invoc_id->getVal());
                     // deconstruct local ids from the given global
                     local_x = static_cast<const Primitive&>(*ids[0]).data.u32 % ep.sizeX;
                     local_y = static_cast<const Primitive&>(*ids[1]).data.u32 % ep.sizeY;
@@ -697,15 +714,15 @@ public:
                     const Primitive gid_z(0 * ep.sizeZ + local_z);
                     std::vector<const Value*> elements {&gid_x, &gid_y, &gid_z};
                     arr.addElements(elements);
-                    v->setVal(arr);
+                    v->getVal().copyFrom(arr);
                     invoc_global->local(globalInvocId).redefine(v);
                 }
             }
             if (local_invoc_id != nullptr) {
                 if (single_invoc && global_invoc_id == nullptr) {
                     // This is the highest-level invocation builtin. Get the current settings to update any lower
-                    assert(global_invoc_id->getVal()->getType().getBase() == DataType::ARRAY);
-                    const auto& ids = static_cast<const Array&>(*global_invoc_id->getVal());
+                    assert(global_invoc_id->getVal().getType().getBase() == DataType::ARRAY);
+                    const auto& ids = static_cast<const Array&>(global_invoc_id->getVal());
                     local_x = static_cast<const Primitive&>(*ids[0]).data.u32;
                     local_y = static_cast<const Primitive&>(*ids[1]).data.u32;
                     local_z = static_cast<const Primitive&>(*ids[2]).data.u32;
@@ -718,7 +735,7 @@ public:
                     const Primitive gid_z(local_z);
                     std::vector<const Value*> elements {&gid_x, &gid_y, &gid_z};
                     arr.addElements(elements);
-                    v->setVal(arr);
+                    v->getVal().copyFrom(arr);
                     invoc_global->local(localInvocId).redefine(v);
                 }
             }
@@ -736,7 +753,7 @@ public:
                     else
                         index = i;
                     const Primitive idx(index);
-                    v->setVal(idx);
+                    v->getVal().copyFrom(idx);
                     invoc_global->local(localInvocIdx).redefine(v);
                 }
             }
@@ -837,7 +854,7 @@ public:
             if (need_mangle)
                 name = VarCompare::mangleName(name);
 
-            ret.emplace(name, var->getVal());
+            ret.emplace(name, &var->getVal());
         }
         return ret;
     }

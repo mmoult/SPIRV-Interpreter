@@ -71,6 +71,10 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     case DataType::COOP_MATRIX:
         // construct an empty cooperative matrix which will be filled by a later OpStore
         return new CoopMatrix(*subElement, rows, subSize / rows);
+    case DataType::POINTER:
+        // We cannot actually construct a pointer, nor does that conceptually make sense. When this is requested, the
+        // pointer is a shallow wrapper to indicate storage settings. In that case, construct the underlying value
+        return subElement->construct();
     }
 }
 

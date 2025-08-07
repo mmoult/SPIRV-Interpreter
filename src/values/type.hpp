@@ -168,6 +168,9 @@ public:
     static inline Type pointer(const Type& point_to) {
         return Type(DataType::POINTER, 0, &point_to);
     }
+    static inline Type forwardPointer() {
+        return Type(DataType::POINTER, 0, nullptr);
+    }
 
     static inline Type string() {
         return Type(DataType::STRING, 0, nullptr);
@@ -255,6 +258,10 @@ public:
     inline const Type& getPointedTo() const {
         assert(base == DataType::POINTER);
         return *subElement;
+    }
+    inline void unforward(const Type& point_to) {
+        assert(base == DataType::POINTER);
+        this->subElement = &point_to;
     }
 
     // TODO: deprecate or make private. The nearest valid use is operator==

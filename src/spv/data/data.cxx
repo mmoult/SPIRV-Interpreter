@@ -40,42 +40,29 @@ export class Variable final : public Valuable {
     /// The descriptor set of this variable.
     unsigned descr_set = UNSET;
 
+public:
     /// @brief Construct a new variable directly (instead of through makeVariable)
-    /// @param value saved (not copied) as the variable's value. Must be on the heap!
+    /// @param value saved (not copied) as the variable's value. Must be on the heap! If null, you must initValue later!
     /// @param storage_class the category which defines this variable's storage/use
     Variable(Value* value, spv::StorageClass storage_class, bool spec_const)
         : val(value), storage(storage_class), specConst(spec_const) {}
 
-public:
     Variable(const Variable& other)
         : storage(other.storage)
         , name(other.name)
         , builtIn(other.builtIn)
         , specConst(other.specConst)
         , nonwritable(other.nonwritable) {
-        val = other.val->getType().construct();
-        val->copyFrom(*other.val);
+        if (other.val != nullptr) {
+            val = other.val->getType().construct();
+            val->copyFrom(*other.val);
+        } else
+            val = nullptr;
     }
     Variable& operator=(const Variable&) = delete;
     virtual ~Variable() {
         if (val != nullptr)
             delete val;
-    }
-
-    [[nodiscard]] static Variable* makeVariable(spv::StorageClass storage, const Type& t) noexcept(false) {
-        // Construct the value from the given type
-        // For whatever reason, the SPIR-V spec says that the type of each OpVariable must be an OpTypePointer,
-        // although it is actually storing the value.
-        // Therefore, before we construct, we need to dereference the pointer
-        if (t.getBase() != DataType::POINTER)
-            throw std::invalid_argument("Cannot initialize variable with non-pointer type!");
-        auto* val = t.getPointedTo().construct();
-        return new Variable(val, storage, false);
-    }
-
-    /// @param value saved (not copied) as the variable's value. Must be on the heap!
-    [[nodiscard]] static Variable* makeSpecConst(Value* value) {
-        return new Variable(value, spv::StorageClass::StorageClassPushConstant, true);
     }
 
     spv::StorageClass getStorageClass() const {
@@ -93,14 +80,31 @@ public:
         return name;
     }
 
-    void setVal(const Value& new_val) {
-        val->copyFrom(new_val);
+    void initValue(const Type& t) {
+        // Only initialize the value once
+        if (this->val != nullptr)
+            return;
+
+        // Construct the value from the given type
+        // For whatever reason, the SPIR-V spec says that the type of each OpVariable must be an OpTypePointer, although
+        // it is actually storing the value.
+        // Therefore, before we construct, we need to dereference the pointer
+        if (t.getBase() != DataType::POINTER)
+            throw std::invalid_argument("Cannot initialize variable with non-pointer type!");
+        this->val = t.getPointedTo().construct();
     }
-    const Value* getVal() const {
-        return val;
+
+    bool isThreaded() const {
+        return storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction;
     }
-    Value* getVal() {
-        return val;
+
+    const Value& getVal() const {
+        assert(val != nullptr);
+        return *val;
+    }
+    Value& getVal() {
+        assert(val != nullptr);
+        return *val;
     }
 
     void setBuiltIn(spv::BuiltIn built_in) {
@@ -261,7 +265,7 @@ public:
         if (type == DType::VARIABLE) {
             auto var = static_cast<Variable*>(raw);
             if (var->isSpecConst())
-                return var->getVal();
+                return &var->getVal();
         }
         return nullptr;
     }
@@ -271,7 +275,7 @@ public:
         if (type == DType::VARIABLE) {
             auto var = static_cast<Variable*>(raw);
             if (var->isSpecConst())
-                return var->getVal();
+                return &var->getVal();
         }
         return nullptr;
     }

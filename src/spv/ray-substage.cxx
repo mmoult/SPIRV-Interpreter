@@ -51,7 +51,7 @@ export struct RayTraceSubstage {
         ValueMap ret;
         for (const auto v : vars) {
             const auto var = (*data)[v].getVariable();
-            ret.emplace(var->getName(), var->getVal());
+            ret.emplace(var->getName(), &var->getVal());
         }
         return ret;
     }
@@ -100,7 +100,7 @@ public:
         }
 
         // Check the storage class and type to find payload and accel struct
-        if (var.getVal()->getType().getBase() == DataType::ACCEL_STRUCT) {
+        if (var.getVal().getType().getBase() == DataType::ACCEL_STRUCT) {
             accelStruct = loc;
             return true;
         }
@@ -128,7 +128,7 @@ public:
             for (unsigned loc : worldRayOrigin) {
                 Variable* var = dat[loc].getVariable();
                 assert(var != nullptr);
-                copy_into(var->getVal(), origin);
+                copy_into(&var->getVal(), origin);
             }
         }
         if (!worldRayDirection.empty()) {
@@ -137,7 +137,7 @@ public:
             for (unsigned loc : worldRayDirection) {
                 Variable* var = dat[loc].getVariable();
                 assert(var != nullptr);
-                copy_into(var->getVal(), direction);
+                copy_into(&var->getVal(), direction);
             }
         }
         if (!rayTMax.empty()) {
@@ -147,7 +147,7 @@ public:
             for (unsigned loc : rayTMax) {
                 Variable* var = dat[loc].getVariable();
                 assert(var != nullptr);
-                var->getVal()->copyFrom(tmax);
+                var->getVal().copyFrom(tmax);
             }
         }
         if (!rayTMin.empty()) {
@@ -157,7 +157,7 @@ public:
             for (unsigned loc : rayTMin) {
                 Variable* var = dat[loc].getVariable();
                 assert(var != nullptr);
-                var->getVal()->copyFrom(tmin);
+                var->getVal().copyFrom(tmin);
             }
         }
         if (!geomIndex.empty()) {
@@ -168,27 +168,27 @@ public:
             for (unsigned loc : geomIndex) {
                 Variable* var = dat[loc].getVariable();
                 assert(var != nullptr);
-                var->getVal()->copyFrom(geom_index);
+                var->getVal().copyFrom(geom_index);
             }
         }
         Primitive custom_idx((instance == nullptr) ? 0 : instance->getCustomIndex());
         for (unsigned loc : instanceCustomIndex) {
             Variable* var = dat[loc].getVariable();
             assert(var != nullptr);
-            var->getVal()->copyFrom(custom_idx);
+            var->getVal().copyFrom(custom_idx);
         }
 
         if (accelStruct != 0) {
             REQUIRE_AS("acceleration struct");
             Variable* var = dat[accelStruct].getVariable();
             assert(var != nullptr);
-            var->getVal()->copyFrom(*as);
+            var->getVal().copyFrom(*as);
         }
         if (unsigned tpayload = this->payload; tpayload != 0) {
             try {
                 Variable* var = dat[tpayload].getVariable();
                 assert(var != nullptr);
-                var->getVal()->copyFrom(payload);
+                var->getVal().copyFrom(payload);
             } catch (const std::runtime_error& _) {
                 throw std::runtime_error("Cannot invoke raytracing substage with incorrect payload type!");
             }
@@ -205,7 +205,7 @@ public:
     setUpHitAttribute(RtStageKind stage, DataView& dat, glm::vec2 barycentrics, Value* hit_attribute) const {
         if (hitAttribute != 0) {
             Variable* var = dat[hitAttribute].getVariable();
-            Value& hit_attrib_val = *var->getVal();
+            Value& hit_attrib_val = var->getVal();
             if (hit_attribute == nullptr) {
                 if (stage == RtStageKind::INTERSECTION) {
                     // For intersection case, create the hit attribute
@@ -247,7 +247,7 @@ public:
         for (unsigned v : ins) {
             const auto& var = *(*data)[v].getVariable();
             if (var.getStorageClass() == spv::StorageClassShaderRecordBufferKHR)
-                input_map.emplace(var.getName(), var.getVal());
+                input_map.emplace(var.getName(), &var.getVal());
         }
         auto spec_consts = getVariables(specs);
         input_map.insert(spec_consts.begin(), spec_consts.end());
@@ -261,13 +261,13 @@ public:
         if (payload != 0) {
             Variable* var = dat[payload].getVariable();
             assert(var != nullptr);
-            frame.getRtResult()->copyFrom(*var->getVal());
+            frame.getRtResult()->copyFrom(var->getVal());
         }
         // Save updates to the hit attribute (if present)
         if (stage == RtStageKind::INTERSECTION && hitAttribute != 0) {
             Variable* var = dat[hitAttribute].getVariable();
             assert(var != nullptr);
-            frame.getHitAttribute()->copyFrom(*var->getVal());
+            frame.getHitAttribute()->copyFrom(var->getVal());
         }
     }
 };

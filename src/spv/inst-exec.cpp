@@ -184,16 +184,16 @@ bool Instruction::execute(
         // exists at the global level.
         // If the storage class requires it, we must transfer the variable down to the local scope. Also, we must set
         // the default value (if any).
-        Variable* var = getVariable(1, data);
-        if (auto storage = var->getStorageClass();
-            storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction) {
+        Variable* var = data[result_at].getVariable();
+        if (var->isThreaded()) {
             // Create the variable for the local scope
             var = new Variable(*var);
             data.local(result_at).redefine(var);
         }
+        var->initValue(*getType(0, data));
         if (operands.size() > 3) {  // included default value
             Value* defaultVal = getValue(3, data);
-            var->setVal(*defaultVal);
+            var->getVal().copyFrom(*defaultVal);
         }
         break;
     }
@@ -425,7 +425,7 @@ bool Instruction::execute(
             // Payload should either be filled with whether the trace intersected a geometry (a boolean)
             // or the user-defined payload output.
             Variable* payload_var = getVariable(10, data);
-            Value* payload = payload_var->getVal();
+            Value* payload = &payload_var->getVal();
 
             // Do not invoke any shaders if a shader binding table was not specified
             bool used_sbt = false;
@@ -549,7 +549,7 @@ bool Instruction::execute(
             assert(index_sbt_prim.getType().getBase() == DataType::UINT);
             const unsigned index_sbt = index_sbt_prim.data.u32;
             auto& call_data = *getVariable(1, data);
-            frame.triggerCallable(index_sbt, call_data.getVal(), frame.getFromAs());
+            frame.triggerCallable(index_sbt, &call_data.getVal(), frame.getFromAs());
             // return to this instruction after exit to clean up
             inc_pc = false;
         } else

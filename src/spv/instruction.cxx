@@ -96,7 +96,7 @@ export class Instruction {
             Variable* head_var = data[start].getVariable();
             if (head_var == nullptr)
                 throw std::runtime_error("Pointer head is neither a variable or a value!");
-            head = head_var->getVal();
+            head = &head_var->getVal();
         }
         // In some cases (especially common with HLSL), the head can itself be a pointer. If so, dereference that
         // pointer to get a simple head value:
@@ -110,7 +110,7 @@ export class Instruction {
 
     Value* getFromPointer(unsigned index, DataView& data) const noexcept(false) {
         if (Variable* from = getVariable(index, data); from != nullptr)
-            return from->getVal();
+            return &from->getVal();
 
         Value* dst_ptr = getValue(index, data);
         if (dst_ptr == nullptr || dst_ptr->getType().getBase() != DataType::POINTER)
@@ -174,7 +174,7 @@ public:
                 // Try to find this's value in the map. If not present, we keep the original value.
                 std::string name = var.getName();
                 if (provided.contains(name))
-                    var.setVal(*provided[name]);
+                    var.getVal().copyFrom(*provided[name]);
                 specs.push_back(id);
                 break;
             }
@@ -183,7 +183,7 @@ public:
         case SC::StorageClassUniformConstant:
             // If the type is an image, then it may have been written to
             // TODO: for a more complete solution, we may need to recursively search the type for any images.
-            if (var.getVal()->getType().getBase() == DataType::IMAGE && var.isWritable())
+            if (var.getVal().getType().getBase() == DataType::IMAGE && var.isWritable())
                 outs.push_back(id);
             ins.push_back(id);
             break;
@@ -194,7 +194,7 @@ public:
         case SC::StorageClassUniform:
             ins.push_back(id);
             // Uniforms decorated with Bufferblock was the pre-SPIR-V 1.3 solution for what is now `StorageBuffer`.
-            if (var.getVal()->getType().isBufferBlock() && var.isWritable())
+            if (var.getVal().getType().isBufferBlock() && var.isWritable())
                 outs.push_back(id);
             break;
         case SC::StorageClassCrossWorkgroup:
@@ -361,6 +361,14 @@ public:
     unsigned getResult() const {
         if (hasResult)
             return std::get<unsigned>(operands[hasResultType ? 1 : 0].raw);
+        return 0;
+    }
+
+    /// @brief Returns the result type index. If there is none, 0 is returned.
+    /// @return the result type index
+    unsigned getResultType() const {
+        if (hasResultType)
+            return std::get<unsigned>(operands[0].raw);
         return 0;
     }
 };

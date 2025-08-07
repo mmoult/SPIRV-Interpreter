@@ -114,7 +114,7 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
         } else {
             if (empty_name) {
                 // Use the name of the type, (if that type has a custom name)
-                const Type& type = var.getVal()->getType();
+                const Type& type = var.getVal().getType();
                 if (std::string type_name = type.getName(); !type_name.empty()) {
                     set_name = true;
                     var.setName(type_name);
@@ -672,7 +672,7 @@ void element_tern_op(
     );
 
 bool Instruction::makeResult(DataView& data, unsigned location, Instruction::DecoQueue* queue) const noexcept(false) {
-    if (!hasResult)
+    if (!hasResult && opcode != spv::OpTypeForwardPointer)
         return false;  // no result made!
 
     // Result type comes before result, if present
@@ -914,7 +914,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpTypePointer: {  // 32
         Type* pt_to = getType(2, data);
         assert(operands[1].type == Token::Type::CONST);  // storage class we don't need
-        data[result_at].redefine(new Type(Type::pointer(*pt_to)));
+        // Could be the implementation of a forward reference
+        Type* already_result = data[result_at].getType();
+        if (already_result == nullptr)
+            data[result_at].redefine(new Type(Type::pointer(*pt_to)));
+        else
+            already_result->unforward(*pt_to);
         break;
     }
     case spv::OpTypeFunction: {  // 33
@@ -930,6 +935,9 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(new Type(Type::function(ret, params)));
         break;
     }
+    case spv::OpTypeForwardPointer:  // 39
+        data[checkRef(0, data_len)].redefine(new Type(Type::forwardPointer()));
+        break;
     case spv::OpConstantTrue:  // 41
     case spv::OpConstantFalse:  // 42
         data[result_at].redefine(new Primitive(opcode == spv::OpConstantTrue));
@@ -978,7 +986,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         if (opcode != spv::OpSpecConstantComposite) {
             data[result_at].redefine(val);
         } else {
-            Variable* var = Variable::makeSpecConst(val);
+            Variable* var = new Variable(val, spv::StorageClass::StorageClassPushConstant, true);
             applyVarDeco(queue, *var, result_at);
             data[result_at].redefine(var);
         }
@@ -993,7 +1001,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         assert(hasResultType);
         // Note: booleans cannot have non-standard precision
         Primitive* default_val = new Primitive(opcode == spv::OpSpecConstantTrue);
-        Variable* var = Variable::makeSpecConst(default_val);
+        Variable* var = new Variable(default_val, spv::StorageClass::StorageClassPushConstant, true);
         applyVarDeco(queue, *var, result_at);
         data[result_at].redefine(var);
         break;
@@ -1003,7 +1011,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         assert(operands[2].type == Token::Type::UINT);
         Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
         prim->cast(*ret);
-        Variable* var = Variable::makeSpecConst(prim);
+        Variable* var = new Variable(prim, spv::StorageClass::StorageClassPushConstant, true);
         applyVarDeco(queue, *var, result_at);
         data[result_at].redefine(var);
         break;
@@ -1113,18 +1121,14 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpVariable: {  // 59
         assert(hasResultType);
-        Type* var_type = getType(dst_type_at, data);
+        Type* result_type = getType(dst_type_at, data);
+        checkRef(dst_type_at, data.getBound());
         assert(operands[2].type == Token::Type::CONST);
         unsigned storage = std::get<unsigned>(operands[2].raw);
-
-        Variable* var = Variable::makeVariable(static_cast<spv::StorageClass>(storage), *var_type);
-        if (operands.size() > 3) {  // included default value
-            Value* default_val = getValue(src_at + 1, data);
-            // default_val may be nullptr in a valid shader if it is dynamically generated
-            // In that case, wait until execution to set default value
-            if (default_val != nullptr)
-                var->setVal(*default_val);
-        }
+        // Note: initialization of the var's value is handled by the program.
+        Variable* var = new Variable(nullptr, static_cast<spv::StorageClass>(storage), false);
+        if (!var->isThreaded())
+            var->initValue(*result_type);
         applyVarDeco(queue, *var, result_at);
         data[result_at].redefine(var);
         break;
@@ -2340,7 +2344,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         Value* whole_val;
         constexpr unsigned whole_index = 5;
         if (Variable* found = getVariable(whole_index, data); found != nullptr)
-            whole_val = found->getVal();
+            whole_val = &found->getVal();
         else {
             const Value* found_val = getValue(whole_index, data);
             if (found_val == nullptr)
