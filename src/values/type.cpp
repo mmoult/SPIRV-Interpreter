@@ -48,13 +48,21 @@ Value* Type::construct(std::vector<const Value*>* values) const {
         return prim;
     }
     case DataType::ARRAY:
+    case DataType::COOP_MATRIX:
     case DataType::STRUCT: {
-        Aggregate* agg = (base == DataType::ARRAY) ? static_cast<Aggregate*>(new Array(*subElement, subSize))
-                                                   : static_cast<Aggregate*>(new Struct(*this));
+        Aggregate* agg;
+        if (base == DataType::ARRAY)
+            agg = static_cast<Aggregate*>(new Array(*subElement, subSize));
+        else if (base == DataType::COOP_MATRIX)
+            agg = static_cast<Aggregate*>(new CoopMatrix(*subElement, rows, subSize / rows));
+        else {
+            assert(base == DataType::STRUCT);
+            agg = static_cast<Aggregate*>(new Struct(*this));
+        }
         // try to populate with each of the entries
         if (values != nullptr)
             agg->addElements(*values);
-        else
+        else if (base != DataType::COOP_MATRIX)
             agg->dummyFill();
         return agg;
     }
@@ -68,9 +76,6 @@ Value* Type::construct(std::vector<const Value*>* values) const {
         return new Image(*this);
     case DataType::SAMPLER:
         return new Sampler(*this);
-    case DataType::COOP_MATRIX:
-        // construct an empty cooperative matrix which will be filled by a later OpStore
-        return new CoopMatrix(*subElement, rows, subSize / rows);
     case DataType::POINTER:
         // We cannot actually construct a pointer, nor does that conceptually make sense. When this is requested, the
         // pointer is a shallow wrapper to indicate storage settings. In that case, construct the underlying value

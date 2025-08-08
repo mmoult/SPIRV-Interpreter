@@ -655,6 +655,17 @@ bool Instruction::execute(
         }
         break;
     }
+    case spv::OpCooperativeMatrixLengthKHR: {  // 4460
+        Type& mat_type = *getType(2, data);
+        uint32_t total_elements = mat_type.getSize();
+        // Split those elements between all in the frame stack
+        uint32_t e_beg = (invocation * total_elements) / num_invocations;
+        uint32_t e_fin = ((invocation + 1) * total_elements) / num_invocations;
+        Primitive len(e_fin - e_beg);
+        dst_val = getType(0, data)->construct();
+        dst_val->copyFrom(len);
+        break;
+    }
     case spv::OpRayQueryInitializeKHR: {  // 4473
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(1, data));

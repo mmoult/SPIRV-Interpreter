@@ -274,30 +274,20 @@ void accum_same(Primitive& x, const Primitive& y) {
 }
 
 Value* composite_extract(Value* composite, unsigned index_start, const std::vector<Token>& operands) {
+    // Construct a pointer value and dereference it
+    std::vector<unsigned> indices;
     for (unsigned i = index_start; i < operands.size(); ++i) {
-        if (DataType dt = composite->getType().getBase(); dt != DataType::ARRAY && dt != DataType::STRUCT) {
-            std::stringstream error;
-            error << "Cannot extract from non-composite type!";
-            throw std::runtime_error(error.str());
-        }
-        Aggregate& agg = *static_cast<Aggregate*>(composite);
         assert(operands[i].type == Token::Type::UINT);
-        auto idx = std::get<unsigned>(operands[i].raw);
-        if (idx >= agg.getSize()) {
-            std::stringstream error;
-            error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
-            throw std::runtime_error(error.str());
-        }
-        composite = agg[idx];
-        // Repeat the process for all indices
+        indices.push_back(std::get<unsigned>(operands[i].raw));
     }
-    return composite;
+    Pointer ptr(0, indices, Type::forwardPointer());
+    return ptr.dereference(*composite);
 }
 
 DataType element_base(const Value& operand) {
     const Type& type = operand.getType();
     auto base = type.getBase();
-    if (base == DataType::ARRAY)
+    if (base == DataType::ARRAY || base == DataType::COOP_MATRIX)
         base = type.getElement().getBase();
     return base;
 }
@@ -338,8 +328,8 @@ void element_bin_op(
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
 
-    if (type1.getBase() == DataType::ARRAY) {
-        assert(type2.getBase() == DataType::ARRAY);
+    if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
+        assert(type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX);
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         assert((op1.getSize() == op2.getSize()) && "Cannot do binary operation on arrays of different size!");
@@ -409,7 +399,7 @@ void element_shift_op(
     auto tb = element_base(*src1);
     assert((tb == DataType::UINT || tb == DataType::INT) && "Cannot perform shift operation on non-integral element!");
 
-    if (tbase.getBase() == DataType::ARRAY) {
+    if (tbase.getBase() == DataType::ARRAY || tbase.getBase() == DataType::COOP_MATRIX) {
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         assert((op1.getSize() == op2.getSize()) && "Cannot do shift operation on arrays of different size!");
@@ -469,8 +459,8 @@ void element_extended_arith_op(
     Struct& res = static_cast<Struct&>(*res_v);
     assert(res.getSize() == 2);
 
-    if (type1.getBase() == DataType::ARRAY) {
-        assert(type2.getBase() == DataType::ARRAY);
+    if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
+        assert(type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX);
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         unsigned asize = op1.getSize();
@@ -487,7 +477,7 @@ void element_extended_arith_op(
                static_cast<Primitive*>(res_hi[i]));
         }
     } else {
-        assert(type2.getBase() != DataType::ARRAY);
+        assert(type2.getBase() != DataType::ARRAY && type2.getBase() != DataType::COOP_MATRIX);
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         op(op1, op2, static_cast<Primitive*>(res[0]), static_cast<Primitive*>(res[1]));
@@ -507,7 +497,7 @@ void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataVie
     std::vector<const Value*> pprims;
     assert(element_base(*src1) == chtype && "Cannot do unary operation on other-typed element!");
 
-    if (type.getBase() == DataType::ARRAY) {
+    if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
         const Array& operand = *static_cast<const Array*>(src1);
         unsigned asize = operand.getSize();
         prims.reserve(asize);
@@ -566,8 +556,9 @@ void element_tern_op(
     std::vector<Primitive> prims;
     std::vector<const Value*> pprims;
 
-    if (type1.getBase() == DataType::ARRAY) {
-        assert(type2.getBase() == DataType::ARRAY && type3.getBase() == DataType::ARRAY);
+    if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
+        assert((type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX) &&
+               (type3.getBase() == DataType::ARRAY || type3.getBase() == DataType::COOP_MATRIX));
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         const Array& op3 = *static_cast<const Array*>(src3);
@@ -587,7 +578,8 @@ void element_tern_op(
             pprims.push_back(&prims[i]);
         }
     } else {
-        assert(type2.getBase() != DataType::ARRAY && type3.getBase() != DataType::ARRAY);
+        assert((type2.getBase() != DataType::ARRAY && type2.getBase() != DataType::COOP_MATRIX) ||
+               (type3.getBase() != DataType::ARRAY && type3.getBase() != DataType::COOP_MATRIX));
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         const Primitive* op3 = static_cast<const Primitive*>(src3);

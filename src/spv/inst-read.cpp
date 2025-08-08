@@ -213,6 +213,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpBranch:  // 249
     case spv::OpReturnValue:  // 254
     // case spv::OpConvertUToAccelerationStructureKHR: // 4447
+    case spv::OpCooperativeMatrixLengthKHR: // 4460
     case spv::OpRayQueryTerminateKHR:  // 4474
     case spv::OpRayQueryConfirmIntersectionKHR:  // 4476
     case spv::OpRayQueryProceedKHR:  // 4477
@@ -459,6 +460,12 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         optional.push_back(Type::UINT);  // Memory Operand
         for (int i = 5; i < words.size(); i++)
             optional.push_back(Type::UINT);
+        break;
+    case spv::OpCooperativeMatrixMulAddKHR: // 4459
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        optional.push_back(Type::CONST);
         break;
     case spv::OpRayQueryInitializeKHR:  // 4473
         for (int i = 0; i < 8; ++i)

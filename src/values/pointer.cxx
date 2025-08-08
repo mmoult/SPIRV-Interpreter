@@ -45,7 +45,9 @@ public:
     Value* dereference(Value& start) const noexcept(false) {
         Value* res = &start;
         for (unsigned idx : indices) {
-            if (DataType dt = res->getType().getBase(); dt != DataType::ARRAY && dt != DataType::STRUCT) {
+            if (DataType dt = res->getType().getBase();
+                dt != DataType::ARRAY && dt != DataType::STRUCT && dt != DataType::COOP_MATRIX
+            ) {
                 std::stringstream error;
                 error << "Cannot extract from non-composite type!";
                 throw std::runtime_error(error.str());
