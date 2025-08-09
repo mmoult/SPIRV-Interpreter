@@ -11,8 +11,8 @@
 
 layout(local_size_x = 4, local_size_y = 1, local_size_z = 1) in;
 
-const uint ROWS = 2;
-const uint COLS = 8;
+const uint ROWS = 3;
+const uint COLS = 5;
 const uint SIZE = ROWS * COLS;
 
 layout(set = 0, binding = 0) coherent buffer Block16 {

@@ -101,11 +101,23 @@ public:
                 if (prec <= 16) {
                     // TODO: be mindful of rounding mode!
                     auto trunc_mantissa = [&](uint32_t bits) {
-                        uint32_t mask = (0b1'11111111'11111111111111111111111 >> bits) << bits;
-                        uint32_t round_up = 0;
-                        if (bits < 23)  // cannot round up beyond mantissa
-                            round_up = ((1 << (bits - 1)) & data.u32) << 1;
-                        data.u32 = (data.u32 & mask) | round_up;
+                        // We need to round up if the first digit to be truncated was a 1
+                        if (bits > 0 && ((1 << (bits - 1)) & data.u32) != 0) {
+                            // Rounding must not go beyond available mantissa bits (23)!
+                            for (unsigned i = bits; i < 23; ++i) {
+                                uint32_t complement = (1 << i);
+                                if ((data.u32 & complement) == 0) {
+                                    // Found a 0 digit.
+                                    // Set the digit to 1 and clear all digits below.
+                                    data.u32 |= complement;
+                                    bits = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // mask out the lower bits as requested
+                        data.u32 &= (std::numeric_limits<uint32_t>::max() >> bits) << bits;
                     };
 
                     // Recall that our FP32 input has 1 sign bit, 8 exponent bits, and 23 mantissa bits:

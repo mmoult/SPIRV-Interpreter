@@ -37,12 +37,12 @@ std::tuple<char, char> select(CompareMode diff, char xc, char yc) {
 
 export namespace Compare {
 bool eq_float(float x, float y, unsigned needed_sigfigs) {
+    if (x == y)
+        return true;
     bool xnan = std::isnan(x);
     bool ynan = std::isnan(y);
     if (xnan || ynan)
         return xnan == ynan;  // nan != nan, but we'll allow it here
-    if (x == y)
-        return true;
     bool xinf = std::isinf(x);
     bool yinf = std::isinf(y);
     if (xinf || yinf)
