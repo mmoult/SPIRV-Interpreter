@@ -27,6 +27,6 @@ void main() {
 
     coopmat<float16_t, gl_ScopeSubgroup, ROWS, ROWS, gl_MatrixUseAccumulator> c =
         coopmat<float16_t, gl_ScopeSubgroup, ROWS, ROWS, gl_MatrixUseAccumulator>(1.0);
-    coopMatMulAdd(a, b, c);
+    c = coopMatMulAdd(a, b, c);
     coopMatStore(c, block.x, ROWS, ROWS, gl_CooperativeMatrixLayoutRowMajor);
 }

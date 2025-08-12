@@ -347,7 +347,7 @@ public:
     /// @return whether the instruction execution blocks the invocation (such as by a barrier)
     bool execute(
         DataView& data,
-        std::vector<Frame*>& frame_stack,
+        std::vector<std::vector<Frame*>>& frame_stacks,
         unsigned invocation,
         unsigned num_invocations,
         bool verbose,

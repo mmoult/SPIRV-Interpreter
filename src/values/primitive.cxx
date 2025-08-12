@@ -301,6 +301,32 @@ public:
         }
     }
 
+    // TODO move this to util/fpconvert and standardize
+    static uint32_t fpConvertTypeToEmu(uint32_t input, unsigned precision) {
+        // literals are given in the precision of the primitive, which means we need to extend bits (since we emulate
+        // all precisions in FP32).
+        if (precision == 32)
+            return input;
+
+        if (precision != 16) {
+            std::stringstream err;
+            err << "The interpreter does not yet support float precision " << precision << "!";
+            Console::warn(err.str());
+            return input;
+        } else {
+            uint32_t sign = ((input >> 15) & 1) << 31;
+            uint32_t mantissa = (input & 0b1111111111) << 13;
+            uint32_t exponent = (input >> 10) & 0b11111;
+            // Exponent is a little tricky, since it acts like a signed int within the fp bitfield
+            // * 10001 => 10000001
+            // * 01110 => 01111110
+            exponent = ((exponent & 0b10000) << 3) // top bit
+                     | (((exponent & 0b01000) > 0) ? 0b01111000 : 0b0) // sign extension
+                     | (exponent & 0b00111);
+            return sign | (exponent << 23) | mantissa;
+        }
+    }
+
     /// @brief Add the unsigned components of this and addend, saving into sum's unsigned value
     /// @return whether the addition overflowed
     bool uAdd(const Primitive* addend, Primitive* sum) const {

@@ -89,7 +89,8 @@ Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expecte
 
 bool Instruction::execute(
     DataView& data,
-    std::vector<Frame*>& frame_stack,
+    // The instruction is strictly forbidden from modifying any but the current frame stack
+    std::vector<std::vector<Frame*>>& frame_stacks,
     unsigned invocation,
     unsigned num_invocations,
     bool verbose,
@@ -97,6 +98,7 @@ bool Instruction::execute(
 ) const {
     bool inc_pc = true;
     bool blocked = false;
+    std::vector<Frame*>& frame_stack = frame_stacks[invocation];
     Frame& frame = *frame_stack.back();
 
     unsigned result_at;
@@ -217,8 +219,10 @@ bool Instruction::execute(
     }
     case spv::OpStore: {  // 62
         Value* val = getValue(1, data);
-        Value* store_to = getFromPointer(0, data);
-        store_to->copyFrom(*val);
+        Value& store_to = *getFromPointer(0, data);
+        store_to.copyFrom(*val);
+        if (store_to.getType().getBase() == DataType::COOP_MATRIX)
+            static_cast<CoopMatrix&>(store_to).enforceSize(invocation, num_invocations);
         break;
     }
     case spv::OpImageWrite: {  // 99
@@ -653,6 +657,82 @@ bool Instruction::execute(
                 arr[index]->copyFrom(*mat[j]);
             }
         }
+        break;
+    }
+    case spv::OpCooperativeMatrixMulAddKHR: {  // 4459
+        // A * B + C, where
+        // - A has M rows and K columns
+        // - B has K rows and N columns
+        // - C has M rows and N columns
+
+        // (MxK) * (KxN) + (MxN)
+        // ⎡ a0 a1 a2 a3 ⎤   ⎡ b0 b1 b2 ⎤   ⎡ c0 c1 c2 ⎤
+        // ⎢ a4 a5 a6 a7 ⎥ * ⎢ b3 b4 b5 ⎥ + ⎢ c3 c4 c5 ⎥
+        // ⎣ a8 a9 a0 a1 ⎦   ⎢ b6 b7 b8 ⎥   ⎣ c6 c7 c8 ⎦
+        //                   ⎣ b9 b0 b1 ⎦
+
+        // Cooperative Matrices distribute the matrix elements across invocations. To compute the matrix multplication,
+        // we will have to reach this dispersed data.
+        Type& res_type = *getType(0, data);
+        const auto& amat = static_cast<const CoopMatrix&>(*getValue(2, data));
+        const auto& bmat = static_cast<const CoopMatrix&>(*getValue(3, data));
+        const auto& cmat = static_cast<const CoopMatrix&>(*getValue(4, data));
+
+        CoopMatrix& result = static_cast<CoopMatrix&>(*res_type.construct());
+        dst_val = &result;
+
+        // Determine which indices in the result matrix need to be populated by this invocation
+        uint32_t res_total_elements = res_type.getSize();
+        uint32_t e_beg = (invocation * res_total_elements) / num_invocations;
+        uint32_t e_fin = ((invocation + 1) * res_total_elements) / num_invocations;
+
+        unsigned result_num_rows = amat.getNumRows();
+        unsigned shared_dim = bmat.getNumRows();
+        unsigned result_num_cols = res_type.getSize() / result_num_rows;
+
+        std::vector<const Value*> elements;
+        std::vector<Primitive> prims;
+        prims.reserve(e_fin - e_beg);
+        const Type& element_type = res_type.getElement();
+        // Perform the matrix multiplication first
+        for (unsigned i = e_beg; i < e_fin; ++i) {
+            unsigned result_row = i / result_num_cols;
+            unsigned result_col = i % result_num_cols;
+
+            // TODO: need to support other element types besides float
+            assert(element_type.getBase() == DataType::FLOAT);
+            double accum = 0.0;
+
+            for (unsigned j = 0; j < shared_dim; ++j) {
+                auto extract_coop_el = [&frame_stacks, num_invocations, this](unsigned idx) -> const Primitive* {
+                    unsigned found = 0;
+                    for (unsigned k = 0; k < num_invocations; ++k) {
+                        auto& data = frame_stacks[k].back()->getData();
+                        const auto& mat = static_cast<const CoopMatrix&>(*getValue(2, data));
+                        if (unsigned next = found + mat.getSize(); next <= idx)
+                            found = next;
+                        else
+                            return static_cast<const Primitive*>(mat[idx - found]);
+                    }
+                    assert(false);
+                    return nullptr;
+                };
+
+                // - from a: (col = j, row = result_row)
+                // - from b: (col = result_col, row = j)
+                const Primitive* a_el = extract_coop_el((result_row * shared_dim) + j);
+                const Primitive* b_el = extract_coop_el((j * result_num_cols) + result_col);
+                accum += a_el->data.fp32 * b_el->data.fp32;
+            }
+
+            // Now add with the accumulator matrix. Since it has the same dimensions as the result, we know that not
+            // only is the necessary value within the same invocation's data, but even the same index.
+            accum += static_cast<const Primitive&>(*cmat[i - e_beg]).data.fp32;
+
+            // Finally, create the primitive and add it to pending elements
+            elements.push_back(&prims.emplace_back(static_cast<float>(accum)));
+        }
+        result.addElements(elements);
         break;
     }
     case spv::OpCooperativeMatrixLengthKHR: {  // 4460

@@ -30,4 +30,19 @@ public:
     unsigned getSize() const override {
         return elements.size();
     }
+
+    void enforceSize(unsigned invocation, unsigned num_invocations) {
+        uint32_t total_elements = type.getSize();
+        // Split those elements between all in the frame stack
+        uint32_t e_beg = (invocation * total_elements) / num_invocations;
+        uint32_t e_fin = ((invocation + 1) * total_elements) / num_invocations;
+        unsigned needed = e_fin - e_beg;
+
+        const Type& subelement = type.getElement();
+        while (getSize() < needed) {
+            Value* val = subelement.construct();
+            val->copyFrom(*elements.back());
+            elements.push_back(val);
+        }
+    }
 };

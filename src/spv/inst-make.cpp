@@ -938,7 +938,10 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         // integer or floating point constant
         Type* ret = getType(dst_type_at, data);
         assert(operands[2].type == Token::Type::UINT);
-        Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
+        unsigned val = std::get<unsigned>(operands[2].raw);
+        if (ret->getBase() == DataType::FLOAT)
+            val = Primitive::fpConvertTypeToEmu(val, ret->getPrecision());
+        Primitive* prim = new Primitive(val);
         prim->cast(*ret);
         data[result_at].redefine(prim);
         break;
@@ -959,8 +962,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         // "If constructing a vector, the total number of components in all the operands must equal the number of
         //  components in Result Type."
         if (ret->getBase() == DataType::ARRAY) {
-            unsigned expected = ret->getSize();
-            if (values.size() < expected) {
+            if (values.size() < ret->getSize()) {
                 std::vector<const Value*> replacement;
                 for (const Value* val : values) {
                     if (val->getType().getBase() == DataType::ARRAY) {
