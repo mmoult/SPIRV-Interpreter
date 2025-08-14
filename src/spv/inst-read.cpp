@@ -234,6 +234,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpSDiv:  // 135
     case spv::OpFDiv:  // 136
     case spv::OpUMod:  // 137
+    case spv::OpSRem:  // 138
     case spv::OpSMod:  // 139
     case spv::OpFRem:  // 140
     case spv::OpFMod:  // 141
