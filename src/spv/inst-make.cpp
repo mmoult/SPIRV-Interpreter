@@ -1343,7 +1343,6 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         break;
     }
     case spv::OpSRem: {  // 138
-
         BinOp fx = [](const Primitive* a, const Primitive* b) {
             if (b->data.i32 == 0) {
                 Console::warn("SMod undefined since divisor is 0!");
@@ -1356,7 +1355,6 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         break;
     }
     case spv::OpSMod: {  // 139
-
         BinOp fx = [](const Primitive* a, const Primitive* b) {
             if (b->data.i32 == 0) {
                 Console::warn("SMod undefined since divisor is 0!");
