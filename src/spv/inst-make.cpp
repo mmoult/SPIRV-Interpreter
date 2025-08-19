@@ -1369,7 +1369,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 // If the dividend and divisor have different signs, we need to adjust the result
                 res += b->data.i32;
             }
-            return res;
+            return Primitive(res);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::INT);
