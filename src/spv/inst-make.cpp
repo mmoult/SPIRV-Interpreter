@@ -1349,7 +1349,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 return Primitive(0);
             }
             if (a->data.i32 == std::numeric_limits<int32_t>::min() && b->data.i32 == -1) {
-                Console::warn("SRem undefined since dividend is UINT_MIN and divisor is -1 causing overflow!");
+                Console::warn("SRem undefined since dividend is INT_MIN and divisor is -1 causing overflow!");
                 return Primitive(0);
             }
             return Primitive(a->data.i32 % b->data.i32);
