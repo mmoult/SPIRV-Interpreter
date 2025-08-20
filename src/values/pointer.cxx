@@ -78,9 +78,10 @@ public:
         return true;
     }
 
-    void clipIndex() {
-        // Only used for cooperative matrices, which have an unexpected pointer passed to OpCooperativeMatrixLoadKHR
-        if (!indices.empty())
-            indices.pop_back();
+    unsigned decompose() {
+        assert(!indices.empty());
+        unsigned back = indices.back();
+        indices.pop_back();
+        return back;
     }
 };

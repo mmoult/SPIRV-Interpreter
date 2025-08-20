@@ -583,12 +583,15 @@ bool Instruction::execute(
     case spv::OpCooperativeMatrixLoadKHR: {  // 4457
         Type* result_type = getType(0, data);
         // TODO: the examples I am seeing are using one level lower than I would expect
-        Pointer& pointer = *static_cast<Pointer*>(getValue(2, data));
-        pointer.clipIndex();  // TODO this is very strange and looks incorrect.
+        Pointer pointer = *static_cast<Pointer*>(getValue(2, data));
+        unsigned back_index = pointer.decompose();
         Value* head = getHeadValue(pointer, data);
         Value* ptr = pointer.dereference(*head);
         bool row_major = static_cast<Primitive*>(getValue(3, data))->data.i32 == 0;
-        // TODO: stride doesn't seem to be used since rows and columns are already dictated by the type
+
+        unsigned stride = 1;
+        if (operands.size() >= 5) // the stride is an optional operand
+            stride = static_cast<Primitive*>(getValue(4, data))->data.u32;
 
         uint32_t total_elements = result_type->getSize();
         // Split those elements between all in the frame stack
@@ -615,7 +618,7 @@ bool Instruction::execute(
                 // - Compose the position into a flat column-major index
                 unsigned index = row_major ? i : (((i % cols) * rows) + (i / cols));
                 const auto& arr = static_cast<const Array&>(*ptr);
-                elements.push_back(arr[index]);
+                elements.push_back(arr[back_index + index * stride]);
             }
         }
         result->addElements(elements);
@@ -623,14 +626,16 @@ bool Instruction::execute(
         break;
     }
     case spv::OpCooperativeMatrixStoreKHR: {  // 4458
-        Pointer& pointer = *static_cast<Pointer*>(getValue(0, data));
-        pointer.clipIndex();  // TODO this is very strange and looks incorrect.
+        Pointer pointer = *static_cast<Pointer*>(getValue(0, data));
+        unsigned back_index = pointer.decompose();
         Value* head = getHeadValue(pointer, data);
         Value* ptr = pointer.dereference(*head);  // ptr to store data into
-
         CoopMatrix& mat = *static_cast<CoopMatrix*>(getValue(1, data));
         bool row_major = static_cast<Primitive*>(getValue(2, data))->data.i32 == 0;
-        // TODO: stride doesn't seem to be used since rows and columns are already dictated by the type
+
+        unsigned stride = 1;
+        if (operands.size() >= 4) // the stride is an optional operand
+            stride = static_cast<Primitive*>(getValue(3, data))->data.u32;
 
         const Type& mat_type = mat.getType();
         uint32_t total_elements = mat_type.getSize();
@@ -654,7 +659,7 @@ bool Instruction::execute(
                 // - Compose the position into a flat column-major index
                 uint32_t i = e_beg + j;
                 unsigned index = row_major ? i : (((i % cols) * rows) + (i / cols));
-                arr[index]->copyFrom(*mat[j]);
+                arr[index]->copyFrom(*mat[back_index + j * stride]);
             }
         }
         break;
