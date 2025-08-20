@@ -1342,15 +1342,38 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::UINT);
         break;
     }
-    case spv::OpSMod: {  // 139
-        // TODO: Result undefined if denominator is -1 and numerator is -max for the primitive's type (in which case,
-        // there is an overflow).
+    case spv::OpSRem: {  // 138
         BinOp fx = [](const Primitive* a, const Primitive* b) {
-            if (b->data.u32 == 0) {
+            if (b->data.i32 == 0) {
+                Console::warn("SRem undefined since divisor is 0!");
+                return Primitive(0);
+            }
+            if (a->data.i32 == std::numeric_limits<int32_t>::min() && b->data.i32 == -1) {
+                Console::warn("SRem undefined since dividend is INT_MIN and divisor is -1 causing overflow!");
+                return Primitive(0);
+            }
+            return Primitive(a->data.i32 % b->data.i32);
+        };
+        OpDst dst {checkRef(dst_type_at, data_len), result_at};
+        element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::INT);
+        break;
+    }
+    case spv::OpSMod: {  // 139
+        BinOp fx = [](const Primitive* a, const Primitive* b) {
+            if (b->data.i32 == 0) {
                 Console::warn("SMod undefined since divisor is 0!");
                 return Primitive(0);
             }
-            return Primitive(a->data.u32 % b->data.u32);
+            if (a->data.i32 == std::numeric_limits<int32_t>::min() && b->data.i32 == -1) {
+                Console::warn("SMod undefined since dividend is INT_MIN and divisor is -1 causing overflow!");
+                return Primitive(0);
+            }
+            int res = a->data.i32 % b->data.i32;
+            if (res != 0 && ((a->data.i32 ^ b->data.i32) < 0)) {
+                // If the dividend and divisor have different signs, we need to adjust the result
+                res += b->data.i32;
+            }
+            return Primitive(res);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::INT);
