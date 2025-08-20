@@ -1345,7 +1345,11 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpSRem: {  // 138
         BinOp fx = [](const Primitive* a, const Primitive* b) {
             if (b->data.i32 == 0) {
-                Console::warn("SMod undefined since divisor is 0!");
+                Console::warn("SRem undefined since divisor is 0!");
+                return Primitive(0);
+            }
+            if (a->data.i32 == std::numeric_limits<int32_t>::min() && b->data.i32 == -1) {
+                Console::warn("SRem undefined since dividend is UINT_MIN and divisor is -1 causing overflow!");
                 return Primitive(0);
             }
             return Primitive(a->data.i32 % b->data.i32);
@@ -1365,7 +1369,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 return Primitive(0);
             }
             int res = a->data.i32 % b->data.i32;
-            if (res !=0 && ((a->data.i32 ^ b->data.i32) < 0)) {
+            if (res != 0 && ((a->data.i32 ^ b->data.i32) < 0)) {
                 // If the dividend and divisor have different signs, we need to adjust the result
                 res += b->data.i32;
             }
