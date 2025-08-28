@@ -284,12 +284,14 @@ Value* composite_extract(Value* composite, unsigned index_start, const std::vect
     return ptr.dereference(*composite);
 }
 
-DataType element_base(const Value& operand) {
-    const Type& type = operand.getType();
+DataType type_base(const Type& type) {
     auto base = type.getBase();
     if (base == DataType::ARRAY || base == DataType::COOP_MATRIX)
         base = type.getElement().getBase();
     return base;
+}
+DataType element_base(const Value& operand) {
+    return type_base(operand.getType());
 }
 
 struct OpDst {
@@ -684,7 +686,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpConstantNull:  // 46
     {
         const Type* ret_type = getType(dst_type_at, data);
-        data[result_at].redefine(ret_type->construct());
+        data[result_at].redefine(ret_type->construct(opcode == spv::OpUndef));
         break;
     }
     case spv::OpString:  // 7
@@ -1827,6 +1829,48 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         INT_E_BIN_OP(&);
     case spv::OpNot:  // 200
         INT_E_UNARY_OP(~);
+    case spv::OpBitFieldInsert: {  // 201
+        const auto& offset_p = static_cast<const Primitive&>(*getValue(src_at + 2, data));
+        if (auto base = offset_p.getType().getBase(); base != DataType::INT && base != DataType::UINT)
+            throw std::runtime_error("The type of bitfield insert offset operand must be an integer!");
+        uint32_t offset = offset_p.data.u32;
+        const auto& count_p = static_cast<const Primitive&>(*getValue(src_at + 3, data));
+        if (auto base = count_p.getType().getBase(); base != DataType::INT && base != DataType::UINT)
+            throw std::runtime_error("The type of bitfield insert count operand must be an integer!");
+
+        const Value* base_v = getValue(src_at, data);
+        const Value* insert_v = getValue(src_at + 1, data);
+        // Check the type of base_v and insert_v as ints (either signed or unsigned) manually
+        auto base_base = element_base(*base_v);
+        auto insert_base = element_base(*insert_v);
+        assert(base_base == DataType::INT || base_base == DataType::UINT);
+        assert(insert_base == DataType::INT || insert_base == DataType::UINT);
+
+        uint32_t src_mask = ((1 << count_p.data.u32) - 1);
+        uint32_t insertion_mask = ~(src_mask << offset);
+
+        BinOp fx_s = [&](const Primitive* a, const Primitive* b) {
+            return int32_t((a->data.u32 & insertion_mask) | ((b->data.u32 & src_mask) << offset));
+        };
+        BinOp fx_u = [&](const Primitive* a, const Primitive* b) {
+            uint32_t base = (a->data.u32 & insertion_mask);
+            uint32_t insert = ((b->data.u32 & src_mask) << offset);
+            return insert | base;
+        };
+        bool is_result_signed = type_base(*getType(dst_type_at, data)) == DataType::INT;
+        assert(is_result_signed || type_base(*getType(dst_type_at, data)) == DataType::UINT);
+        OpDst dst {std::get<unsigned>(operands[dst_type_at].raw), result_at};
+        element_bin_op(
+            // No need to checkRef for the first two arguments since they have been checked already
+            std::get<unsigned>(operands[src_at].raw),
+            std::get<unsigned>(operands[src_at + 1].raw),
+            dst,
+            data,
+            is_result_signed? fx_s : fx_u,
+            DataType::VOID
+        );
+        break;
+    }
     case spv::OpBitFieldSExtract:  // 202
     case spv::OpBitFieldUExtract:  // 203
     {
@@ -1900,6 +1944,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         break;
     }
     case spv::OpAtomicIAdd: {  // 234
+        // 0={Pointer id} 1={Memory Scope id} 2={Memory Semantics id} 3={Value id}
         Primitive& prev_val = static_cast<Primitive&>(*getFromPointer(src_at, data));
         assert(prev_val.getType().getBase() == DataType::UINT || prev_val.getType().getBase() == DataType::INT);
         Value* ret = getType(dst_type_at, data)->construct();

@@ -58,7 +58,10 @@ for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True):
         for i in range(len(file_types)):
             prefix = file_types[i]
             if file.startswith(prefix):
-                num = extract_num(file, prefix)
+                try:
+                    num = extract_num(file, prefix)
+                except ValueError:
+                    continue
                 if not num in configs:
                     configs[num] = [None] * len(file_types)
                 if configs[num][i] is not None:

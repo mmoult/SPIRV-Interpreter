@@ -46,16 +46,21 @@ public:
         data.b32 = b32;
     }
     // Create a blank primitive for the given type
-    Primitive(const Type& t) : Value(t) {
+    Primitive(const Type& t, bool undef = true) : Value(t) {
         assert(isPrimitive(t.getBase()));
-        // Initialize to dummy values (instead of 0 to indicate visibility and help user catch errors)
-        if (t.getBase() == FLOAT)
-            data.fp32 = std::nanf("1");
-        else
-            // Although undefined values should not appear in outputs, they may be used in intermediate calculations
-            // where the result is not used. Assuming 32 and 16 are the two most common precisions, avoid the
-            // circumstance where the dummy value triggers an assert for being too large to fit in a signed integer.
-            data.u32 = 0x1ABC2DEF;
+
+        if (undef) {
+            // Initialize to dummy values (instead of 0 to indicate visibility and help user catch errors)
+            if (t.getBase() == FLOAT)
+                data.fp32 = std::nanf("1");
+            else
+                // Although undefined values should not appear in outputs, they may be used in intermediate calculations
+                // where the result is not used. Assuming 32 and 16 are the two most common precisions, avoid the
+                // circumstance where the dummy value triggers an assert for being too large to fit in a signed integer.
+                data.u32 = 0x1ABC2DEF;
+        } else
+            // Otherwise, set to "null" value, as described by OpConstantNull.
+            data.u32 = 0;
     }
 
     static bool isPrimitive(DataType base) {

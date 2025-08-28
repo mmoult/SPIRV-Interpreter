@@ -91,9 +91,10 @@ class Type final : public Valuable {
 
     /// @brief Creates a value corresponding to this type, with optional inputs
     /// @param values an optional vector of values to use
+    /// @param undef whether the values constructed should be undefined
     /// @return a new value whose ownership belongs to the caller
     /// @throws if the type cannot be constructed
-    [[nodiscard]] Value* construct(std::vector<const Value*>* values) const noexcept(false);
+    [[nodiscard]] Value* construct(std::vector<const Value*>* values, bool undef = true) const noexcept(false);
 
 public:
     inline Type() noexcept(true) : base(DataType::VOID), subSize(0), subElement(nullptr) {}
@@ -206,10 +207,11 @@ public:
     // Other methods:
 
     /// @brief Creates a value corresponding to this type, filling in values with dummies as necessary
+    /// @param undef whether the values constructed should be undefined
     /// @return a new value whose ownership belongs to the caller
     /// @throws if the type cannot be constructed
-    [[nodiscard]] inline Value* construct() const noexcept(false) {
-        return construct(nullptr);
+    [[nodiscard]] inline Value* construct(bool undef = true) const noexcept(false) {
+        return construct(nullptr, undef);
     }
     /// @brief Creates a value corresponding to this type with given inputs (used for fields, elements, etc)
     /// @param values a vector of values to use

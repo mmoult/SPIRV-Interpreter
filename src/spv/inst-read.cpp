@@ -281,6 +281,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpBitwiseOr:  // 197
     case spv::OpBitwiseXor:  // 198
     case spv::OpBitwiseAnd:  // 199
+    case spv::OpMemoryBarrier:  // 225
     case spv::OpPtrEqual:  // 401
     case spv::OpPtrNotEqual:  // 402
     case spv::OpExecuteCallableKHR:  // 4446
@@ -393,11 +394,12 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
+    case spv::OpBitFieldInsert:  // 201
     case spv::OpAtomicIAdd:  // 234
-        to_load.push_back(Type::REF);  // pointer
-        to_load.push_back(Type::REF);  // memory
-        to_load.push_back(Type::REF);  // semantics
-        to_load.push_back(Type::REF);  // value
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
         break;
     case spv::OpPhi:  // 245
         to_load.push_back(Type::REF);  // value

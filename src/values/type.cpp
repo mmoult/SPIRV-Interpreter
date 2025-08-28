@@ -19,7 +19,7 @@ import value.raytrace.rayQuery;
 import value.sampler;
 import value.string;
 
-Value* Type::construct(std::vector<const Value*>* values) const {
+Value* Type::construct(std::vector<const Value*>* values, bool undef) const {
     switch (base) {
     default:
         throw std::runtime_error("Cannot construct unsupported type!");
@@ -30,7 +30,7 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     case DataType::UINT:
     case DataType::INT:
     case DataType::BOOL: {
-        Primitive* prim = new Primitive(*this);
+        Primitive* prim = new Primitive(*this, undef);
         if (values == nullptr)
             return prim;
         if (values->empty() || values->size() != 1) {
@@ -63,7 +63,7 @@ Value* Type::construct(std::vector<const Value*>* values) const {
         if (values != nullptr)
             agg->addElements(*values);
         else if (base != DataType::COOP_MATRIX)
-            agg->dummyFill();
+            agg->dummyFill(undef);
         return agg;
     }
     case DataType::STRING:
@@ -79,7 +79,7 @@ Value* Type::construct(std::vector<const Value*>* values) const {
     case DataType::POINTER:
         // We cannot actually construct a pointer, nor does that conceptually make sense. When this is requested, the
         // pointer is a shallow wrapper to indicate storage settings. In that case, construct the underlying value
-        return subElement->construct();
+        return subElement->construct(undef);
     }
 }
 

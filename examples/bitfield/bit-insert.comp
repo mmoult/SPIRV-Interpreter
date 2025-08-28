@@ -1,0 +1,23 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant, std430) uniform Operands
+{
+    uvec4 insert;
+    int vals[4];
+} ops;
+
+layout(std140, binding = 1) buffer Res {
+   uvec4 res[16];
+};
+
+void main()
+{
+    uvec4 base = uvec4(res[gl_LocalInvocationIndex].x);
+    res[gl_LocalInvocationIndex] = bitfieldInsert(
+        base,
+        ops.insert,
+        ops.vals[gl_LocalInvocationIndex % 4], // offset = 0,1,2,3, 0,1,2,3, ...
+        ops.vals[gl_LocalInvocationIndex / 4]  // bits =   0,0,0,0, 1,1,1,1, ...
+    );
+}

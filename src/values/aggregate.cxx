@@ -73,9 +73,9 @@ public:
         }
     }
 
-    void dummyFill() noexcept(false) {
+    void dummyFill(bool undef = true) noexcept(false) {
         for (unsigned i = 0; i < getSize(); ++i) {
-            Value* val = getTypeAt(i).construct();
+            Value* val = getTypeAt(i).construct(undef);
             elements.push_back(val);
         }
     }
