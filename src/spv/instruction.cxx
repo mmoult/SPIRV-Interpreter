@@ -321,6 +321,7 @@ public:
     }
 private:
     void applyVarDeco(DecoQueue* queue, Variable& var, unsigned result_at) const;
+
 public:
     /// @brief Create the instruction result from the operands.
     /// This is first called before execution (for static instructions) but is also a fallback during
@@ -371,4 +372,7 @@ public:
             return std::get<unsigned>(operands[0].raw);
         return 0;
     }
+
+    /// @brief Select a name for the variable. Must be performed after value initialization
+    void selectName(Variable& var) const;
 };

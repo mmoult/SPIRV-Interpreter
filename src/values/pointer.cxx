@@ -12,6 +12,7 @@ module;
 #include "value.hpp"
 export module value.pointer;
 import value.aggregate;
+import value.coopMatrix;
 
 export class Pointer final : public Value {
     /// @brief an index in Data which all indices point into
@@ -46,14 +47,24 @@ public:
         Value* res = &start;
         for (unsigned idx : indices) {
             if (DataType dt = res->getType().getBase();
-                dt != DataType::ARRAY && dt != DataType::STRUCT && dt != DataType::COOP_MATRIX
-            ) {
+                dt != DataType::ARRAY && dt != DataType::STRUCT && dt != DataType::COOP_MATRIX) {
                 std::stringstream error;
                 error << "Cannot extract from non-composite type!";
                 throw std::runtime_error(error.str());
             }
             Aggregate& agg = *static_cast<Aggregate*>(res);
             if (idx >= agg.getSize()) {
+                if (agg.getType().getBase() == DataType::COOP_MATRIX && static_cast<CoopMatrix&>(agg).isUnsized()) {
+                    // Cooperative matrices have complications since their size may not be known
+                    // If it is still indeterminate, push the index within bounds
+                    if (agg.getSize() < 1)
+                        throw std::runtime_error("Cannot access within an empty coopmat!");
+                    idx = 0;
+                } else {
+                    std::stringstream error;
+                    error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
+                    throw std::runtime_error(error.str());
+                }
                 std::stringstream error;
                 error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
                 throw std::runtime_error(error.str());

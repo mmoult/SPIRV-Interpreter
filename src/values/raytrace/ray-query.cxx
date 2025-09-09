@@ -92,7 +92,9 @@ public:
     }
 
     void copyFrom(const Value& new_value) noexcept(false) override {
-        throw std::runtime_error("Unimplemented copy from ray query!");
+        Value::copyFrom(new_value);
+        auto& other = static_cast<const RayQuery&>(new_value);
+        accelStruct = other.accelStruct;
     }
 
     void copyReinterp(const Value& other) noexcept(false) override {

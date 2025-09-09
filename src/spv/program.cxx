@@ -50,6 +50,8 @@ export class Program {
     unsigned localInvocId = 0;
     unsigned globalInvocId = 0;
     unsigned workGroupSize = 0;
+    // A list of static vars that need thread-level initialization before beginning main
+    std::vector<unsigned> threadVars;
 
     std::vector<RayTraceSubstage> misses;
     std::vector<RayTraceSubstage> hits;
@@ -257,82 +259,100 @@ public:
         std::vector<unsigned>& outs = (stage == nullptr) ? this->outs : stage->outs;
         std::vector<unsigned>& specs = (stage == nullptr) ? this->specs : stage->specs;
 
-        auto process_visible_io = [&](const Instruction& inst) {
+        unsigned local_idx_loc = 0;
+        unsigned local_id_loc = 0;
+        unsigned global_id_loc = 0;
+
+        auto process_visible_io = [&](const Instruction& inst, unsigned location) {
+            if (location != 0) {
+                // Some builtins need to be removed from the interface, in which case they continue,
+                // others just need to report results, in which they can be saved and break.
+                if (stage == nullptr) {
+                    switch (inst.getVarBuiltIn(global)) {
+                    case spv::BuiltIn::BuiltInLocalInvocationIndex:
+                    case spv::BuiltIn::BuiltInInvocationId:
+                        localInvocIdx = inst.getResult();
+                        local_idx_loc = location;
+                        return;
+                    case spv::BuiltIn::BuiltInLocalInvocationId:
+                        localInvocId = inst.getResult();
+                        local_id_loc = location;
+                        return;
+                    case spv::BuiltIn::BuiltInGlobalInvocationId:
+                        globalInvocId = inst.getResult();
+                        global_id_loc = location;
+                        return;
+                    case spv::BuiltIn::BuiltInWorkgroupSize:
+                        workGroupSize = inst.getResult();
+                        break;
+                    default:
+                        break;
+                    }
+                } else if (stage->handleStaticInst(inst))
+                    return;
+            }
+
             inst.ioGen(global, ins, outs, specs, provided, insts[entry]);
         };
 
         Instruction::DecoQueue decorations(insts.getInstructions());
-        unsigned location = insts.getLastBreak();
-        unsigned local_idx_loc = 0;
-        unsigned local_id_loc = 0;
-        unsigned global_id_loc = 0;
         bool entry_found = false;  // whether the entry instruction has been found
-        bool static_ctn = true;  // whether we can construct results statically (until first OpFunction)
-        std::vector<unsigned> vars;
+        bool static_sec = true;  // whether we can construct results statically (until first OpFunction)
+        std::vector<unsigned> static_vars;
 
-        for (; location < insts.size(); ++location) {
+        for (unsigned location = insts.getLastBreak(); location < insts.size(); ++location) {
             Instruction& inst = insts[location];
             auto opcode = inst.getOpcode();
 
-            if (static_ctn || inst.isStaticDependent()) {
-                if (opcode == spv::OpFunction) {
-                    // Static construction is no longer legal at the first non-static
-                    static_ctn = false;
-
-                    if (!entry_found)
-                        break;
-                    // OpFunction is static dependent, so intended fallthrough
-                }
-
+            if (static_sec) {
                 // silently ignore all but the first entry found
                 // (I think it is legal to have multiple- maybe add a way to distinguish desired?)
                 if (opcode == spv::OpEntryPoint && !entry_found) {
                     entry_found = true;
                     entry = location;
+                } else if (opcode == spv::OpFunction) {
+                    static_sec = false;  // Static construction is no longer legal at the first non-static
+                    if (!entry_found)
+                        break;  // the entry point must be seen before the static section ends
+                    // OpFunction is static dependent, so intended fallthrough
                 }
+            }
 
+            if (static_sec || inst.isStaticDependent()) {
                 // Process the instruction as necessary
-                // If it has a static result, let it execute now on the data vector
-                if (!inst.queueDecoration(data.getBound(), location, decorations)) {
-                    inst.makeResult(global, location, &decorations);
+                if (inst.queueDecoration(data.getBound(), location, decorations))
+                    continue;
 
-                    if (static_ctn) {
-                        // Add the variable to the list to have its value initialized later. This must be done since the
-                        // type may be a reference pointer.
-                        // Note: we don't need to worry about variable declarations in non-static contexts since they
-                        // will be executed dynamically (which will then populate the value).
-                        if (opcode == spv::OpVariable)
-                            vars.push_back(location);
+                inst.makeResult(global, location, &decorations);
 
-                        // Some builtins need to be removed from the interface, in which case they continue,
-                        // others just need to report results, in which they can be saved and break.
-                        if (stage == nullptr) {
-                            switch (inst.getVarBuiltIn(global)) {
-                            case spv::BuiltIn::BuiltInLocalInvocationIndex:
-                            case spv::BuiltIn::BuiltInInvocationId:
-                                localInvocIdx = inst.getResult();
-                                local_idx_loc = location;
-                                continue;
-                            case spv::BuiltIn::BuiltInLocalInvocationId:
-                                localInvocId = inst.getResult();
-                                local_id_loc = location;
-                                continue;
-                            case spv::BuiltIn::BuiltInGlobalInvocationId:
-                                globalInvocId = inst.getResult();
-                                global_id_loc = location;
-                                continue;
-                            case spv::BuiltIn::BuiltInWorkgroupSize:
-                                workGroupSize = inst.getResult();
-                                break;
-                            default:
-                                break;
-                            }
-                        } else if (stage->handleStaticInst(inst))
-                            continue;
-
-                        process_visible_io(inst);
-                    }
+                if (static_sec) {
+                    if (inst.getOpcode() == spv::OpVariable)
+                        static_vars.push_back(location);
+                    else
+                        process_visible_io(inst, location);
                 }
+            }
+        }
+        if (!entry_found)
+            throw std::runtime_error("Program is missing entry function!");
+
+        // Post processing. Had to delay init of static variables in case their pointer was forward declared
+        for (unsigned location : static_vars) {
+            Instruction& inst = insts[location];
+
+            // Note: we don't need to worry about variable declarations in non-static contexts since they
+            // will be executed dynamically (which will then populate the value).
+            if (inst.getOpcode() == spv::OpVariable) {
+                Variable* var_v = global[inst.getResult()].getVariable();
+                if (var_v->isThreaded())
+                    threadVars.push_back(location);
+                else {
+                    Type* var_type = global[inst.getResultType()].getType();
+                    var_v->initValue(*var_type);
+                    inst.selectName(*var_v);
+                }
+
+                process_visible_io(inst, location);
             }
         }
 
@@ -358,19 +378,8 @@ public:
 
             // If no id variable is used by the shader, no need to have the user define which invocation to use.
             if (top_var != 0)
-                process_visible_io(insts[top_var]);
+                process_visible_io(insts[top_var], 0);
         }
-
-        for (unsigned var : vars) {
-            // Had to delay initialization of static variable's value in case the pointer was forward declared
-            Instruction& inst = insts[var];
-            assert(inst.getOpcode() == spv::OpVariable);
-            Type* var_type = global[inst.getResultType()].getType();
-            global[inst.getResult()].getVariable()->initValue(*var_type);
-        }
-
-        if (!entry_found)
-            throw std::runtime_error("Program is missing entry function!");
 
         // Load any connected rt substages
         if (provided.contains(SBT_NAME) && insts[entry].getShaderStage() == spv::ExecutionModelRayGenerationKHR) {
@@ -684,6 +693,7 @@ public:
         if (globalInvocId != 0)
             global_invoc_id = global[globalInvocId].getVariable();
 
+        bool use_sbt = !sbt.isEmpty();
         for (unsigned i = 0; i < num_invocations; ++i) {
             unsigned local_x = i % ep.sizeX;
             unsigned local_y = (i / ep.sizeX) % ep.sizeY;
@@ -693,6 +703,7 @@ public:
             invoc_globals.push_back(invoc_global);
             active_threads.insert(i);
             live_threads.insert(i);
+
             // Copy over builtins from the global scope to the invocation's scope and populate with their values
             if (global_invoc_id != nullptr) {
                 // GlobalInvocationID = WorkGroupID * WorkGroupSize + LocalInvocationID
@@ -758,10 +769,19 @@ public:
                 }
             }
 
-            frame_stacks[i].push_back(new Frame(ep.getLocation(), entry_args, 0, *invoc_global));
+            Frame* new_frame = new Frame(ep.getLocation(), entry_args, 0, *invoc_global);
+            frame_stacks[i].push_back(new_frame);
+
+            // initialize all thread-focused "static" vars before we start main
+            for (unsigned threadVar : threadVars) {
+                Instruction& inst = insts[threadVar];
+                assert(inst.getOpcode() == spv::OpVariable);
+                bool blocked = inst.execute(new_frame->getData(), frame_stacks, i, num_invocations, verbose, use_sbt);
+                assert(!blocked);
+                Variable* var_v = global[inst.getResult()].getVariable();
+            }
         }
 
-        bool use_sbt = !sbt.isEmpty();
         // Right now, do something like round robin scheduling. In the future, we will want to give other options
         // through the command line
         unsigned next_invoc = num_invocations - 1;
@@ -795,6 +815,7 @@ public:
             }
 
             unsigned frame_depth = frame_stack.size();
+            // If executing the instruction blocks the thread, remove it from the active list
             if (insts[i_at].execute(cur_data, frame_stacks, next_invoc, num_invocations, verbose, use_sbt))
                 active_threads.erase(next_invoc);
 

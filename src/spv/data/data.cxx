@@ -14,6 +14,7 @@ module;
 #include "../../values/value.hpp"
 export module spv.data.data;
 import value.aggregate;
+import value.coopMatrix;
 import value.primitive;
 import value.string;
 
@@ -92,10 +93,13 @@ public:
         if (t.getBase() != DataType::POINTER)
             throw std::invalid_argument("Cannot initialize variable with non-pointer type!");
         this->val = t.getPointedTo().construct();
+        if (val->getType().getBase() == DataType::COOP_MATRIX)
+            static_cast<CoopMatrix*>(this->val)->setUnsized();
     }
 
     bool isThreaded() const {
-        return storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction;
+        return (val != nullptr && val->getType().getBase() == DataType::COOP_MATRIX) ||
+               storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction;
     }
 
     const Value& getVal() const {

@@ -193,6 +193,9 @@ bool Instruction::execute(
             data.local(result_at).redefine(var);
         }
         var->initValue(*getType(0, data));
+        selectName(*var);
+        if (Value& val = var->getVal(); val.getType().getBase() == DataType::COOP_MATRIX)
+            static_cast<CoopMatrix&>(val).enforceSize(invocation, num_invocations);
         if (operands.size() > 3) {  // included default value
             Value* defaultVal = getValue(3, data);
             var->getVal().copyFrom(*defaultVal);
@@ -221,8 +224,6 @@ bool Instruction::execute(
         Value* val = getValue(1, data);
         Value& store_to = *getFromPointer(0, data);
         store_to.copyFrom(*val);
-        if (store_to.getType().getBase() == DataType::COOP_MATRIX)
-            static_cast<CoopMatrix&>(store_to).enforceSize(invocation, num_invocations);
         break;
     }
     case spv::OpImageWrite: {  // 99
@@ -582,7 +583,6 @@ bool Instruction::execute(
     }
     case spv::OpCooperativeMatrixLoadKHR: {  // 4457
         Type* result_type = getType(0, data);
-        // TODO: the examples I am seeing are using one level lower than I would expect
         Pointer pointer = *static_cast<Pointer*>(getValue(2, data));
         unsigned back_index = pointer.decompose();
         Value* head = getHeadValue(pointer, data);
@@ -590,7 +590,7 @@ bool Instruction::execute(
         bool row_major = static_cast<Primitive*>(getValue(3, data))->data.i32 == 0;
 
         unsigned stride = 1;
-        if (operands.size() >= 5) // the stride is an optional operand
+        if (operands.size() >= 5)  // the stride is an optional operand
             stride = static_cast<Primitive*>(getValue(4, data))->data.u32;
 
         uint32_t total_elements = result_type->getSize();
@@ -631,10 +631,11 @@ bool Instruction::execute(
         Value* head = getHeadValue(pointer, data);
         Value* ptr = pointer.dereference(*head);  // ptr to store data into
         CoopMatrix& mat = *static_cast<CoopMatrix*>(getValue(1, data));
+        mat.enforceSize(invocation, num_invocations);
         bool row_major = static_cast<Primitive*>(getValue(2, data))->data.i32 == 0;
 
         unsigned stride = 1;
-        if (operands.size() >= 4) // the stride is an optional operand
+        if (operands.size() >= 4)  // the stride is an optional operand
             stride = static_cast<Primitive*>(getValue(3, data))->data.u32;
 
         const Type& mat_type = mat.getType();
@@ -679,9 +680,12 @@ bool Instruction::execute(
         // Cooperative Matrices distribute the matrix elements across invocations. To compute the matrix multplication,
         // we will have to reach this dispersed data.
         Type& res_type = *getType(0, data);
-        const auto& amat = static_cast<const CoopMatrix&>(*getValue(2, data));
-        const auto& bmat = static_cast<const CoopMatrix&>(*getValue(3, data));
-        const auto& cmat = static_cast<const CoopMatrix&>(*getValue(4, data));
+        auto& amat = static_cast<CoopMatrix&>(*getValue(2, data));
+        amat.enforceSize(invocation, num_invocations);
+        auto& bmat = static_cast<CoopMatrix&>(*getValue(3, data));
+        bmat.enforceSize(invocation, num_invocations);
+        auto& cmat = static_cast<CoopMatrix&>(*getValue(4, data));
+        cmat.enforceSize(invocation, num_invocations);
 
         CoopMatrix& result = static_cast<CoopMatrix&>(*res_type.construct());
         dst_val = &result;

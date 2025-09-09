@@ -34,6 +34,7 @@ import spv.token;
 import util.arrayMath;
 import util.fpconvert;
 import value.aggregate;
+import value.coopMatrix;
 import value.image;
 import value.pointer;
 import value.primitive;
@@ -64,8 +65,6 @@ const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigne
 }
 
 void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, unsigned result_at) const {
-    bool set_name = false;
-    bool empty_name = false;
     if (const auto* decorations = find_request(queue, result_at); decorations != nullptr) {
         for (auto location : *decorations) {
             const Instruction& deco = queue->insts[location];
@@ -73,12 +72,8 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
             case spv::OpName: {  // 5
                 assert(deco.operands[1].type == Token::Type::STRING);
                 std::string name = std::get<std::string>(deco.operands[1].raw);
-                if (name.empty())
-                    empty_name = true;
-                else {
+                if (!name.empty())
                     var.setName(name);
-                    set_name = true;
-                }
                 break;
             }
             case spv::OpDecorate: {  // 71
@@ -105,24 +100,33 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
             }
         }
     }
-    if (!set_name) {
-        // It is helpful to name the builtin after what it is, but this may collide with custom user variables with the
-        // same name. The best approach would be to track names used and enforce uniqueness.
-        if (auto builtin = var.getBuiltIn(); builtin != spv::BuiltIn::BuiltInMax) {
-            set_name = true;
-            var.setName(spv::BuiltInToString(builtin));
-        } else {
-            if (empty_name) {
-                // Use the name of the type, (if that type has a custom name)
-                const Type& type = var.getVal().getType();
-                if (std::string type_name = type.getName(); !type_name.empty()) {
-                    set_name = true;
-                    var.setName(type_name);
-                }
+}
+
+void Instruction::selectName(Variable& var) const {
+    // Should NOT be called unless var has a value!
+    if (!var.getName().empty())
+        return;
+    // In the event that no / a blank name is provided, attempt to name the variable based on its attributes. Priority
+    // of name selection:
+    // 1) Using an explicit OpName (set before this is called)
+    // 2) After the builtin it follows
+    // 3) From the name of its type
+    // 4) Stringize the return location
+    // It is possible for these names to collide with each other, but we don't check this yet...
+    if (auto builtin = var.getBuiltIn(); builtin != spv::BuiltIn::BuiltInMax)
+        var.setName(spv::BuiltInToString(builtin));
+    else {
+        bool selected = false;
+        if (var.getName().empty()) {
+            // Use the name of the type (if that type has a custom name)
+            const Type& type = var.getVal().getType();
+            if (std::string type_name = type.getName(); !type_name.empty()) {
+                selected = true;
+                var.setName(type_name);
             }
-            if (!set_name)
-                var.setName(std::to_string(result_at));
         }
+        if (!selected)
+            var.setName(std::to_string(getResult()));
     }
 }
 
@@ -559,8 +563,10 @@ void element_tern_op(
     std::vector<const Value*> pprims;
 
     if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
-        assert((type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX) &&
-               (type3.getBase() == DataType::ARRAY || type3.getBase() == DataType::COOP_MATRIX));
+        assert(
+            (type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX) &&
+            (type3.getBase() == DataType::ARRAY || type3.getBase() == DataType::COOP_MATRIX)
+        );
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         const Array& op3 = *static_cast<const Array*>(src3);
@@ -580,8 +586,10 @@ void element_tern_op(
             pprims.push_back(&prims[i]);
         }
     } else {
-        assert((type2.getBase() != DataType::ARRAY && type2.getBase() != DataType::COOP_MATRIX) ||
-               (type3.getBase() != DataType::ARRAY && type3.getBase() != DataType::COOP_MATRIX));
+        assert(
+            (type2.getBase() != DataType::ARRAY && type2.getBase() != DataType::COOP_MATRIX) ||
+            (type3.getBase() != DataType::ARRAY && type3.getBase() != DataType::COOP_MATRIX)
+        );
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         const Primitive* op3 = static_cast<const Primitive*>(src3);
@@ -978,12 +986,15 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             }
         }
         auto* val = ret->construct(values);
+        if (ret->getBase() == DataType::COOP_MATRIX)
+            static_cast<CoopMatrix*>(val)->setUnsized();
 
         if (opcode != spv::OpSpecConstantComposite) {
             data[result_at].redefine(val);
         } else {
             Variable* var = new Variable(val, spv::StorageClass::StorageClassPushConstant, true);
             applyVarDeco(queue, *var, result_at);
+            selectName(*var);
             data[result_at].redefine(var);
         }
         break;
@@ -999,6 +1010,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         Primitive* default_val = new Primitive(opcode == spv::OpSpecConstantTrue);
         Variable* var = new Variable(default_val, spv::StorageClass::StorageClassPushConstant, true);
         applyVarDeco(queue, *var, result_at);
+        selectName(*var);
         data[result_at].redefine(var);
         break;
     }
@@ -1009,6 +1021,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         prim->cast(*ret);
         Variable* var = new Variable(prim, spv::StorageClass::StorageClassPushConstant, true);
         applyVarDeco(queue, *var, result_at);
+        selectName(*var);
         data[result_at].redefine(var);
         break;
     }
@@ -1117,14 +1130,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpVariable: {  // 59
         assert(hasResultType);
-        Type* result_type = getType(dst_type_at, data);
         checkRef(dst_type_at, data.getBound());
         assert(operands[2].type == Token::Type::CONST);
         unsigned storage = std::get<unsigned>(operands[2].raw);
-        // Note: initialization of the var's value is handled by the program.
+        // Note: We cannot necessarily initalize val now, because of some forward declarations of type.
+        // Program is responsible for construction of vars within a static context and execute will handle dynamic.
         Variable* var = new Variable(nullptr, static_cast<spv::StorageClass>(storage), false);
-        if (!var->isThreaded())
-            var->initValue(*result_type);
         applyVarDeco(queue, *var, result_at);
         data[result_at].redefine(var);
         break;
@@ -1866,7 +1877,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             std::get<unsigned>(operands[src_at + 1].raw),
             dst,
             data,
-            is_result_signed? fx_s : fx_u,
+            is_result_signed ? fx_s : fx_u,
             DataType::VOID
         );
         break;

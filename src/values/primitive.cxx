@@ -325,9 +325,9 @@ public:
             // Exponent is a little tricky, since it acts like a signed int within the fp bitfield
             // * 10001 => 10000001
             // * 01110 => 01111110
-            exponent = ((exponent & 0b10000) << 3) // top bit
-                     | (((exponent & 0b01000) > 0) ? 0b01111000 : 0b0) // sign extension
-                     | (exponent & 0b00111);
+            exponent = ((exponent & 0b10000) << 3)  // top bit
+                       | (((exponent & 0b01000) > 0) ? 0b01111000 : 0b0)  // sign extension
+                       | (exponent & 0b00111);
             return sign | (exponent << 23) | mantissa;
         }
     }
