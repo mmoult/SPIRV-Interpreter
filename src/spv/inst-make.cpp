@@ -116,17 +116,14 @@ void Instruction::selectName(Variable& var) const {
     if (auto builtin = var.getBuiltIn(); builtin != spv::BuiltIn::BuiltInMax)
         var.setName(spv::BuiltInToString(builtin));
     else {
-        bool selected = false;
-        if (var.getName().empty()) {
-            // Use the name of the type (if that type has a custom name)
-            const Type& type = var.getVal().getType();
-            if (std::string type_name = type.getName(); !type_name.empty()) {
-                selected = true;
-                var.setName(type_name);
-            }
-        }
-        if (!selected)
-            var.setName(std::to_string(getResult()));
+        // Use the name of the type (if that type has a custom name)
+        const Type& type = var.getVal().getType();
+        std::string new_name;
+        if (std::string type_name = type.getName(); !type_name.empty())
+            new_name = type_name;
+        else
+            new_name = std::to_string(getResult());
+        var.setName(new_name);
     }
 }
 

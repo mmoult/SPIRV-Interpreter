@@ -771,6 +771,7 @@ public:
 
             Frame* new_frame = new Frame(ep.getLocation(), entry_args, 0, *invoc_global);
             frame_stacks[i].push_back(new_frame);
+            unsigned pre_pc = new_frame->getPC();
 
             // initialize all thread-focused "static" vars before we start main
             for (unsigned threadVar : threadVars) {
@@ -780,6 +781,8 @@ public:
                 assert(!blocked);
                 Variable* var_v = global[inst.getResult()].getVariable();
             }
+            // Restore the program counter, which may have been altered by thread var processing
+            new_frame->setPC(pre_pc);
         }
 
         // Right now, do something like round robin scheduling. In the future, we will want to give other options

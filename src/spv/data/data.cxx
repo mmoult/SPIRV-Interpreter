@@ -83,8 +83,7 @@ public:
 
     void initValue(const Type& t) {
         // Only initialize the value once
-        if (this->val != nullptr)
-            return;
+        assert(this->val == nullptr);
 
         // Construct the value from the given type
         // For whatever reason, the SPIR-V spec says that the type of each OpVariable must be an OpTypePointer, although
@@ -98,8 +97,7 @@ public:
     }
 
     bool isThreaded() const {
-        return (val != nullptr && val->getType().getBase() == DataType::COOP_MATRIX) ||
-               storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction;
+        return storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction;
     }
 
     const Value& getVal() const {
