@@ -20,6 +20,7 @@ module;
 #include "../values/value.hpp"
 #include "data/manager.hpp"
 module spv.instruction;
+import front.console;
 import spv.data.data;
 import spv.frame;
 import spv.token;
@@ -589,10 +590,6 @@ bool Instruction::execute(
         Value* ptr = pointer.dereference(*head);
         bool row_major = static_cast<Primitive*>(getValue(3, data))->data.i32 == 0;
 
-        unsigned stride = 1;
-        if (operands.size() >= 5)  // the stride is an optional operand
-            stride = static_cast<Primitive*>(getValue(4, data))->data.u32;
-
         uint32_t total_elements = result_type->getSize();
         // Split those elements between all in the frame stack
         uint32_t e_beg = (invocation * total_elements) / num_invocations;
@@ -601,6 +598,14 @@ bool Instruction::execute(
         // The extension spec: https://github.khronos.org/SPIRV-Registry/extensions/KHR/SPV_KHR_cooperative_matrix.html
         uint32_t rows = result_type->getNumRows();
         uint32_t cols = total_elements / rows;
+
+        unsigned stride = row_major ? cols : rows;
+        if (operands.size() >= 5) {
+            unsigned new_stride = static_cast<Primitive*>(getValue(4, data))->data.u32;
+            if (new_stride < stride)
+                Console::warn("Given stride is less than the major axis length. Load will read overlapping elements!");
+            stride = new_stride;
+        }
 
         CoopMatrix* result = new CoopMatrix(result_type->getElement(), rows, cols);
 
@@ -612,13 +617,14 @@ bool Instruction::execute(
                 // Copy the scalar as many times as necessary
                 elements.push_back(ptr);
             else {
-                // If the source and dest are both row-major, the index may be used as-is
-                // Otherwise, we need to get a new index:
+                // We may need to get a new index:
                 // - Decompose the row-major index into a row and column position
-                // - Compose the position into a flat column-major index
-                unsigned index = row_major ? i : (((i % cols) * rows) + (i / cols));
+                unsigned x = i % cols;
+                unsigned y = i / cols;
+                // - Compose the position into a flat index, using the specified stride
+                unsigned index = row_major ? (y * stride) + x : (x * stride) + y;
                 const auto& arr = static_cast<const Array&>(*ptr);
-                elements.push_back(arr[back_index + index * stride]);
+                elements.push_back(arr[back_index + index]);
             }
         }
         result->addElements(elements);
@@ -634,10 +640,6 @@ bool Instruction::execute(
         mat.enforceSize(invocation, num_invocations);
         bool row_major = static_cast<Primitive*>(getValue(2, data))->data.i32 == 0;
 
-        unsigned stride = 1;
-        if (operands.size() >= 4)  // the stride is an optional operand
-            stride = static_cast<Primitive*>(getValue(3, data))->data.u32;
-
         const Type& mat_type = mat.getType();
         uint32_t total_elements = mat_type.getSize();
         // Split those elements between all in the frame stack
@@ -645,6 +647,16 @@ bool Instruction::execute(
 
         uint32_t rows = mat_type.getNumRows();
         uint32_t cols = total_elements / rows;
+
+        unsigned stride = row_major ? cols : rows;
+        if (operands.size() >= 4) {
+            unsigned new_stride = static_cast<Primitive*>(getValue(3, data))->data.u32;
+            if (new_stride < stride)
+                Console::warn(
+                    "Given stride is less than the major axis length. Store will write overlapping elements!"
+                );
+            stride = new_stride;
+        }
 
         // Pointer can be either a scalar or a vector of the desired type
         const Type& ptr_type = ptr->getType();
@@ -654,13 +666,14 @@ bool Instruction::execute(
         else {
             auto& arr = static_cast<Array&>(*ptr);
             for (uint32_t j = 0; j < mat.getSize(); ++j) {
-                // If the source and dest are both row-major, the index may be used as-is
-                // Otherwise, we need to get a new index:
-                // - Decompose the row-major index into a row and column position
-                // - Compose the position into a flat column-major index
                 uint32_t i = e_beg + j;
-                unsigned index = row_major ? i : (((i % cols) * rows) + (i / cols));
-                arr[index]->copyFrom(*mat[back_index + j * stride]);
+                // We may need to get a new index:
+                // - Decompose the row-major index into a row and column position
+                unsigned x = i % cols;
+                unsigned y = i / cols;
+                // - Compose the position into a flat index, using the specified stride
+                unsigned index = row_major ? (y * stride) + x : (x * stride) + y;
+                arr[back_index + index]->copyFrom(*mat[j]);
             }
         }
         break;

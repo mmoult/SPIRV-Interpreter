@@ -40,7 +40,7 @@ void main()
     */
     uint start = 0;
 
-    coopMatLoad(matA, values.x, start, 1, gl_CooperativeMatrixLayoutRowMajor);
+    coopMatLoad(matA, values.x, start, N, gl_CooperativeMatrixLayoutRowMajor);
     matO = func(matA);
-    coopMatStore(matO, values.x, start, 1, gl_CooperativeMatrixLayoutRowMajor);
+    coopMatStore(matO, values.x, start, N, gl_CooperativeMatrixLayoutRowMajor);
 }

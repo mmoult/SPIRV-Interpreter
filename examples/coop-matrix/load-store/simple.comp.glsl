@@ -14,9 +14,7 @@ layout(local_size_x = 4, local_size_y = 1, local_size_z = 1) in;
 const uint ROWS = 8;
 const uint COLS = 2;
 const uint SIZE = ROWS * COLS;
-
 const uint START = 0;
-const uint STRIDE = 1;
 
 layout(set = 0, binding = 0) coherent buffer Block16 {
     float x[SIZE];
@@ -35,6 +33,17 @@ void main() {
         // 2 - gl_MatrixUseAccumulator
         gl_MatrixUseAccumulator
     > m;
-    coopMatLoad(m, block.x, START, STRIDE, gl_CooperativeMatrixLayoutColumnMajor);
-    coopMatStore(m, block.x, START, STRIDE, gl_CooperativeMatrixLayoutRowMajor);
+    coopMatLoad(
+        m, // load values into this matrix
+        block.x, // transfer values from this buffer to the matrix
+        START, // the index of the initial matrix element within the buffer
+        // Elements are expected to appear in contiguous locations for the major axis
+        // For each iteration of the minor axis, there may be an extra gap, which is indicated through the stride arg
+        // Specifically, the stride is the distance between two adjacent elements on the minor axis in the input buffer.
+        // If the given stride *exceeds* the size of the major axis, the elements in the difference are unused by this
+        // load operation.
+        ROWS,
+        gl_CooperativeMatrixLayoutColumnMajor
+    );
+    coopMatStore(m, block.x, START, COLS, gl_CooperativeMatrixLayoutRowMajor);
 }

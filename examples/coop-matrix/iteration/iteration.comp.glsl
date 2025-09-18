@@ -14,9 +14,7 @@ layout(local_size_x = 4, local_size_y = 1, local_size_z = 1) in;
 const uint ROWS = 3;
 const uint COLS = 5;
 const uint SIZE = ROWS * COLS;
-
 const uint START = 0;
-const uint STRIDE = 1;
 
 layout(set = 0, binding = 0) coherent buffer Block16 {
     float x[SIZE];
@@ -28,9 +26,9 @@ float doSomething(float x) {
 
 void main() {
     coopmat<float, gl_ScopeSubgroup, ROWS, COLS, gl_MatrixUseA> a;
-    coopMatLoad(a, block.x, START, STRIDE, gl_CooperativeMatrixLayoutRowMajor);
+    coopMatLoad(a, block.x, START, COLS, gl_CooperativeMatrixLayoutRowMajor);
     for (uint i = 0; i < a.length(); ++i) {
         a[i] = doSomething(a[i]);
     }
-    coopMatStore(a, block.x, START, STRIDE, gl_CooperativeMatrixLayoutRowMajor);
+    coopMatStore(a, block.x, START, COLS, gl_CooperativeMatrixLayoutRowMajor);
 }
