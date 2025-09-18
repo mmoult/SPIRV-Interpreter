@@ -726,11 +726,11 @@ bool Instruction::execute(
             double accum = 0.0;
 
             for (unsigned j = 0; j < shared_dim; ++j) {
-                auto extract_coop_el = [&frame_stacks, num_invocations, this](unsigned idx) -> const Primitive* {
+                auto extract_coop_el = [&frame_stacks, num_invocations, this](unsigned idx, unsigned opnd) -> const Primitive* {
                     unsigned found = 0;
                     for (unsigned k = 0; k < num_invocations; ++k) {
                         auto& data = frame_stacks[k].back()->getData();
-                        const auto& mat = static_cast<const CoopMatrix&>(*getValue(2, data));
+                        const auto& mat = static_cast<const CoopMatrix&>(*getValue(opnd, data));
                         if (unsigned next = found + mat.getSize(); next <= idx)
                             found = next;
                         else
@@ -742,8 +742,8 @@ bool Instruction::execute(
 
                 // - from a: (col = j, row = result_row)
                 // - from b: (col = result_col, row = j)
-                const Primitive* a_el = extract_coop_el((result_row * shared_dim) + j);
-                const Primitive* b_el = extract_coop_el((j * result_num_cols) + result_col);
+                const Primitive* a_el = extract_coop_el((result_row * shared_dim) + j, 2);
+                const Primitive* b_el = extract_coop_el((j * result_num_cols) + result_col, 3);
                 accum += a_el->data.fp32 * b_el->data.fp32;
             }
 

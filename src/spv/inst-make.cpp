@@ -72,8 +72,7 @@ void Instruction::applyVarDeco(Instruction::DecoQueue* queue, Variable& var, uns
             case spv::OpName: {  // 5
                 assert(deco.operands[1].type == Token::Type::STRING);
                 std::string name = std::get<std::string>(deco.operands[1].raw);
-                if (!name.empty())
-                    var.setName(name);
+                var.setName(name);
                 break;
             }
             case spv::OpDecorate: {  // 71
