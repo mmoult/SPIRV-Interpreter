@@ -80,6 +80,12 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     };
     Repeat repeating = Repeat::NONE;
 
+    auto memory_operands = [&]() {
+        optional.push_back(Type::CONST);
+        optional.push_back(Type::UINT);
+        repeating = Repeat::LAST;
+    };
+
     switch (op) {
     default: {
         // Unsupported op
@@ -330,13 +336,12 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         break;
     case spv::OpLoad:  // 61
         to_load.push_back(Type::REF);
-        optional.push_back(Type::UINT);
-        repeating = Repeat::WHOLE;
+        memory_operands();
         break;
     case spv::OpStore:  // 62
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
-        optional.push_back(Type::UINT);
+        memory_operands();
         break;
     case spv::OpAccessChain:  // 65
         to_load.push_back(Type::REF);
