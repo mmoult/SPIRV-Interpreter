@@ -982,8 +982,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             }
         }
         auto* val = ret->construct(values);
-        if (ret->getBase() == DataType::COOP_MATRIX)
-            static_cast<CoopMatrix*>(val)->setUnsized();
+        auto set_unsized = [&](Value& seen) {
+            if (seen.getType().getBase() == DataType::COOP_MATRIX)
+                static_cast<CoopMatrix&>(seen).setUnsized();
+            return true;
+        };
+        val->recursiveApply(set_unsized);
 
         if (opcode != spv::OpSpecConstantComposite) {
             data[result_at].redefine(val);

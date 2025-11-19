@@ -7,6 +7,7 @@
 #define VALUES_VALUE_HPP
 
 #include <cassert>
+#include <functional>
 #include <map>
 #include <stdexcept>
 
@@ -61,6 +62,11 @@ public:
     virtual bool equals(const Value& val) const {
         return type == val.type;
     }
+
+    /// @brief Recursively applies a function to this value and all sub-values, in post-order traversal.
+    ///
+    /// @param seen the function to apply. Returns true to continue traversal, false to stop.
+    virtual void recursiveApply(const std::function<bool(Value& seen)>& usage) {}
 };
 
 using ValueMap = std::map<std::string, const Value*>;

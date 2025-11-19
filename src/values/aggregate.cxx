@@ -133,6 +133,13 @@ public:
         }
         return true;
     }
+
+    void recursiveApply(const std::function<bool(Value& seen)>& usage) override {
+        for (auto& e : elements)
+            e->recursiveApply(usage);
+
+        usage(*this);
+    }
 };
 
 export class Array : public Aggregate {

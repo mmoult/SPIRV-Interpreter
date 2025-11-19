@@ -195,8 +195,12 @@ bool Instruction::execute(
         }
         var->initValue(*getType(0, data));
         selectName(*var);
-        if (Value& val = var->getVal(); val.getType().getBase() == DataType::COOP_MATRIX)
-            static_cast<CoopMatrix&>(val).enforceSize(invocation, num_invocations);
+        auto fix_size = [&](Value& seen) {
+            if (seen.getType().getBase() == DataType::COOP_MATRIX)
+                static_cast<CoopMatrix&>(seen).enforceSize(invocation, num_invocations);
+            return true;
+        };
+        var->getVal().recursiveApply(fix_size);
         if (operands.size() > 3) {  // included default value
             Value* defaultVal = getValue(3, data);
             var->getVal().copyFrom(*defaultVal);
@@ -726,7 +730,8 @@ bool Instruction::execute(
             double accum = 0.0;
 
             for (unsigned j = 0; j < shared_dim; ++j) {
-                auto extract_coop_el = [&frame_stacks, num_invocations, this](unsigned idx, unsigned opnd) -> const Primitive* {
+                auto extract_coop_el =
+                    [&frame_stacks, num_invocations, this](unsigned idx, unsigned opnd) -> const Primitive* {
                     unsigned found = 0;
                     for (unsigned k = 0; k < num_invocations; ++k) {
                         auto& data = frame_stacks[k].back()->getData();

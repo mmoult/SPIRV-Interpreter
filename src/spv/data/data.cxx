@@ -92,8 +92,12 @@ public:
         if (t.getBase() != DataType::POINTER)
             throw std::invalid_argument("Cannot initialize variable with non-pointer type!");
         this->val = t.getPointedTo().construct();
-        if (val->getType().getBase() == DataType::COOP_MATRIX)
-            static_cast<CoopMatrix*>(this->val)->setUnsized();
+        auto set_unsized = [&](Value& seen) {
+            if (seen.getType().getBase() == DataType::COOP_MATRIX)
+                static_cast<CoopMatrix&>(seen).setUnsized();
+            return true;
+        };
+        val->recursiveApply(set_unsized);
     }
 
     bool isThreaded() const {
