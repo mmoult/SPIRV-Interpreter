@@ -1251,7 +1251,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(to_ret);
         break;
     }
-    case spv::OpSampledImage: { // 86
+    case spv::OpSampledImage: {  // 86
         const Value* image_v = getValue(src_at, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The second operand to OpSampledImage must be an image!");
@@ -1259,10 +1259,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         if (sampler_v->getType().getBase() != DataType::SAMPLER)
             throw std::runtime_error("The third operand to OpSampledImage must be a sampler!");
 
-        SampledImage* to_ret = new SampledImage(
-            static_cast<const Sampler&>(*sampler_v),
-            static_cast<const Image&>(*image_v),
-        );
+        SampledImage* to_ret =
+            new SampledImage(static_cast<const Sampler&>(*sampler_v), static_cast<const Image&>(*image_v));
         data[result_at].redefine(to_ret);
         break;
     }
