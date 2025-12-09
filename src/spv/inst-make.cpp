@@ -1972,33 +1972,6 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         element_unary_op(base, checkRef(src_at, data_len), dst, data, op);
         break;
     }
-    case spv::OpAtomicIAdd: {  // 234
-        // 0={Pointer id} 1={Memory Scope id} 2={Memory Semantics id} 3={Value id}
-        Primitive& prev_val = static_cast<Primitive&>(*getFromPointer(src_at, data));
-        assert(prev_val.getType().getBase() == DataType::UINT || prev_val.getType().getBase() == DataType::INT);
-        Value* ret = getType(dst_type_at, data)->construct();
-        ret->copyFrom(prev_val);
-        data[result_at].redefine(ret);  // store the original value into the result
-
-        // Memory scope and Memory semantics are not needed because we don't reorder interpreted instructions.
-        // See: https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Scope_-id-
-        // See: https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Memory_Semantics_-id-
-
-        const auto& other_val = static_cast<const Primitive&>(*getValue(src_at + 3, data));
-        // the spec says the type of val and prev_val must match
-        Primitive prim(0);
-        // TODO: possible underflow or overflow
-        if (other_val.getType().getBase() == DataType::UINT) {
-            assert(prev_val.getType().getBase() == DataType::UINT);
-            prim = Primitive(prev_val.data.u32 + other_val.data.u32);
-        } else {
-            assert(other_val.getType().getBase() == DataType::INT);
-            assert(prev_val.getType().getBase() == DataType::INT);
-            prim = Primitive(prev_val.data.i32 + other_val.data.i32);
-        }
-        prev_val.copyFrom(prim);
-        break;
-    }
     case spv::OpLabel:  // 248
         data[result_at].redefine(new Primitive(location));
         break;

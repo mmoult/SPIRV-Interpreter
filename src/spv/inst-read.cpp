@@ -397,12 +397,23 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpBitFieldSExtract:  // 202
     case spv::OpBitFieldUExtract:  // 203
     case spv::OpControlBarrier:  // 224
+    case spv::OpAtomicIIncrement:  // 232
+    case spv::OpAtomicIDecrement:  // 233
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         break;
     case spv::OpBitFieldInsert:  // 201
+    case spv::OpAtomicExchange:  // 229
     case spv::OpAtomicIAdd:  // 234
+    case spv::OpAtomicISub:  // 235
+    case spv::OpAtomicSMin:  // 236
+    case spv::OpAtomicUMin:  // 237
+    case spv::OpAtomicSMax:  // 238
+    case spv::OpAtomicUMax:  // 239
+    case spv::OpAtomicAnd:  // 240
+    case spv::OpAtomicOr:  // 241
+    case spv::OpAtomicXor:  // 242
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);

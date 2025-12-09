@@ -88,6 +88,39 @@ Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expecte
     return nullptr;
 }
 
+#define ATOMIC_BIN_OP(ACTION) \
+    { \
+        Primitive& prev_val = static_cast<Primitive&>(*getFromPointer(2, data)); \
+        const auto& other_val = static_cast<const Primitive&>(*getValue(5, data)); \
+        auto action_lambda = [](Primitive& a, const Primitive& b) { ACTION; }; \
+        Value* ret = atomic_bin_op(prev_val, other_val, getType(0, data), action_lambda); \
+        data[result_at].redefine(ret); \
+        break; \
+    }
+
+Value* atomic_bin_op(
+    Primitive& prev_val,
+    const Primitive& other_val,
+    const Type* ret_type,
+    std::function<void(Primitive&, const Primitive&)> op
+) {
+    // 0={Pointer id} 1={Memory Scope id} 2={Memory Semantics id} 3={Value id}
+    assert(prev_val.getType().getBase() == DataType::UINT || prev_val.getType().getBase() == DataType::INT);
+    Value* ret = ret_type->construct();
+    ret->copyFrom(prev_val);
+
+    // Memory scope and Memory semantics are not needed because we don't reorder interpreted instructions.
+    // See: https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Scope_-id-
+    // See: https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Memory_Semantics_-id-
+
+    // the spec says the type of val and prev_val must match
+    assert(other_val.getType() == prev_val.getType());
+    // We should be able to freely use i32 or u32 for any operation since both operands have the same representation
+    op(prev_val, other_val);
+    prev_val.copyFrom(prev_val);  // apply precision masking if needed
+    return ret;
+}
+
 bool Instruction::execute(
     DataView& data,
     // The instruction is strictly forbidden from modifying any but the current frame stack
@@ -261,6 +294,46 @@ bool Instruction::execute(
         // TODO surely there is more to do here...
         break;
     }
+    case spv::OpAtomicExchange: {  // 229
+        Type* ret_type = getType(0, data);
+        Value* from_val = getFromPointer(2, data);
+        Value* new_val = getValue(5, data);
+        dst_val = ret_type->construct();
+        dst_val->copyFrom(*from_val);
+        from_val->copyFrom(*new_val);
+        break;
+    }
+    case spv::OpAtomicIIncrement:  // 232
+    case spv::OpAtomicIDecrement: {  // 233
+        Type* ret_type = getType(0, data);
+        Value* from_val = getFromPointer(2, data);
+        dst_val = ret_type->construct();
+        dst_val->copyFrom(*from_val);
+        // Modify the from_val as requested
+        assert(from_val->getType().getBase() == DataType::UINT || from_val->getType().getBase() == DataType::INT);
+        Primitive& prim = static_cast<Primitive&>(*from_val);
+        prim.data.i32 += (opcode == spv::OpAtomicIIncrement) ? 1 : -1;
+        prim.copyFrom(prim);  // apply precision masking if needed
+        break;
+    }
+    case spv::OpAtomicIAdd:  // 234
+        ATOMIC_BIN_OP(a.data.i32 += b.data.i32);
+    case spv::OpAtomicISub:  // 235
+        ATOMIC_BIN_OP(a.data.i32 -= b.data.i32);
+    case spv::OpAtomicSMin:  // 236
+        ATOMIC_BIN_OP(a.data.i32 = std::min(a.data.i32, b.data.i32));
+    case spv::OpAtomicUMin:  // 237
+        ATOMIC_BIN_OP(a.data.u32 = std::min(a.data.u32, b.data.u32));
+    case spv::OpAtomicSMax:  // 238
+        ATOMIC_BIN_OP(a.data.i32 = std::max(a.data.i32, b.data.i32));
+    case spv::OpAtomicUMax:  // 239
+        ATOMIC_BIN_OP(a.data.u32 = std::max(a.data.u32, b.data.u32));
+    case spv::OpAtomicAnd:  // 240
+        ATOMIC_BIN_OP(a.data.u32 &= b.data.u32);
+    case spv::OpAtomicOr:  // 241
+        ATOMIC_BIN_OP(a.data.u32 |= b.data.u32);
+    case spv::OpAtomicXor:  // 242
+        ATOMIC_BIN_OP(a.data.u32 ^= b.data.u32);
     case spv::OpPhi: {  // 245
         unsigned last_label = frame.getLabel();
         // We must find a label in the phi which matches the last block seen
@@ -921,3 +994,5 @@ void Instruction::print() const {
     }
     std::cout << std::endl;
 }
+
+#undef ATOMIC_BIN_OP
