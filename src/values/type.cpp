@@ -16,6 +16,7 @@ import value.image;
 import value.primitive;
 import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
+import value.sampledImg;
 import value.sampler;
 import value.string;
 
@@ -74,8 +75,10 @@ Value* Type::construct(std::vector<const Value*>* values, bool undef) const {
         return new RayQuery();
     case DataType::IMAGE:
         return new Image(*this);
+    case DataType::SAMPLED_IMG:
+        return new SampledImage(*this);
     case DataType::SAMPLER:
-        return new Sampler(*this);
+        return new Sampler();
     case DataType::POINTER:
         // We cannot actually construct a pointer, nor does that conceptually make sense. When this is requested, the
         // pointer is a shallow wrapper to indicate storage settings. In that case, construct the underlying value
@@ -106,6 +109,7 @@ bool Type::operator==(const Type& rhs) const {
         return subSize == rhs.subSize;
     case DataType::STRING:  // TODO
     case DataType::BOOL:
+    case DataType::SAMPLER:
     case DataType::VOID:
         return true;
     case DataType::ARRAY:
@@ -130,6 +134,7 @@ bool Type::operator==(const Type& rhs) const {
         return (*subElement == *(rhs.subElement)) && (subList == rhs.subList);
     case DataType::POINTER:
     case DataType::IMAGE:  // Can compare dimensions and other fields in the image itself
+    case DataType::SAMPLED_IMG:
         return *subElement == *(rhs.subElement);
     }
 }
@@ -294,6 +299,7 @@ Type Type::unionOf(const Type& other, std::vector<const Type*> created) const no
         SIMPLE(ACCEL_STRUCT, accelStruct);
         SIMPLE(RAY_QUERY, rayQuery);
         SIMPLE(IMAGE, image);
+        SIMPLE(SAMPLED_IMG, sampledImg);
         SIMPLE(SAMPLER, sampler);
         SIMPLE(COOP_MATRIX, cooperativeMatrix);
     default:

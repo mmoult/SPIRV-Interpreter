@@ -40,6 +40,7 @@ import value.pointer;
 import value.primitive;
 import value.raytrace.accelStruct;
 import value.raytrace.rayQuery;
+import value.sampledImg;
 import value.sampler;
 import value.statics;
 import value.string;
@@ -137,8 +138,8 @@ Value* Instruction::handleImage(
     Value* to_ret = res_type->construct();
     float lod = 0.0;
     const Image* image;
-    if (img.getType().getBase() == DataType::SAMPLER) {
-        const Sampler& sampler = static_cast<const Sampler&>(img);
+    if (img.getType().getBase() == DataType::SAMPLED_IMG) {
+        const auto& sampler = static_cast<const SampledImage&>(img);
         image = &sampler.getImage();
         lod = sampler.getImplicitLod();
     } else {
@@ -845,9 +846,13 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(new Type(Type::image(texel_type, dim, comps)));
         break;
     }
+    case spv::OpTypeSampler: {  // 26
+        data[result_at].redefine(new Type(Type::sampler()));
+        break;
+    }
     case spv::OpTypeSampledImage: {  // 27
-        Type* sampled_image = getType(1, data);
-        data[result_at].redefine(new Type(Type::sampler(sampled_image)));
+        Type* image = getType(1, data);
+        data[result_at].redefine(new Type(Type::sampledImage(image)));
         break;
     }
     case spv::OpTypeArray: {  // 28
@@ -1246,13 +1251,28 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(to_ret);
         break;
     }
+    case spv::OpSampledImage: { // 86
+        const Value* image_v = getValue(src_at, data);
+        if (image_v->getType().getBase() != DataType::IMAGE)
+            throw std::runtime_error("The second operand to OpSampledImage must be an image!");
+        const Value* sampler_v = getValue(src_at + 1, data);
+        if (sampler_v->getType().getBase() != DataType::SAMPLER)
+            throw std::runtime_error("The third operand to OpSampledImage must be a sampler!");
+
+        SampledImage* to_ret = new SampledImage(
+            static_cast<const Sampler&>(*sampler_v),
+            static_cast<const Image&>(*image_v),
+        );
+        data[result_at].redefine(to_ret);
+        break;
+    }
     case spv::OpImageSampleImplicitLod:  // 87
     case spv::OpImageSampleExplicitLod:  // 88
     case spv::OpImageSampleProjImplicitLod:  // 91
     case spv::OpImageSampleProjExplicitLod:  // 92
     {
         const Value* sampler_v = getValue(src_at, data);
-        if (sampler_v->getType().getBase() != DataType::SAMPLER)
+        if (sampler_v->getType().getBase() != DataType::SAMPLED_IMG)
             throw std::runtime_error("The third operand to OpImageSample* must be an sampler!");
 
         bool proj = (opcode == spv::OpImageSampleProjImplicitLod) || (opcode == spv::OpImageSampleProjExplicitLod);
@@ -1273,7 +1293,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpImage: {  // 100
         Value* sampler_v = getValue(src_at, data);
-        Image& image = static_cast<Sampler&>(*sampler_v).getImage();
+        Image& image = static_cast<SampledImage&>(*sampler_v).getImage();
         data[result_at].redefine(&image, false);
         break;
     }

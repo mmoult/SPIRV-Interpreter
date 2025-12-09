@@ -7,32 +7,39 @@ module;
 
 #include "type.hpp"
 #include "value.hpp"
-export module value.sampler;
+export module value.sampledImg;
 import value.aggregate;
-import value.primitive;
+import value.image;
+import value.sampler;
 import value.statics;
 import value.string;
 
-export class Sampler : public Value {
-    unsigned defaultLod;
+export class SampledImage : public Value {
+    Sampler sampler;
+    Image image;
 
-    inline static const std::vector<std::string> names {"lod"};
+    inline static const std::vector<std::string> names {"sampler", "image"};
 
 public:
-    Sampler(Type t = Type::sampler()) : Value(t), defaultLod(0) {};
+    SampledImage(Type t) : Value(t), image(t.getElement()) {};
+    SampledImage(const Sampler& sampler, const Image& image)
+        : Value(Type::sampledImage(&image.getType())), sampler(sampler), image(image) {}
 
     void copyReinterp(const Value& other) noexcept(false) override {
         if (!tryCopyFrom(other))
-            throw std::runtime_error("Could not copy reinterp to Sampler!");
+            throw std::runtime_error("Could not copy reinterp to SampledImage!");
     }
 
     /// @brief Copy the image's fields from the other struct, if possible
     /// @param other the struct to copy from
     void copyFrom(const Struct& str) noexcept(false) {
-        const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "Sampler", names);
+        const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "SampledImage", names);
 
-        // lod: <uint>
-        defaultLod = Statics::extractUint(other[0], names[0]);
+        // sampler: <sampler
+        sampler.copyFrom(*other[0]);
+
+        // image: <image>
+        image.copyFrom(*other[1]);
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
@@ -43,20 +50,28 @@ public:
         }
 
         Value::copyFrom(new_val);  // verifies matching types
-        const auto& other = static_cast<const Sampler&>(new_val);
-        this->defaultLod = other.defaultLod;
+        const auto& other = static_cast<const SampledImage&>(new_val);
+        this->sampler.copyFrom(other.sampler);
+        this->image.copyFrom(other.image);
     }
 
-    // Right now, the sampler has only a single field:
-    //   lod : <uint>
+    // A sampled image has two fields: sampler and image
     Struct* toStruct() const {
         std::vector<Value*> elements;
         elements.reserve(names.size());
-        elements.push_back(new Primitive(defaultLod));
+        elements.push_back(sampler.toStruct());
+        elements.push_back(image.toStruct());
         return new Struct(elements, names);
     }
 
     const unsigned getImplicitLod() const {
-        return defaultLod;
+        return sampler.getImplicitLod();
+    }
+
+    Image& getImage() {
+        return image;
+    }
+    const Image& getImage() const {
+        return image;
     }
 };

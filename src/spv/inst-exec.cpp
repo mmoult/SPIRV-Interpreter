@@ -212,7 +212,7 @@ bool Instruction::execute(
         Value* from_val = getFromPointer(2, data);
 
         // The SPIR-V spec handles images differently.
-        if (auto base = ret_type->getBase(); base == DataType::IMAGE || base == DataType::SAMPLER) {
+        if (auto base = ret_type->getBase(); base == DataType::IMAGE || base == DataType::SAMPLED_IMG) {
             // Unlike aggregates which own their data, images have metadata and a non-owning reference to the texels.
             // Due to this, each load from a variable will share the same texels. Since the metadata is constant, we can
             // simulate this by reusing the same image object

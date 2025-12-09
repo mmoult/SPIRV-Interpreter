@@ -30,7 +30,8 @@ enum class DataType {
     ACCEL_STRUCT,
     RAY_QUERY,
     IMAGE,
-    SAMPLER,  // image sampler, to be specific
+    SAMPLED_IMG,
+    SAMPLER,
     COOP_MATRIX,
 };
 
@@ -56,6 +57,7 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
         SWITCH(ACCEL_STRUCT)
         SWITCH(RAY_QUERY)
         SWITCH(IMAGE)
+        SWITCH(SAMPLED_IMG)
         SWITCH(SAMPLER)
         SWITCH(COOP_MATRIX)
     default:
@@ -200,8 +202,12 @@ public:
         return Type(DataType::IMAGE, (comps << 8) | dim, texel_type);
     }
 
-    static inline Type sampler(const Type* image) {
-        return Type(DataType::SAMPLER, 0, image);
+    static inline Type sampledImage(const Type* image) {
+        return Type(DataType::SAMPLED_IMG, 0, image);
+    }
+
+    static inline Type sampler() {
+        return Type(DataType::SAMPLER, 0, nullptr);
     }
 
     // Other methods:
@@ -223,7 +229,7 @@ public:
 
     inline const Type& getElement() const {
         assert(
-            base == DataType::ARRAY || base == DataType::IMAGE || base == DataType::SAMPLER ||
+            base == DataType::ARRAY || base == DataType::IMAGE || base == DataType::SAMPLED_IMG ||
             base == DataType::COOP_MATRIX
         );
         return *subElement;

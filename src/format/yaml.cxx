@@ -22,6 +22,7 @@ import value.image;
 import value.pointer;
 import value.primitive;
 import value.raytrace.accelStruct;
+import value.sampledImg;
 import value.sampler;
 import value.string;
 
@@ -488,6 +489,10 @@ private:
         }
         case DataType::IMAGE: {
             structure = static_cast<const Image&>(value).toStruct();
+            break;
+        }
+        case DataType::SAMPLED_IMG: {
+            structure = static_cast<const SampledImage&>(value).toStruct();
             break;
         }
         case DataType::SAMPLER: {

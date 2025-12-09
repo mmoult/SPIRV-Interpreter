@@ -1,5 +1,5 @@
 InputTexture:
-  lod: 0
+  sampler: { lod: 0 }
   image:
     ref: ""
     dim: [ 4, 4 ]

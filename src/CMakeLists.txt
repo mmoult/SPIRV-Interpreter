@@ -32,10 +32,11 @@ target_sources(spv-interp
       util/string.cxx
       util/ternary.cxx
       values/aggregate.cxx
-      values/coopMatrix.cxx
+      values/coop-matrix.cxx
       values/image.cxx
       values/pointer.cxx
       values/primitive.cxx
+      values/sampled-img.cxx
       values/sampler.cxx
       values/statics.cxx
       values/string.cxx

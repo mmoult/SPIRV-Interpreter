@@ -97,6 +97,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpUndef:  // 3
     case spv::OpTypeVoid:  // 19
     case spv::OpTypeBool:  // 20
+    case spv::OpTypeSampler:  // 26
     case spv::OpConstantTrue:  // 41
     case spv::OpConstantFalse:  // 42
     case spv::OpConstantNull:  // 46
@@ -231,6 +232,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeArray:  // 28
+    case spv::OpSampledImage:  // 86
     case spv::OpIAdd:  // 128
     case spv::OpFAdd:  // 129
     case spv::OpISub:  // 130
