@@ -6,6 +6,7 @@
 #include "type.hpp"
 
 #include <cassert>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
