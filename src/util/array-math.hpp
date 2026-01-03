@@ -81,7 +81,7 @@ inline double determinant(const Array& arr) {
             // ⎡ a b ⎤
             // ⎣ c d ⎦
             // ad - bc
-            unsigned x0, x1;
+            unsigned x0 = 0, x1 = 0;
             bool first = true;
             for (unsigned i = 0; i < size; ++i) {
                 if (!col_skips.contains(i)) {

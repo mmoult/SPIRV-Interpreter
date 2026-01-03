@@ -11,6 +11,14 @@ project(SPIRV-Interpreter CXX)
 set(CMAKE_CXX_STANDARD 20)
 message(STATUS "Compiling with: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_definitions(COMPILER_CLANG)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_definitions(COMPILER_GNU)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    add_compile_definitions(COMPILER_MSVC)
+endif()
+
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     add_subdirectory(src)

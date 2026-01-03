@@ -616,10 +616,10 @@ void element_tern_op(
     { \
         BinOp uufx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }; \
         BinOp uifx = [](const Primitive* a, const Primitive* b) { \
-            return static_cast<int>(a->data.u32) BIN_OP b->data.i32; \
+            return a->data.u32 BIN_OP b->data.i32; \
         }; \
         BinOp iufx = [](const Primitive* a, const Primitive* b) { \
-            return a->data.i32 BIN_OP static_cast<int>(b->data.u32); \
+            return a->data.i32 BIN_OP b->data.u32; \
         }; \
         BinOp iifx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; }; \
         element_int_bin_op( \

@@ -116,7 +116,9 @@ struct Statics {
         return static_cast<const Primitive&>(*field).data.u32;
     }
 
-    [[gnu::no_dangling]]
+#if defined(COMPILER_GNU)
+    [[gnu::no_dangling]]  // GCC erroneously believes this returns a dangling reference. Ignore.
+#endif
     static const Struct&
     extractStruct(const Value* field, const std::string& name, const std::vector<std::string>& fields) {
         if (field == nullptr) {
