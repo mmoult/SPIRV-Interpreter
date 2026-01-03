@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
-import spv.data.data;
+#include "data.hpp"
 
 class DataManager;
 

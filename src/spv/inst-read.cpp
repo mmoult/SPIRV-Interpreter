@@ -3,7 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-module;
+#include "instruction.hpp"
+
 #include <bit>
 #include <cassert>
 #include <cstdint>
@@ -12,11 +13,8 @@ module;
 #include <string>
 #include <vector>
 
-#define SPV_ENABLE_UTILITY_CODE 1
-#include "../../external/spirv.hpp"
-module spv.instruction;
-import spv.frame;
-import spv.token;
+#include "frame.hpp"
+#include "token.hpp"
 
 bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {
     // UTF-8 encoding with four codepoints per word, 0 terminated
@@ -454,7 +452,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         repeating = Repeat::WHOLE;
         break;
     case spv::OpTraceRayKHR:  // 4445
-        for (int i = 0; i < 11; ++i)
+        for (size_t i = 0; i < 11; ++i)
             to_load.push_back(Type::REF);
         break;
     case spv::OpTypeCooperativeMatrixKHR:  // 4456
@@ -469,7 +467,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::REF);  // Memory Layout
         optional.push_back(Type::REF);  // Stride
         optional.push_back(Type::UINT);  // Memory Operand
-        for (int i = 6; i < words.size(); i++)
+        for (size_t i = 6; i < words.size(); i++)
             optional.push_back(Type::UINT);
         // repeating = Repeat::WHOLE;
         break;
@@ -479,7 +477,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::REF);  // Memory Layout
         optional.push_back(Type::REF);  // Stride
         optional.push_back(Type::UINT);  // Memory Operand
-        for (int i = 5; i < words.size(); i++)
+        for (size_t i = 5; i < words.size(); i++)
             optional.push_back(Type::UINT);
         break;
     case spv::OpCooperativeMatrixMulAddKHR:  // 4459
@@ -489,7 +487,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         optional.push_back(Type::CONST);
         break;
     case spv::OpRayQueryInitializeKHR:  // 4473
-        for (int i = 0; i < 8; ++i)
+        for (size_t i = 0; i < 8; ++i)
             to_load.push_back(Type::REF);
         break;
     }

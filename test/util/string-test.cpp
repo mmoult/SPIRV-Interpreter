@@ -6,7 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <sstream>
 #include <string>
-import util.string;
+#include "../../src/util/string.hpp"
 
 std::string to_string(float x) {
     std::stringstream s;

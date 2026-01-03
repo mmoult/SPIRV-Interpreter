@@ -3,7 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-module;
+#include "instruction.hpp"
+
 #include <algorithm>
 #include <bit>
 #include <cassert>
@@ -19,31 +20,28 @@ module;
 #include <vector>
 
 #include "../../external/GLSL.std.450.h"
-#define SPV_ENABLE_UTILITY_CODE 1
-#include "../../external/spirv.hpp"
+#include "../front/console.hpp"
+#include "../spv/ray-flags.hpp"
+#include "../util/array-math.hpp"
+#include "../util/fpconvert.hpp"
+#include "../values/aggregate.hpp"
+#include "../values/coop-matrix.hpp"
+#include "../values/image.hpp"
+#include "../values/pointer.hpp"
+#include "../values/primitive.hpp"
+#include "../values/raytrace/accel-struct.hpp"
+#include "../values/raytrace/ray-query.hpp"
 #include "../values/raytrace/trace.hpp"
+#include "../values/sampled-img.hpp"
+#include "../values/sampler.hpp"
+#include "../values/statics.hpp"
+#include "../values/string.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
+#include "data/data.hpp"
 #include "data/manager.hpp"
-module spv.instruction;
-import front.console;
-import spv.data.data;
-import spv.frame;
-import spv.rayFlags;
-import spv.token;
-import util.arrayMath;
-import util.fpconvert;
-import value.aggregate;
-import value.coopMatrix;
-import value.image;
-import value.pointer;
-import value.primitive;
-import value.raytrace.accelStruct;
-import value.raytrace.rayQuery;
-import value.sampledImg;
-import value.sampler;
-import value.statics;
-import value.string;
+#include "frame.hpp"
+#include "token.hpp"
 
 template<typename T>
 Value* construct_from_vec(const std::vector<T>& vec, const Type* res_type) {
@@ -617,8 +615,12 @@ void element_tern_op(
 #define INT_E_BIN_OP(BIN_OP) \
     { \
         BinOp uufx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }; \
-        BinOp uifx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.i32; }; \
-        BinOp iufx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.u32; }; \
+        BinOp uifx = [](const Primitive* a, const Primitive* b) { \
+            return static_cast<int>(a->data.u32) BIN_OP b->data.i32; \
+        }; \
+        BinOp iufx = [](const Primitive* a, const Primitive* b) { \
+            return a->data.i32 BIN_OP static_cast<int>(b->data.u32); \
+        }; \
         BinOp iifx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; }; \
         element_int_bin_op( \
             checkRef(src_at, data_len), \

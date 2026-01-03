@@ -12,10 +12,10 @@
 
 #include "glm/ext.hpp"
 
+#include "../../util/ternary.hpp"
+#include "../aggregate.hpp"
+#include "../primitive.hpp"
 #include "../value.hpp"
-import util.ternary;
-import value.aggregate;
-import value.primitive;
 
 // Forward declaration needed for step
 struct Trace;

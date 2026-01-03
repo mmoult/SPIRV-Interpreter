@@ -10,16 +10,16 @@
 #include <stdexcept>
 #include <vector>
 
+#include "aggregate.hpp"
+#include "coop-matrix.hpp"
+#include "image.hpp"
+#include "primitive.hpp"
+#include "raytrace/accel-struct.hpp"
+#include "raytrace/ray-query.hpp"
+#include "sampled-img.hpp"
+#include "sampler.hpp"
+#include "string.hpp"
 #include "value.hpp"
-import value.aggregate;
-import value.coopMatrix;
-import value.image;
-import value.primitive;
-import value.raytrace.accelStruct;
-import value.raytrace.rayQuery;
-import value.sampledImg;
-import value.sampler;
-import value.string;
 
 Value* Type::construct(std::vector<const Value*>* values, bool undef) const {
     switch (base) {
