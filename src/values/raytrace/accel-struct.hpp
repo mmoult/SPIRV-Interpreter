@@ -424,7 +424,6 @@ public:
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
-        /*
         // Construct the acceleration structures and shader binding table based on the type of "other"
         const Type& from_type = new_val.getType();
         if (auto base = from_type.getBase(); base == DataType::ACCEL_STRUCT) {
@@ -475,7 +474,6 @@ public:
         tlas.resolve(bvh, boxIndex, instanceIndex, triangleIndex);
         for (Node* node : bvh)
             node->resolveReferences(bvh, boxIndex, instanceIndex, triangleIndex);
-        */
     }
 
     void copyReinterp(const Value& other) noexcept(false) override {

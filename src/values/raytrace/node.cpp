@@ -122,7 +122,6 @@ Ternary InstanceNode::step(Trace* trace_p) const {
 }
 
 [[nodiscard]] InstanceNode* InstanceNode::fromVal(const Value* val) {
-    /*
     const Struct& str = Statics::extractStruct(val, "InstanceNode", names);
     const Array& transform = Statics::extractArray(str[0], names[0]);
     if (transform.getSize() != 4)
@@ -137,8 +136,6 @@ Ternary InstanceNode::step(Trace* trace_p) const {
     uint32_t sbt_record_offset = Statics::extractUint(str[5], names[5]);
 
     return new InstanceNode(ref[0], ref[1], world_to_obj, id, custom_index, mask, sbt_record_offset);
-    */
-    return nullptr;
 }
 
 [[nodiscard]] Struct* InstanceNode::toStruct() const {
@@ -221,7 +218,6 @@ Ternary TriangleNode::step(Trace* trace_p) const {
 }
 
 [[nodiscard]] TriangleNode* TriangleNode::fromVal(const Value* val) {
-    /*
     const Struct& str = Statics::extractStruct(val, "TriangleNode", names);
 
     uint32_t geom_index = Statics::extractUint(str[0], names[0]);
@@ -244,8 +240,6 @@ Ternary TriangleNode::step(Trace* trace_p) const {
     }
 
     return new TriangleNode(geom_index, prim_index, opaque, verts);
-    */
-    return nullptr;
 }
 
 [[nodiscard]] Struct* TriangleNode::toStruct() const {
@@ -314,7 +308,6 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
 }
 
 [[nodiscard]] ProceduralNode* ProceduralNode::fromVal(const Value* val) {
-    /*
     const Struct& str = Statics::extractStruct(val, "ProceduralNode", names);
     std::vector<float> mins = Statics::extractVec(str[0], names[0], 3);
     std::vector<float> maxs = Statics::extractVec(str[1], names[1], 3);
@@ -328,8 +321,6 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
     uint32_t prim_index = Statics::extractUint(str[4], names[4]);
 
     return new ProceduralNode(mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2], opaque, geom_index, prim_index);
-    */
-    return nullptr;
 }
 
 [[nodiscard]] Struct* ProceduralNode::toStruct() const {
