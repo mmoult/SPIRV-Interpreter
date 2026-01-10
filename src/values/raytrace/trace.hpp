@@ -10,8 +10,8 @@
 
 #include "glm/ext.hpp"
 
+#include "../../spv/ray-flags.hpp"
 #include "node.hpp"
-import spv.rayFlags;
 
 struct Trace;
 

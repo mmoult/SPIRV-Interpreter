@@ -3,7 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-module;
+#include "instruction.hpp"
+
 #include <cassert>
 #include <iostream>
 #include <sstream>
@@ -13,25 +14,22 @@ module;
 #include <variant>
 #include <vector>
 
-#define SPV_ENABLE_UTILITY_CODE 1
-#include "../../external/spirv.hpp"
+#include "../front/console.hpp"
+#include "../util/ternary.hpp"
+#include "../values/aggregate.hpp"
+#include "../values/coop-matrix.hpp"
+#include "../values/image.hpp"
+#include "../values/primitive.hpp"
+#include "../values/raytrace/accel-struct.hpp"
+#include "../values/raytrace/ray-query.hpp"
 #include "../values/raytrace/trace.hpp"
+#include "../values/statics.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
+#include "data/data.hpp"
 #include "data/manager.hpp"
-module spv.instruction;
-import front.console;
-import spv.data.data;
-import spv.frame;
-import spv.token;
-import util.ternary;
-import value.aggregate;
-import value.coopMatrix;
-import value.image;
-import value.primitive;
-import value.raytrace.accelStruct;
-import value.raytrace.rayQuery;
-import value.statics;
+#include "frame.hpp"
+#include "token.hpp"
 
 void
 invoke_substage_shader(RtStageKind kind, Frame& frame, AccelStruct& as, Value* hit_attrib, Value* payload = nullptr) {

@@ -34,8 +34,7 @@ structures. A best guess approximation is used for the interpreter, which relies
 implementations.
 
 ## Building
-The source can be built using a compiler which supports C++20 with modules (such as `clang++` version ≥ 16). It is known
-to build on Linux and Windows.
+The source can be built using a compiler which supports C++20. It is known to build on Linux and Windows.
 
 Here are a few build commands to run from the repository's root directory:
 

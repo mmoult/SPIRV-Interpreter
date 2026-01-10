@@ -10,14 +10,14 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/ext.hpp"
 
+#include "../../util/array-math.hpp"
+#include "../../util/geom-math.hpp"
+#include "../../util/ternary.hpp"
+#include "../aggregate.hpp"
+#include "../primitive.hpp"
+#include "../statics.hpp"
 #include "../value.hpp"
 #include "trace.hpp"
-import util.arrayMath;
-import util.geomMath;
-import util.ternary;
-import value.aggregate;
-import value.primitive;
-import value.statics;
 
 const Type& BoxNode::getType() {
     if (type.getBase() != DataType::VOID)

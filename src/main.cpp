@@ -10,16 +10,16 @@
 #include <optional>
 #include <string>
 
-#include "../external/spirv.hpp"
+#include "format/json.hpp"
+#include "format/parse.hpp"
+#include "format/yaml.hpp"
+#include "front/argparse.hpp"
+#include "front/console.hpp"
+#include "spv/program.hpp"
+#include "spv/ray-substage.hpp"
+#include "util/spirv.hpp"
+#include "values/raytrace/shader-binding-table.hpp"
 #include "values/value.hpp"
-import format.json;
-import format.parse;
-import format.yaml;
-import front.argparse;
-import front.console;
-import spv.program;
-import spv.raySubstage;
-import value.raytrace.shaderBindingTable;
 
 constexpr auto VERSION = "0.9.1";
 

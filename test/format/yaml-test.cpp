@@ -10,11 +10,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include "../../src/values/value.hpp"
-import format.parse;
-import format.yaml;
-import value.aggregate;
-import value.primitive;
-
+#include "../../src/format/parse.hpp"
+#include "../../src/format/yaml.hpp"
+#include "../../src/values/aggregate.hpp"
+#include "../../src/values/primitive.hpp"
 
 TEST_CASE("output", "[yaml]") {
     SECTION("empty") {

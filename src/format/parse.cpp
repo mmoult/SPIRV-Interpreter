@@ -1,0 +1,305 @@
+/* © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+#include "parse.hpp"
+
+#include <cctype>  // for std::isspace
+#include <cmath>
+#include <cstdint>  // for uint32_t and int32_t
+#include <istream>
+#include <limits>  // for inf and nan
+#include <stdexcept>
+
+#include "../values/aggregate.hpp"
+#include "../values/primitive.hpp"
+#include "../values/statics.hpp"
+
+bool ValueFormat::parseIntWithMax(
+    std::integral auto& val,
+    const std::integral auto max,
+    const std::string& line,
+    unsigned start,
+    unsigned end
+) const {
+    for (unsigned i = start; i < end; ++i) {
+        // Since we pre-checked the input, we know the char is 0-9
+        char digit = line[i] - '0';
+        if (max / 10 < val) {
+            return false;
+        }
+        val *= 10;
+        if (max - digit < val) {
+            return false;
+        }
+        val += digit;
+    }
+    return true;
+}
+
+ValueFormat::LineHandler::IdValidity ValueFormat::LineHandler::isIdent(char c, bool first) const {
+    if ((c >= 'A' && c <= 'Z') || c == '_' || c == '-' || (c >= 'a' && c <= 'z'))
+        return ValueFormat::LineHandler::IdValidity::VALID;
+    if (!first && ((c >= '0' && c <= '9')))
+        return ValueFormat::LineHandler::IdValidity::VALID;
+    if (std::isspace(c))
+        return ValueFormat::LineHandler::IdValidity::BREAK;
+    return ValueFormat::LineHandler::IdValidity::INVALID;
+}
+
+bool ValueFormat::LineHandler::queueLine() {
+    if (file == nullptr || !std::getline(*file, fromFile))
+        return false;
+
+    pLine = &fromFile;
+    idx = 0;  // reset point to front
+    return true;
+}
+
+bool ValueFormat::LineHandler::matchId(std::string match) {
+    auto c = peek();
+    if (!c.has_value())
+        return false;
+
+    unsigned len = match.length();
+    const auto& line = *pLine;
+    if (idx + len > line.length())  // if the match string is longer than remaining length on line
+        return false;
+
+    // speculatively look ahead
+    for (unsigned i = 0; i < len; ++i) {
+        if (line[i + idx] != match[i])
+            return false;
+    }
+    // We need to verify that the character after len (if any) is not alphanumeric
+    // If it is, then the search string was only a prefix, not a valid reference
+
+    // Either the match goes to the end of line (in which case, there are no chars after) OR
+    // there is another character to check at (idx + len)
+    if (idx + len == line.length() || isIdent(line[idx + len], false) != ValueFormat::LineHandler::IdValidity::VALID) {
+        idx += len;  // update the index to point to after the constant name
+        return true;
+    }
+    return false;
+}
+
+void ValueFormat::LineHandler::resetToLineStart() {
+    // Verify that the index state is synced with the line state
+    if (!peek().has_value())
+        return;
+
+    // If this is a multi-line approach, we can just go to the beginning of this line
+    if (file != nullptr)
+        idx = 0;
+    else {
+        // If there is no file, pLine must not be null. If it was, the earlier peek would have yielded empty.
+        assert(pLine != nullptr);
+        // Otherwise, we need to backtrack to the last newline
+        for (; idx > 0; --idx) {
+            if ((*pLine)[idx] == '\n')
+                break;
+        }
+    }
+}
+
+std::optional<char> ValueFormat::LineHandler::peek() {
+    if (pLine == nullptr && !queueLine())
+        return {};
+
+    const auto& line = *pLine;
+    // Logically, this loop should never repeat more than twice.
+    while (true) {
+        if (idx < line.length())
+            return {line[idx]};
+        else if (idx == line.length())
+            return {'\n'};
+        else {
+            // fetch a new line
+            if (!queueLine())
+                return {};
+        }
+    }
+}
+
+void ValueFormat::addToMap(ValueMap& vars, std::string key, Value* val) const {
+    // If the map already has the key, we have a problem
+    if (vars.contains(key)) {
+        std::stringstream err;
+        err << "Attempt to add variable \"" << key << "\" when one by the same name already exists!";
+        throw std::runtime_error(err.str());
+    }
+    vars[key] = val;
+}
+
+[[nodiscard]] Value* ValueFormat::constructArrayFrom(std::vector<const Value*>& elements) {
+    if (elements.empty())
+        return new Array(Statics::voidType, 0);
+
+    std::vector<const Type*> created;
+    try {
+        Type union_type = Type::unionOf(elements, created);
+        Array* arr = new Array(union_type, elements.size());
+        arr->addElements(elements);
+        // Now that the array elements have been added which embody the element type, we can unload ownership of
+        // the subelement which may have been generated by unionOf because we use the child instead.
+        // NOTE: It is critically important that there must be *at least one* child, but that is gauranteed by our
+        // previous checking that the elements provided were non-empty.
+        arr->inferType();
+
+        for (const Type* type : created)
+            delete type;
+        return arr;
+    } catch (const std::exception& e) {
+        for (auto* element : elements)
+            delete element;
+        for (const Type* type : created)
+            delete type;
+        throw std::runtime_error("Element parsed of incompatible type with other array elements!");
+    }
+}
+
+[[nodiscard]] Value*
+ValueFormat::constructStructFrom(std::vector<std::string>& names, std::vector<const Value*>& elements) {
+    std::vector<const Type*> el_type_list;
+    for (const auto val : elements) {
+        const Type& vt = val->getType();
+        el_type_list.push_back(&vt);
+    }
+    Type ts = Type::structure(el_type_list);
+    for (unsigned i = 0; i < names.size(); ++i)
+        ts.nameMember(i, names[i]);
+    Struct* st = new Struct(ts);
+    st->addElements(elements);
+    return st;
+}
+
+Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcept(false) {
+    auto c = handler.peek();
+    if (!c.has_value())
+        throw std::runtime_error("Missing number!");
+
+    // Very first, we may see a sign signifier
+    bool sign = true;
+    if (*c == '+' || *c == '-') {
+        sign = (*c == '+');
+        // character accepted, move on to next
+        handler.skip();
+    }
+
+    // Next, we check for special nums (inf and nan)
+    switch (isSpecialFloat(handler)) {
+    case SpecialFloatResult::F_INF:
+        return new Primitive(std::numeric_limits<float>::infinity() * (sign ? 1 : -1));
+    case SpecialFloatResult::F_NAN:
+        return new Primitive(std::numeric_limits<float>::quiet_NaN() * (sign ? 1 : -1));
+    default:
+        break;
+    }
+
+    // From here, we need more details than line handler gives us, so we take control
+    auto [pline, idx] = handler.update();
+    const auto& line = *pline;
+
+    bool has_dot = false;
+    int e_sign = 0;
+    unsigned e;
+    unsigned end = idx;
+    for (; end < line.length(); ++end) {
+        char c = line[end];
+        if (c >= '0' && c <= '9')
+            continue;
+        else if (c == '.') {
+            if (has_dot)
+                throw std::runtime_error("Found number with multiple decimals!");
+            else if (e_sign != 0)
+                throw std::runtime_error("Ill-formatted number with decimal in exponent!");
+
+            has_dot = true;
+        } else if (c == 'e' || c == 'E') {
+            if (e_sign == 0) {
+                e = end;
+                // Look ahead to find the exponent's sign
+                if (++end < line.length()) {
+                    c = line[end];
+                    if (c == '-')
+                        e_sign = -1;
+                    else if (c == '+' || (c >= '0' && c <= '9'))
+                        e_sign = 1;
+                    else {
+                        std::stringstream err;
+                        err << "Unexpected character (" << c << ") found in exponent of number!";
+                        throw std::runtime_error(err.str());
+                    }
+                } else {
+                    std::stringstream err;
+                    err << "Missing exponent in number after " << line[e] << "!";
+                    throw std::runtime_error(err.str());
+                }
+            } else
+                throw std::runtime_error("Ill-formatted number!");
+        } else if (std::isspace(c) || c == ',' || c == ']' || c == '}' || c == '"' || c == '\'')
+            break;
+        else {
+            std::stringstream err;
+            err << "Unexpected character (" << c << ") in number!";
+            throw std::runtime_error(err.str());
+        }
+    }
+    if (idx == end)
+        // No characters were accepted!
+        throw std::runtime_error("No number found before break!");
+
+    // Here at the end, we want to parse out from the indices we have learned
+    if (!has_dot && e_sign == 0) {
+        // Integral type- use either int or uint
+        if (sign) {
+            // Assume the larger uint type
+            uint32_t val = 0;
+            if (!parseIntWithMax(val, UINT32_MAX, line, idx, end))
+                throw std::runtime_error("Value parsed is too big to fit in a 32-bit uint!");
+
+            handler.setIdx(end);
+            return new Primitive(val);
+        } else {
+            // Use int to apply the negation
+            int32_t val = 0;
+            bool too_small = false;
+            // compare with logic in parseIntWithMax
+            for (unsigned ii = idx; ii < end; ++ii) {
+                char digit = line[ii] - '0';
+                if (INT32_MIN / 10 > val) {
+                    too_small = true;
+                    break;
+                }
+                val *= 10;
+                if (INT32_MIN + digit > val) {
+                    too_small = true;
+                    break;
+                }
+                val -= digit;
+            }
+            if (too_small)
+                throw std::runtime_error("Value parsed is too small to fit in a 32-bit int!");
+
+            handler.setIdx(end);
+            return new Primitive(val);
+        }
+    } else {
+        // float parsing, which may include exponent after the first digit
+        std::string substr = line.substr(idx, end - idx);
+        double val = std::atof(substr.c_str());
+        if (!sign)
+            val *= -1;
+        handler.setIdx(end);
+        return new Primitive(static_cast<float>(val));
+    }
+}
+
+void ValueFormat::parseVariable(ValueMap& vars, const std::string& keyval) noexcept(false) {
+    const std::string* pstr = &keyval;  // need an r-value pointer even though the value should not change
+    ValueFormat::LineHandler handle(pstr, nullptr);
+    auto [key, value] = parseVariable(handle);
+    addToMap(vars, key, value);
+    verifyBlank(handle);  // Verify there is only whitespace or comments after
+}

@@ -10,9 +10,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include "../../src/values/value.hpp"
-import format.parse;
-import value.aggregate;
-import value.primitive;
+#include "../../src/format/parse.hpp"
+#include "../../src/values/aggregate.hpp"
+#include "../../src/values/primitive.hpp"
 
 class TestFormat : public ValueFormat {
 private:

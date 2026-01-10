@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #include <catch2/catch_test_macros.hpp>
-import util.compare;
+#include "../../src/util/compare.hpp"
 
 TEST_CASE("eq_float", "[compare]") {
     CHECK(Compare::eq_float(0.0f, 0.0f, 6)); // trivial eq

@@ -6,55 +6,38 @@ cmake_minimum_required(VERSION 3.28)
 
 add_library(spv-interp)
 
-# Add module interface files
-target_sources(spv-interp
-  PUBLIC
-    FILE_SET CXX_MODULES FILES
-      format/json.cxx
-      format/parse.cxx
-      format/yaml.cxx
-      front/argparse.cxx
-      front/console.cxx
-      front/debug.cxx
-      spv/data/data.cxx
-      spv/frame.cxx
-      spv/inst-list.cxx
-      spv/instruction.cxx
-      spv/program.cxx
-      spv/ray-flags.cxx
-      spv/ray-substage.cxx
-      spv/token.cxx
-      spv/var-compare.cxx
-      util/array-math.cxx
-      util/compare.cxx
-      util/fpconvert.cxx
-      util/geom-math.cxx
-      util/string.cxx
-      util/ternary.cxx
-      values/aggregate.cxx
-      values/coop-matrix.cxx
-      values/image.cxx
-      values/pointer.cxx
-      values/primitive.cxx
-      values/sampled-img.cxx
-      values/sampler.cxx
-      values/statics.cxx
-      values/string.cxx
-      values/raytrace/accel-struct.cxx
-      values/raytrace/ray-query.cxx
-      values/raytrace/shader-binding-table.cxx
-)
 # Add other source files
 target_sources(spv-interp
   PUBLIC
+    format/json.cpp
+    format/parse.cpp
+    format/yaml.cpp
+    front/argparse.cpp
+    front/console.cpp
+    front/debug.cpp
+    spv/data/data.cpp
     spv/data/manager.cpp
+    spv/frame.cpp
     spv/inst-exec.cpp
     spv/inst-make.cpp
     spv/inst-read.cpp
+    spv/instruction.cpp
+    spv/program.cpp
+    spv/ray-substage.cpp
+    util/array-math.cpp
+    util/compare.cpp
+    util/geom-math.cpp
+    util/string.cpp
     util/trie.cpp
-    values/type.cpp
+    util/stb-impl.cpp
+    values/raytrace/accel-struct.cpp
     values/raytrace/node.cpp
     values/raytrace/trace.cpp
+    values/aggregate.cpp
+    values/image.cpp
+    values/primitive.cpp
+    values/statics.cpp
+    values/type.cpp
 )
 
 set(HASH "" CACHE STRING "Repository hash to insert into version info")
