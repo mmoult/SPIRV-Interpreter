@@ -1271,12 +1271,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpImageSampleProjImplicitLod:  // 91
     case spv::OpImageSampleProjExplicitLod:  // 92
     {
-        const Value* sampler_v = getValue(src_at, data);
-        if (sampler_v->getType().getBase() != DataType::SAMPLED_IMG)
+        const Value* sampled_v = getValue(src_at, data);
+        if (sampled_v->getType().getBase() != DataType::SAMPLED_IMG)
             throw std::runtime_error("The third operand to OpImageSample* must be an sampler!");
 
         bool proj = (opcode == spv::OpImageSampleProjImplicitLod) || (opcode == spv::OpImageSampleProjExplicitLod);
-        Value* to_ret = handleImage(data, *sampler_v, getValue(src_at + 1, data), 4, proj);
+        Value* to_ret = handleImage(data, *sampled_v, getValue(src_at + 1, data), 4, proj);
         data[result_at].redefine(to_ret);
         break;
     }

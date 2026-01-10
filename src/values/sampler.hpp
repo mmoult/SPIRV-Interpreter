@@ -9,7 +9,6 @@
 #include "aggregate.hpp"
 #include "primitive.hpp"
 #include "statics.hpp"
-#include "string.hpp"
 #include "type.hpp"
 #include "value.hpp"
 

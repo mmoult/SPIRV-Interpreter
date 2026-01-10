@@ -6,7 +6,6 @@
 #ifndef VALUES_RAYTRACE_SHADERBINDINGTABLE_HPP
 #define VALUES_RAYTRACE_SHADERBINDINGTABLE_HPP
 
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -15,15 +14,6 @@
 #include "../string.hpp"
 #include "../type.hpp"
 #include "../value.hpp"
-
-const std::string& extract_string(const Value* record, const std::string& type) {
-    if (record->getType().getBase() != DataType::STRING) {
-        std::stringstream err;
-        err << "Type of " << type << " record must be a string!";
-        throw std::runtime_error(err.str());
-    }
-    return static_cast<const String*>(record)->get();
-}
 
 struct ShaderRecord {
     inline static const std::vector<std::string> names {"shader", "input"};

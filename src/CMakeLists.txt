@@ -15,15 +15,29 @@ target_sources(spv-interp
     front/argparse.cpp
     front/console.cpp
     front/debug.cpp
+    spv/data/data.cpp
     spv/data/manager.cpp
+    spv/frame.cpp
     spv/inst-exec.cpp
     spv/inst-make.cpp
     spv/inst-read.cpp
+    spv/instruction.cpp
+    spv/program.cpp
+    spv/ray-substage.cpp
+    util/array-math.cpp
+    util/compare.cpp
+    util/geom-math.cpp
+    util/string.cpp
     util/trie.cpp
     util/stb-impl.cpp
-    values/type.cpp
+    values/raytrace/accel-struct.cpp
     values/raytrace/node.cpp
     values/raytrace/trace.cpp
+    values/aggregate.cpp
+    values/image.cpp
+    values/primitive.cpp
+    values/statics.cpp
+    values/type.cpp
 )
 
 set(HASH "" CACHE STRING "Repository hash to insert into version info")

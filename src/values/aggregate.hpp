@@ -50,29 +50,7 @@ public:
         return elements.end();
     }
 
-    void addElements(std::vector<const Value*>& es) noexcept(false) {
-        // Test that the size matches the current type's:
-        unsigned vecsize = es.size();
-        if (unsigned tsize = getSize(); vecsize != tsize && tsize != 0) {
-            std::stringstream err;
-            err << "Could not add " << vecsize << " values to " << getTypeName() << " of size " << tsize << "!";
-            throw std::runtime_error(err.str());
-        }
-        for (unsigned i = 0; i < vecsize; ++i) {
-            // Construct an element from the element type, then copy data from e to it.
-            const Type& typeAt = getTypeAt(i);
-            Value* val = typeAt.construct();
-            try {
-                val->copyFrom(*es[i]);
-            } catch (const std::exception& e) {
-                delete val;
-                std::stringstream err;
-                err << "Could not add " << getTypeName() << " value #" << i << " because: " << e.what() << "!";
-                throw std::runtime_error(err.str());
-            }
-            elements.push_back(val);
-        }
-    }
+    void addElements(std::vector<const Value*>& es) noexcept(false);
 
     void dummyFill(bool undef = true) noexcept(false) {
         for (unsigned i = 0; i < getSize(); ++i) {
@@ -82,18 +60,7 @@ public:
     }
 
     // Infer the type from the children elements. Useful if the subelement type currently stored was a temporary.
-    void inferType() {
-        if (type.getBase() == DataType::ARRAY) {
-            // Must be at least one array element to perform this action!
-            assert(!elements.empty());
-            type.replaceSubElement(&elements[0]->getType());
-        } else {
-            assert(type.getBase() == DataType::STRUCT);
-            // Replace each of the sub elements with the field's type
-            for (unsigned i = 0; i < elements.size(); ++i)
-                type.replaceFieldType(&elements[0]->getType(), i);
-        }
-    }
+    void inferType();
 
     const Value* operator[](unsigned i) const {
         return elements[i];
@@ -102,38 +69,14 @@ public:
         return elements[i];
     }
 
-    void copyFrom(const Value& new_val) noexcept(false) override {
-        Value::copyFrom(new_val);
-
-        // Do the actual copy now
-        const Aggregate& other = static_cast<const Aggregate&>(new_val);
-        unsigned size = elements.size();
-
-        if (unsigned osize = other.elements.size(); osize != size) {
-            std::stringstream err;
-            err << "Cannot copy from " << getTypeName() << " of a different size (" << osize << " -> " << size << ")!";
-            throw std::runtime_error(err.str());
-        }
-        for (unsigned i = 0; i < size; ++i)
-            elements[i]->copyFrom(*other.elements[i]);
-    }
+    void copyFrom(const Value& new_val) noexcept(false) override;
 
     void copyReinterp(const Value& other) noexcept(false) override {
         if (!tryCopyFrom(other))
             throw std::runtime_error("Could not copy reinterp to aggregate!");
     }
 
-    bool equals(const Value& val) const override {
-        if (!Value::equals(val))  // guarantees matching types
-            return false;
-        const auto& other = static_cast<const Aggregate&>(val);
-        // Shouldn't have to test lengths since that is encoded in the type
-        for (unsigned i = 0; i < elements.size(); ++i) {
-            if (!elements[i]->equals(*other.elements[i]))
-                return false;
-        }
-        return true;
-    }
+    bool equals(const Value& val) const override;
 
     void recursiveApply(const std::function<bool(Value& seen)>& usage) override {
         for (auto& e : elements)
@@ -176,22 +119,7 @@ public:
         return tsize;
     }
 
-    void copyFrom(const Value& new_val) noexcept(false) override {
-        Value::copyFrom(new_val);
-        // Runtime arrays have size 0 by default. If this size is 0, then we assume the correct length from what is
-        // given now. Afterward, this should no longer have 0 length
-        if (elements.empty()) {
-            const Array& other = static_cast<const Array&>(new_val);
-            unsigned osize = other.elements.size();
-            // Initialize an element for each element in other to copy to
-            const Type& e_type = type.getElement();
-            for (unsigned i = 0; i < osize; ++i) {
-                Value* val = e_type.construct();
-                elements.push_back(val);
-            }
-        }
-        Aggregate::copyFrom(new_val);
-    }
+    void copyFrom(const Value& new_val) noexcept(false) override;
 
     void copyReinterp(const Value& other) noexcept(false) override {
         // We can only reinterpret from other arrays currently

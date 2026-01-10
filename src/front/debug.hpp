@@ -17,7 +17,6 @@
 #include "../spv/frame.hpp"
 #include "../spv/inst-list.hpp"
 #include "../util/trie.hpp"
-#include "../values/value.hpp"
 
 struct BreakPoint {
     unsigned hitCount = 0;

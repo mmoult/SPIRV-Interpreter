@@ -10,7 +10,6 @@
 #include "image.hpp"
 #include "sampler.hpp"
 #include "statics.hpp"
-#include "string.hpp"
 #include "type.hpp"
 #include "value.hpp"
 
@@ -35,7 +34,7 @@ public:
     void copyFrom(const Struct& str) noexcept(false) {
         const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "SampledImage", names);
 
-        // sampler: <sampler
+        // sampler: <sampler>
         sampler.copyFrom(*other[0]);
 
         // image: <image>
