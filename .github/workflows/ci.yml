@@ -22,15 +22,16 @@ jobs:
       matrix:
         build_type: [ Debug ]
         os:
-        - windows-latest
         - ubuntu-latest
-        #- macos-latest
+        - windows-latest
+        - macos-latest
         compiler:
         - llvm
-        #- gcc-14
-        #include:
-        #- os: "windows-latest"
-        #  compiler: "msvc"
+        include:
+        - os: "windows-latest"
+          compiler: "msvc"
+        - os: "ubuntu-latest"
+          compiler: "gcc-14"
 
     steps:
     - name: Checkout
