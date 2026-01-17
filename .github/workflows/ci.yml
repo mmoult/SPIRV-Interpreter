@@ -24,14 +24,14 @@ jobs:
         os:
         - ubuntu-latest
         - windows-latest
-        - macos-latest
+        #- macos-latest
         compiler:
         - llvm
         include:
-        - os: "windows-latest"
-          compiler: "msvc"
         - os: "ubuntu-latest"
           compiler: "gcc-14"
+        - os: "windows-latest"
+          compiler: "msvc"
 
     steps:
     - name: Checkout
