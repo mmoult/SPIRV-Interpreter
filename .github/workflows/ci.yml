@@ -20,19 +20,19 @@ jobs:
       fail-fast: true
 
       matrix:
-        build_type: [ Debug ]
+        compiler:
+        - llvm
         os:
         - ubuntu-latest
         - windows-latest
         #- macos-latest
-        compiler:
-        - llvm
+        build_type: [ Debug ]
         include:
-        - os: "ubuntu-latest"
-          compiler: "gcc-14"
+        - compiler: "gcc-14"
+          os: "ubuntu-latest"
           build_type: Debug
-        - os: "windows-latest"
-          compiler: "msvc"
+        - compiler: "msvc"
+          os: "windows-latest"
           build_type: Debug
 
     steps:
