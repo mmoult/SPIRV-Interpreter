@@ -30,8 +30,10 @@ jobs:
         include:
         - os: "ubuntu-latest"
           compiler: "gcc-14"
+          build_type: Debug
         - os: "windows-latest"
           compiler: "msvc"
+          build_type: Debug
 
     steps:
     - name: Checkout
