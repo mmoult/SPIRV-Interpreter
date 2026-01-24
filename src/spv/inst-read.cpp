@@ -196,6 +196,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         break;
     case spv::OpTypeSampledImage:  // 27
     case spv::OpTypeRuntimeArray:  // 29
+    case spv::OpCopyObject:  // 83
     case spv::OpTranspose:  // 84
     case spv::OpImage:  // 100
     case spv::OpConvertFToU:  // 109
@@ -311,11 +312,15 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeStruct:  // 30
+        // "It is valid for the structure to have no members."
     case spv::OpTypeFunction:  // 33
     case spv::OpConstantComposite:  // 44
     case spv::OpSpecConstantComposite:  // 51
-    case spv::OpFunctionCall:  // 57
     case spv::OpCompositeConstruct:  // 80
+        optional.push_back(Type::REF);
+        repeating = Repeat::WHOLE;
+        break;
+    case spv::OpFunctionCall:  // 57
         to_load.push_back(Type::REF);
         optional.push_back(Type::REF);
         repeating = Repeat::WHOLE;

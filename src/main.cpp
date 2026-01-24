@@ -21,7 +21,7 @@
 #include "values/raytrace/shader-binding-table.hpp"
 #include "values/value.hpp"
 
-constexpr auto VERSION = "0.9.1";
+constexpr auto VERSION = "0.10.0";
 
 enum ReturnCode : int {
     OK = 0,

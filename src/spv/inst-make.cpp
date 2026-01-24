@@ -1215,6 +1215,14 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(to_ret);
         break;
     }
+    case spv::OpCopyObject: {  // 83
+        const Value* src = getValue(src_at, data);
+        Type* res_type = getType(dst_type_at, data);
+        Value* to_ret = res_type->construct();
+        to_ret->copyFrom(*src);
+        data[result_at].redefine(to_ret);
+        break;
+    }
     case spv::OpTranspose: {  // 84
         Type* res_type = getType(dst_type_at, data);
         Value* to_ret = res_type->construct();
