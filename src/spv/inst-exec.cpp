@@ -121,7 +121,7 @@ Value* atomic_bin_op(
 
 bool Instruction::execute(
     DataView& data,
-    // The instruction is strictly forbidden from modifying any but the current frame stack
+    // NOTE: The instruction is strictly forbidden from modifying any but the current frame stack
     std::vector<std::vector<Frame*>>& frame_stacks,
     unsigned invocation,
     unsigned num_invocations,
@@ -424,6 +424,48 @@ bool Instruction::execute(
         // Illegal code path reached- signal to user
         throw std::runtime_error("Unreachable code path executed!");
         break;
+    case spv::OpGroupNonUniformQuadSwap: { // 366
+        // TODO: "An invocation will not execute a dynamic instance of this instruction (X') until all invocations in
+        // its quad have executed all dynamic instances that are program-ordered before X'."
+
+        if (num_invocations % 4 != 0)
+            throw std::runtime_error("GroupNonUniformQuadSwap must be called with exactly 4 invocations in the group!");
+        Value* direction = getValue(4, data);
+        // "Direction must be a scalar of integer type, whose Signedness operand is 0."
+        Primitive& dir_prim = static_cast<Primitive&>(*direction);
+        unsigned invoc_in_group = invocation % 4;
+
+        unsigned swap_with;
+        // The quad looks like this:
+        //   I0 I1
+        //   I2 I3
+        switch (dir_prim.data.u32) {
+        case 0:  // Horizontal
+            swap_with = invoc_in_group % 2 == 0 ? invoc_in_group + 1 : invoc_in_group - 1;
+            break;
+        case 1: // Vertical
+            swap_with = invoc_in_group < 2 ? invoc_in_group + 2 : invoc_in_group - 2;
+            break;
+        case 2: // Diagonal
+            swap_with = ~invoc_in_group & 0x3;
+            break;
+        default:
+            throw std::runtime_error("Invalid direction for GroupNonUniformQuadSwap!");
+        }
+        unsigned group_base = (invocation / 4) * 4;
+        swap_with += group_base;
+
+        Type* ret_type = getType(0, data);
+        Value* dst = ret_type->construct();
+        auto& frame_stack = frame_stacks[swap_with];
+        auto& swap_frame = *frame_stack.back();
+        DataView& swap_data = swap_frame.getData();
+        Value* swap_value = getValue(3, swap_data);
+        dst->copyFrom(*swap_value);
+
+        data[result_at].redefine(dst);
+        break;
+    }
     case spv::OpTraceRayKHR: {  // 4445
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(0, data));
 

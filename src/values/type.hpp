@@ -7,6 +7,7 @@
 #define VALUES_TYPE_HPP
 
 #include <algorithm>  // for min
+#include <cstdint>
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
@@ -67,12 +68,23 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     return os;
 }
 
+union ImageFields {
+    struct {
+        unsigned dim : 3;
+        unsigned comps : 13;
+        unsigned unused : 16;
+    };
+    uint32_t packed;
+
+    ImageFields(uint32_t val = 0) : packed(val) {}
+};
+
 // necessary forward reference
 class Value;
 
 class Type final : public Valuable {
     DataType base;
-    unsigned subSize;
+    uint32_t subSize;
     // memory for subElement and subList elements is NOT managed by the Type
     // In other words, the original allocator is expected to deallocate or transfer ownership
     const Type* subElement;
@@ -85,7 +97,7 @@ class Type final : public Valuable {
         unsigned rows;  // for cooperative matrix
     };
 
-    inline Type(DataType base, unsigned sub_size, const Type* sub_element)
+    inline Type(DataType base, uint32_t sub_size, const Type* sub_element)
         : base(base), subSize(sub_size), subElement(sub_element), rows(0) {}
 
     inline Type(DataType base, const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list)
@@ -199,7 +211,10 @@ public:
     static inline Type image(const Type* texel_type, unsigned dim, unsigned comps) {
         assert(dim <= 3);  // max of 2 bits
         assert(comps <= 4321);  // max of 13 bits
-        return Type(DataType::IMAGE, (comps << 8) | dim, texel_type);
+        ImageFields fields;
+        fields.dim = dim;
+        fields.comps = comps;
+        return Type(DataType::IMAGE, fields.packed, texel_type);
     }
 
     static inline Type sampledImage(const Type* image) {
@@ -246,12 +261,14 @@ public:
 
     inline unsigned getDim() const {
         assert(base == DataType::IMAGE);
-        return subSize & 0x3;
+        ImageFields fields(subSize);
+        return fields.dim;
     }
 
     inline unsigned getComps() const {
         assert(base == DataType::IMAGE);
-        return subSize >> 8;
+        ImageFields fields(subSize);
+        return fields.comps;
     }
 
     inline const std::vector<const Type*>& getFields() const {

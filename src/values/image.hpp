@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include <array>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -17,7 +18,11 @@
 #include "value.hpp"
 
 class Image final : public Value {
-    /// Dimensions of the image. xx is the length of x, yy the length of y, zz the len of z
+    /// Dimensions of the image:
+    /// - xx is width
+    /// - yy is height
+    /// - zz is depth
+    /// - ww is number of array elements (not currently supported)
     unsigned xx, yy, zz;
 
     /// @brief The number of mipmap levels, which decrease in level of detail (LOD).
@@ -111,6 +116,7 @@ class Image final : public Value {
     /// |
     /// v +y
     std::string reference;
+    bool fromFile = false;  // this is a hint for whether to write it out
 
     // TODO I suspect that there are a couple extra fields which need to be encoded in the type. As far as I can tell,
     // these only really apply to floats, but we probably need to track them to get correct output
@@ -165,6 +171,15 @@ public:
     unsigned getDimensionality() const {
         return type.getDim();
     }
+
+    /// @brief Get the size of the image at the given LOD level
+    /// @param lod the level of detail to query. 0 is the most detailed level
+    /// @return a tuple of four floats: width, height, depth, and number of array elements.
+    ///
+    /// Note, some images are of a dimensionality which don't specify some of the return floats. For all missing
+    /// component(s), an undefined returned and the output is expected to be truncated in dimension to match with
+    /// #getDimensionality().
+    std::array<unsigned, 4> getSize(uint32_t lod = 0) const;
 
     static std::tuple<float, float, float, float> extractCoords(const Value* coords_v, unsigned dim, bool proj);
 

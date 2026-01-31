@@ -216,20 +216,33 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
             throw std::runtime_error(err.str());
         }
 
+        // The shader may or may not provide the components field.
+        // - %10 = OpTypeImage %float 2D 0 0 0 2 Rgba8
+        // - %11 = OpTypeImage %float 2D 0 0 0 1 Unknown
+        // If it doesn't, we will default to the format of the provided image.
+        if (comps.count == 0) {
+            for (unsigned i = 0; i < gc; ++i)
+                comps[i] = i + 1;
+            comps.count = gc;
+        }
+        // Note, however, if it does, we need to only copy the relevant channels in the correct order from loaded data.
+
         // Now, transfer the data from img to our "data" field
         // Data has been loaded in as a sequence of RGBA bytes (values 0-255) from left -> right, top -> bottom.
         // TODO handle more than just unsigned normalized float element type
-        unsigned size = gx * gy * gc;
-        data.resize(size);
-        // TODO handle if the number of channels gotten != 4
-        for (unsigned i = 0; i < size; i += gc) {
-            unsigned ii = 0;
-            for (unsigned j = 0; j < 4; ++j) {
-                if (comps[j] == 0)
-                    continue;
-                float norm = img[i + ii] / 255.0;
-                data[i + comps[j] - 1] = *reinterpret_cast<uint32_t*>(&norm);
-                ++ii;
+        data.resize(gx * gy * comps.count);
+        unsigned load_idx = 0;
+        unsigned store_idx = 0;
+        for (unsigned y = 0; y < gy; ++y) {
+            for (unsigned x = 0; x < gx; ++x) {
+                for (unsigned c = 0; c < gc; ++c) {
+                    if (comps[c] == 0)
+                        continue;
+                    float norm = img[load_idx + c] / 255.0f;
+                    data[store_idx + comps[c] - 1] = *reinterpret_cast<uint32_t*>(&norm);
+                }
+                load_idx += gc;
+                store_idx += comps.count;
             }
         }
 
@@ -240,6 +253,8 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
 
     // mipmaps: <uint>
     mipmaps = Statics::extractUint(other[2], names[2]);
+    if (mipmaps == 0)
+        throw std::runtime_error("The image field \"mipmaps\" is an must have an integer value greater than 0!");
 
     // comps: <uint>
     const Value& comps_v = *other[3];
@@ -251,9 +266,9 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
             "that all four channels are present in the order ARGB."
         );
     unsigned comps_got = static_cast<const Primitive&>(comps_v).data.all;
-    Component comp_new(comps_got, true);
-    if (reference.empty())  // the component field only matters if we aren't specifying data through a file
-        comps.assertCompatible(comp_new);
+    Component comps_new(comps_got, reference.empty());  // only used if no reference is given
+    if (reference.empty())
+        comps.assertCompatible(comps_new);
 
     // data : array<float> or array<uint> or array<int>
     // TODO: differentiate between float [0, 255] and float normal [0.0, 1.0]
@@ -270,6 +285,10 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
                 "Image exists with both an image reference and literal data. Only one may be provided at a time!"
             );
         }
+
+        // Clear out the reference because when the output prints, we cannot print reference and data
+        reference = "";
+        fromFile = true;
     } else {
         const Type& element = data_a.getType().getElement();
         if (DataType ebase = element.getBase();
@@ -301,7 +320,7 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
             for (unsigned j = 0; j < 4; ++j) {
                 if (comps[j] == 0)
                     continue;
-                const auto& prim = static_cast<const Primitive&>(*data_a[i + comp_new[j] - 1]);
+                const auto& prim = static_cast<const Primitive&>(*data_a[i + comps_new[j] - 1]);
                 data[i + comps[j] - 1] = prim.data.all;
             }
         }
@@ -569,6 +588,15 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
     return new Array(vals);
 }
 
+std::array<unsigned, 4> Image::getSize(uint32_t lod) const {
+    // we divide each dimension by 2 times the lod. For example, 0 is full size, 1 is half-size, etc
+    unsigned divide = std::max(lod * 2, 1u);
+    auto trunc = [divide](unsigned size) {
+        return std::max(size / divide, 1u);
+    };
+    return {trunc(xx), trunc(yy), trunc(zz), 1u};
+}
+
 bool Image::write(int x, int y, int z, const Array& texel) {
     // Verify that the texel to write to is in bounds
     bool oob = false;
@@ -596,9 +624,9 @@ bool Image::write(int x, int y, int z, const Array& texel) {
     std::vector<const Value*> values(1, nullptr);
     values.resize(1);
     unsigned tex_size = texel.getSize();
+    assert(tex_size <= 4);  // texel array to write cannot have more than 4 channels!
+    tex_size = std::min(tex_size, comps.count);
     assert(base + tex_size <= data.size());
-    if (tex_size > 4)
-        throw std::runtime_error("Texel array to write to image has too many channels (> 4)!");
     for (unsigned i = 0; i < tex_size; ++i) {
         values[0] = texel[i];
         const Value* gen = el.construct(values);

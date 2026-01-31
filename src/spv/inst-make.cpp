@@ -1305,6 +1305,24 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(&image, false);
         break;
     }
+    case spv::OpImageQuerySizeLod: { // 103
+        const Value* image_v = getValue(src_at, data);
+        const Value* lod_v = getValue(src_at + 1, data);
+        // "Level of Detail is used to compute which mipmap level to query and must be a 32-bit integer type scalar."
+        uint32_t lod = static_cast<const Primitive*>(lod_v)->data.u32;
+        const Image& image = static_cast<const Image&>(*image_v);
+        std::array<unsigned, 4> size = image.getSize(lod);
+        Type* ret_type = getType(dst_type_at, data);
+        Value* ret = ret_type->construct();
+        Array& arr = *static_cast<Array*>(ret);
+        assert(arr.getSize() <= 4);
+        for (unsigned i = 0; i < arr.getSize(); ++i) {
+            Primitive prim(size[i]);
+            arr[i]->copyFrom(prim);
+        }
+        data[result_at].redefine(ret);
+        break;
+    }
     case spv::OpConvertFToU:  // 109
         TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint32_t>(a->data.fp32));
     case spv::OpConvertFToS:  // 110
