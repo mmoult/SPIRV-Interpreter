@@ -8,14 +8,10 @@
 
 #include <cassert>
 #include <cstdint>
-#include <sstream>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "aggregate.hpp"
-#include "primitive.hpp"
-#include "string.hpp"
 #include "type.hpp"
 #include "value.hpp"
 

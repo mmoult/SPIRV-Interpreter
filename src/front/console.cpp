@@ -84,15 +84,15 @@ void Console::warn(std::string msg) {
     FlushConsoleInputBuffer(hConsole);
     SetConsoleTextAttribute(hConsole, RED_ON_BLACK);
 #else
-    std::cout << "\e[0;31m";
+    std::cerr << "\e[0;31m";
 #endif
 
-    std::cout << "[Warning] " << msg << std::endl;
+    std::cerr << "[Warning] " << msg << std::endl;
 
 #if defined(WIN32) || defined(_WIN32)
     constexpr int DEFAULT = 7;
     SetConsoleTextAttribute(hConsole, DEFAULT);
 #else
-    std::cout << "\e[0m";
+    std::cerr << "\e[0m";
 #endif
 }

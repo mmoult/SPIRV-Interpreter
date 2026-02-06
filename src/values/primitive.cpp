@@ -5,6 +5,9 @@
  */
 #include "primitive.hpp"
 
+#include <bit>  // countl_zero
+#include <limits>
+
 void Primitive::copyFrom(const Value& new_val) noexcept(false) {
     // Verify that the other is a primitive type
     // (Don't use the super check since we don't require the same base)

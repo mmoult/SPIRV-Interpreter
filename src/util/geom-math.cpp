@@ -96,4 +96,4 @@ std::tuple<bool, float, float, float, bool> ray_triangle_intersect(
     return {true, t, u, v, intersect_front};
 }
 
-}; // namespace GeomMath
+};  // namespace GeomMath

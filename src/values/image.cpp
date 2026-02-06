@@ -174,17 +174,13 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
     // ref: <string>
     const Value* ref = other[0];
     if (ref->getType().getBase() != DataType::STRING)
-        throw std::runtime_error(
-            "The first image field, \"ref\", must be a string path to the image source or empty!"
-        );
+        throw std::runtime_error("The first image field, \"ref\", must be a string path to the image source or empty!");
     reference = static_cast<const String*>(ref)->get();
 
     // dim: uvec1, uvec2, or uvec3
     unsigned dim_size = this->type.getDim();
     if (dim_size < 1 || dim_size > 3)
-        throw std::runtime_error(
-            "Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive."
-        );
+        throw std::runtime_error("Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive.");
     std::vector<unsigned> dims = Statics::extractUvec(other[1], names[1], dim_size);
     xx = dims[0];
     if (dim_size > 1) {
@@ -274,9 +270,7 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
     // TODO: differentiate between float [0, 255] and float normal [0.0, 1.0]
     const Value& data_v = *other[4];
     if (data_v.getType().getBase() != DataType::ARRAY)
-        throw std::runtime_error(
-            "The fourth image field, \"data\", must be an array of uint, int, or float values."
-        );
+        throw std::runtime_error("The fourth image field, \"data\", must be an array of uint, int, or float values.");
     const Array& data_a = static_cast<const Array&>(data_v);
     if (!reference.empty()) {
         // Verify that the data is empty
@@ -307,9 +301,8 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
         if (total != size) {
             std::stringstream err;
             err << "The amount of data provided for the image does not match the dimensions given! Dimensions "
-                    "were ";
-            err << xx << " x " << yy << " x " << zz << ", with " << comps.count
-                << " active channels. This requires ";
+                   "were ";
+            err << xx << " x " << yy << " x " << zz << ", with " << comps.count << " active channels. This requires ";
             err << total << " values, however, " << size << " were provided.";
             throw std::runtime_error(err.str());
         }
@@ -438,8 +431,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
         auto [zBase, zRatio] = decompose(z);
 
         if ((xBase > xx || (xBase == xx && xRatio > 0.0)) || (yBase > yy || (yBase == yy && yRatio > 0.0)) ||
-            (zBase > zz || (zBase == zz && zRatio > 0.0)) ||
-            (lBase > mipmaps || (lBase == mipmaps && lRatio > 0.0)))
+            (zBase > zz || (zBase == zz && zRatio > 0.0)) || (lBase > mipmaps || (lBase == mipmaps && lRatio > 0.0)))
             return outOfBoundsAccess();
     }
 
@@ -591,9 +583,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
 std::array<unsigned, 4> Image::getSize(uint32_t lod) const {
     // we divide each dimension by 2 times the lod. For example, 0 is full size, 1 is half-size, etc
     unsigned divide = std::max(lod * 2, 1u);
-    auto trunc = [divide](unsigned size) {
-        return std::max(size / divide, 1u);
-    };
+    auto trunc = [divide](unsigned size) { return std::max(size / divide, 1u); };
     return {trunc(xx), trunc(yy), trunc(zz), 1u};
 }
 

@@ -269,8 +269,7 @@ bool Debugger::invoke(unsigned i_at, const DataView& data, const std::vector<Fra
                         warnExtraArgs("break add", 1, tokens.size() - 2);
                         unsigned line_no = *found;
                         if (bps.contains(line_no)) {
-                            std::cout << "There already exists a breakpoint at line " << line_no << "!"
-                                        << std::endl;
+                            std::cout << "There already exists a breakpoint at line " << line_no << "!" << std::endl;
                             break;
                         }
                         bps.emplace(line_no, BreakPoint());
@@ -289,15 +288,13 @@ bool Debugger::invoke(unsigned i_at, const DataView& data, const std::vector<Fra
                         unsigned max_line = 0;
                         for (auto const& pair : bps)
                             max_line = std::max(max_line, pair.first);
-                        max_line =
-                            std::max(static_cast<unsigned>(line_header.length()), numDigits(max_line)) + BUFFER;
+                        max_line = std::max(static_cast<unsigned>(line_header.length()), numDigits(max_line)) + BUFFER;
 
                         std::cout << line_header << std::string(max_line - line_header.length(), ' ');
                         std::cout << "hits:" << std::endl;
                         for (auto const& [line_no, bp] : bps) {
                             unsigned line_len = numDigits(line_no);
-                            std::cout << line_no << std::string(max_line - line_len, ' ') << bp.hitCount
-                                        << std::endl;
+                            std::cout << line_no << std::string(max_line - line_len, ' ') << bp.hitCount << std::endl;
                         }
                         break;
                     }
@@ -312,8 +309,7 @@ bool Debugger::invoke(unsigned i_at, const DataView& data, const std::vector<Fra
                         warnExtraArgs("break remove", 1, tokens.size() - 2);
                         unsigned line_no = *found;
                         if (!bps.contains(line_no)) {
-                            std::cout << "There is no breakpoint to remove from line " << line_no << "!"
-                                        << std::endl;
+                            std::cout << "There is no breakpoint to remove from line " << line_no << "!" << std::endl;
                             break;
                         }
                         bps.erase(line_no);

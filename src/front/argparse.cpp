@@ -26,7 +26,14 @@ std::optional<unsigned> UintOption::isValid(std::string str) {
     }
 }
 
-bool Parser::handleOption(const std::string& option, Option& opt, const std::string& initial, int* i, char* argv[], int argc) {
+bool Parser::handleOption(
+    const std::string& option,
+    Option& opt,
+    const std::string& initial,
+    int* i,
+    char* argv[],
+    int argc
+) {
     unsigned args = opt.getNumArgs();
     if (args == 0) {
         if (!initial.empty()) {

@@ -424,7 +424,7 @@ bool Instruction::execute(
         // Illegal code path reached- signal to user
         throw std::runtime_error("Unreachable code path executed!");
         break;
-    case spv::OpGroupNonUniformQuadSwap: { // 366
+    case spv::OpGroupNonUniformQuadSwap: {  // 366
         // TODO: "An invocation will not execute a dynamic instance of this instruction (X') until all invocations in
         // its quad have executed all dynamic instances that are program-ordered before X'."
 
@@ -443,10 +443,10 @@ bool Instruction::execute(
         case 0:  // Horizontal
             swap_with = invoc_in_group % 2 == 0 ? invoc_in_group + 1 : invoc_in_group - 1;
             break;
-        case 1: // Vertical
+        case 1:  // Vertical
             swap_with = invoc_in_group < 2 ? invoc_in_group + 2 : invoc_in_group - 2;
             break;
-        case 2: // Diagonal
+        case 2:  // Diagonal
             swap_with = ~invoc_in_group & 0x3;
             break;
         default:

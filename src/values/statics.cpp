@@ -5,6 +5,12 @@
  */
 #include "statics.hpp"
 
+#include <sstream>
+#include <stdexcept>
+
+#include "primitive.hpp"
+#include "string.hpp"
+
 const Array& Statics::extractArray(const Value* field, const std::string& name) {
     if (field == nullptr) {
         std::stringstream err;

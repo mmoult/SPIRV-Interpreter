@@ -615,12 +615,8 @@ void element_tern_op(
 #define INT_E_BIN_OP(BIN_OP) \
     { \
         BinOp uufx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }; \
-        BinOp uifx = [](const Primitive* a, const Primitive* b) { \
-            return a->data.u32 BIN_OP b->data.i32; \
-        }; \
-        BinOp iufx = [](const Primitive* a, const Primitive* b) { \
-            return a->data.i32 BIN_OP b->data.u32; \
-        }; \
+        BinOp uifx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.i32; }; \
+        BinOp iufx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.u32; }; \
         BinOp iifx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; }; \
         element_int_bin_op( \
             checkRef(src_at, data_len), \
@@ -1305,7 +1301,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(&image, false);
         break;
     }
-    case spv::OpImageQuerySizeLod: { // 103
+    case spv::OpImageQuerySizeLod: {  // 103
         const Value* image_v = getValue(src_at, data);
         const Value* lod_v = getValue(src_at + 1, data);
         // "Level of Detail is used to compute which mipmap level to query and must be a 32-bit integer type scalar."

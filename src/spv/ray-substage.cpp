@@ -12,10 +12,10 @@ void copy_into(Value* into, std::vector<Primitive>& src) {
 }
 
 void RayTraceSubstage::setUpInputs(DataView& dat, AccelStruct* as, Value& payload, const InstanceNode* instance) const {
-    #define REQUIRE_AS(VAR_TYPE) \
-        if (as == nullptr) { \
-            throw std::runtime_error("Cannot set up " VAR_TYPE " variable without an acceleration struct in the frame!"); \
-        }
+#define REQUIRE_AS(VAR_TYPE) \
+    if (as == nullptr) { \
+        throw std::runtime_error("Cannot set up " VAR_TYPE " variable without an acceleration struct in the frame!"); \
+    }
 
     if (!worldRayOrigin.empty()) {
         REQUIRE_AS("world ray origin");
@@ -90,9 +90,11 @@ void RayTraceSubstage::setUpInputs(DataView& dat, AccelStruct* as, Value& payloa
     }
 }
 
-[[nodiscard]] Value*
-RayTraceSubstage::setUpHitAttribute(
-    RtStageKind stage, DataView& dat, glm::vec2 barycentrics, Value* hit_attribute
+[[nodiscard]] Value* RayTraceSubstage::setUpHitAttribute(
+    RtStageKind stage,
+    DataView& dat,
+    glm::vec2 barycentrics,
+    Value* hit_attribute
 ) const {
     if (hitAttribute != 0) {
         Variable* var = dat[hitAttribute].getVariable();

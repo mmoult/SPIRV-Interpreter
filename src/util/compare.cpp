@@ -144,4 +144,4 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
     return diff == CompareMode::TYPICAL || diff == CompareMode::ZERO;
 }
 
-}; // namespace Compare
+};  // namespace Compare

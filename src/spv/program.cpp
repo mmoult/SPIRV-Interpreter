@@ -56,9 +56,9 @@ bool Program::ProgramLoader::skip(int delta) {
 }
 
 uint32_t Program::ProgramLoader::parse(std::vector<Instruction>& insts) noexcept(false) {
-    #define REQUIRE(COND, MSG) \
-        if (!(COND)) \
-            throw std::runtime_error(MSG);
+#define REQUIRE(COND, MSG) \
+    if (!(COND)) \
+        throw std::runtime_error(MSG);
 
     REQUIRE(determineEndian(), "Corrupted binary! Magic number missing.");
     REQUIRE(skip(2), "Corrupted binary! Version and/or generator missing.");

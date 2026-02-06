@@ -6,11 +6,9 @@
 #ifndef VALUES_PRIMITIVE_HPP
 #define VALUES_PRIMITIVE_HPP
 
-#include <bit>
 #include <cassert>
 #include <cmath>
 #include <cstdint>  // for uint32_t and int32_t
-#include <limits>
 #include <sstream>
 #include <stdexcept>
 

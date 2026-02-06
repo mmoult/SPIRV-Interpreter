@@ -232,7 +232,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         break;
     case spv::OpTypeArray:  // 28
     case spv::OpSampledImage:  // 86
-    case spv::OpImageQuerySizeLod: // 103
+    case spv::OpImageQuerySizeLod:  // 103
     case spv::OpIAdd:  // 128
     case spv::OpFAdd:  // 129
     case spv::OpISub:  // 130
@@ -313,7 +313,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::REF);
         break;
     case spv::OpTypeStruct:  // 30
-        // "It is valid for the structure to have no members."
+                             // "It is valid for the structure to have no members."
     case spv::OpTypeFunction:  // 33
     case spv::OpConstantComposite:  // 44
     case spv::OpSpecConstantComposite:  // 51
@@ -403,7 +403,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
     case spv::OpControlBarrier:  // 224
     case spv::OpAtomicIIncrement:  // 232
     case spv::OpAtomicIDecrement:  // 233
-    case spv::OpGroupNonUniformQuadSwap: // 366
+    case spv::OpGroupNonUniformQuadSwap:  // 366
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);

@@ -7,8 +7,8 @@
 #define VALUES_TYPE_HPP
 
 #include <algorithm>  // for min
-#include <cstdint>
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>

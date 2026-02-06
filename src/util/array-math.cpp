@@ -125,4 +125,4 @@ double determinant(const Array& arr) {
     return determinant_rec(no_skips);
 }
 
-}; // namespace ArrayMath
+};  // namespace ArrayMath
