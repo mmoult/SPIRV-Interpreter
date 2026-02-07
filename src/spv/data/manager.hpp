@@ -6,7 +6,7 @@
 #ifndef SPV_DATA_MANAGER_HPP
 #define SPV_DATA_MANAGER_HPP
 
-#include <algorithm>
+#include <algorithm>  // find
 #include <map>
 #include <stdexcept>
 #include <vector>

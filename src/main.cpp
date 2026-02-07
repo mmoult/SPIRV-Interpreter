@@ -213,8 +213,8 @@ int main(int argc, char* argv[]) {
         &location,
         "location",
         "Prefer location names instead of decorated/inferred names when printing out variables (both for templates and "
-        " outputs. This option does not need to be enabled for location names to be usable when providing input or "
-        " comparing output(s).",
+        "outputs. This option does not need to be enabled for location names to be usable when providing input or "
+        "comparing output(s).",
         "l"
     );
     ArgParse::StringOption out_arg("FILE", "-");

@@ -7,7 +7,6 @@
 #define SPV_DATA_DATA_HPP
 
 #include <cassert>
-#include <cstdint>
 #include <limits>
 
 #include "../../util/spirv.hpp"
@@ -44,13 +43,13 @@ public:
     Variable(Value* value, spv::StorageClass storage_class, bool spec_const)
         : val(value), storage(storage_class), specConst(spec_const) {}
 
-    Variable(const Variable& other)
+    Variable(const Variable& other, bool copy_val = true)
         : storage(other.storage)
         , name(other.name)
         , builtIn(other.builtIn)
         , specConst(other.specConst)
         , nonwritable(other.nonwritable) {
-        if (other.val != nullptr) {
+        if (copy_val && other.val != nullptr) {
             val = other.val->getType().construct();
             val->copyFrom(*other.val);
         } else

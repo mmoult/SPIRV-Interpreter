@@ -193,7 +193,7 @@ bool Instruction::execute(
         inc_pc = false;  // get arg increments PC for us
         // Function parameters get a weak copy of the data passed in. If a pointer is passed (such as a Variable), then
         // changes to the pointed data in-function should remain after the function exits.
-        data[result_at].redefine(frame.getArg(), false);
+        data.local(result_at).redefine(frame.getArg(), false);
         break;
     case spv::OpFunctionEnd:  // 56
         throw std::runtime_error("Missing return before function end!");
@@ -221,7 +221,7 @@ bool Instruction::execute(
         Variable* var = data[result_at].getVariable();
         if (var->isThreaded()) {
             // Create the variable for the local scope
-            var = new Variable(*var);
+            var = new Variable(*var, false);
             data.local(result_at).redefine(var);
         }
         var->initValue(*getType(0, data));

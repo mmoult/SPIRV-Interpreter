@@ -1,0 +1,89 @@
+; SPIR-V
+; Version: 1.6
+; Generator: Khronos Glslang Reference Front End; 11
+; Bound: 66
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main" %_
+               OpExecutionMode %main LocalSize 1 1 1
+               OpSource GLSL 450
+               OpDecorate %Struct Block
+               OpMemberDecorate %Struct 0 Offset 0
+               OpMemberDecorate %Struct 1 Offset 4
+               OpMemberDecorate %Struct 2 Offset 8
+               OpDecorate %_ Binding 1
+               OpDecorate %_ DescriptorSet 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+        %int = OpTypeInt 32 1
+%_ptr_Function_int = OpTypePointer Function %int
+          %8 = OpTypeFunction %int %_ptr_Function_int
+      %int_2 = OpConstant %int 2
+       %bool = OpTypeBool
+      %int_1 = OpConstant %int 1
+     %Struct = OpTypeStruct %int %int %int
+%_ptr_StorageBuffer_Struct = OpTypePointer StorageBuffer %Struct
+          %_ = OpVariable %_ptr_StorageBuffer_Struct StorageBuffer
+%_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
+      %int_0 = OpConstant %int 0
+       %uint = OpTypeInt 32 0
+     %v3uint = OpTypeVector %uint 3
+     %uint_1 = OpConstant %uint 1
+         %65 = OpConstantComposite %v3uint %uint_1 %uint_1 %uint_1
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+    %param_0 = OpVariable %_ptr_Function_int Function
+         %58 = OpAccessChain %_ptr_StorageBuffer_int %_ %int_0
+         %59 = OpLoad %int %58
+               OpStore %param_0 %59
+         %60 = OpFunctionCall %int %recursive %param_0
+         %61 = OpAccessChain %_ptr_StorageBuffer_int %_ %int_2
+               OpStore %61 %60
+               OpReturn
+               OpFunctionEnd
+  %recursive = OpFunction %int None %8
+      %depth = OpFunctionParameter %_ptr_Function_int
+         %14 = OpLabel
+       %next = OpVariable %_ptr_Function_int Function
+      %param = OpVariable %_ptr_Function_int Function
+         %18 = OpLoad %int %depth
+         %21 = OpSLessThan %bool %18 %int_2
+               OpSelectionMerge %23 None
+               OpBranchConditional %21 %22 %23
+         %22 = OpLabel
+               OpReturnValue %int_1
+         %23 = OpLabel
+         %27 = OpLoad %int %depth
+         %28 = OpISub %int %27 %int_1
+               OpStore %param %28
+         %30 = OpFunctionCall %int %recursive %param
+               OpStore %next %30
+         %35 = OpAccessChain %_ptr_StorageBuffer_int %_ %int_1
+         %36 = OpLoad %int %35
+         %38 = OpSLessThanEqual %bool %36 %int_0
+               OpSelectionMerge %40 None
+               OpBranchConditional %38 %39 %46
+         %39 = OpLabel
+         %41 = OpLoad %int %next
+         %42 = OpAccessChain %_ptr_StorageBuffer_int %_ %int_1
+         %43 = OpLoad %int %42
+         %44 = OpIAdd %int %43 %41
+         %45 = OpAccessChain %_ptr_StorageBuffer_int %_ %int_1
+               OpStore %45 %44
+               OpBranch %40
+         %46 = OpLabel
+         %47 = OpLoad %int %next
+         %48 = OpAccessChain %_ptr_StorageBuffer_int %_ %int_1
+         %49 = OpLoad %int %48
+         %50 = OpISub %int %49 %47
+         %51 = OpAccessChain %_ptr_StorageBuffer_int %_ %int_1
+               OpStore %51 %50
+               OpBranch %40
+         %40 = OpLabel
+         %52 = OpLoad %int %next
+         %53 = OpLoad %int %depth
+         %54 = OpIAdd %int %52 %53
+               OpReturnValue %54
+               OpFunctionEnd

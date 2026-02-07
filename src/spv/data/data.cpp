@@ -5,6 +5,7 @@
  */
 #include "data.hpp"
 
+#include <cstdint>
 #include <stdexcept>
 
 #include "../../values/aggregate.hpp"

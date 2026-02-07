@@ -5,6 +5,7 @@
  */
 #include "type.hpp"
 
+#include <algorithm>  // for max
 #include <cassert>
 #include <sstream>
 #include <stdexcept>

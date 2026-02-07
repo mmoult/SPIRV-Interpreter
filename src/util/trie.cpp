@@ -6,10 +6,6 @@
 #include "trie.hpp"
 
 #include <algorithm>  // for min
-#include <sstream>
-#include <string>
-#include <tuple>
-#include <vector>
 
 std::tuple<unsigned, bool> Trie::index(char key) const {
     // Do a binary search between children indices

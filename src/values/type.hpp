@@ -6,7 +6,6 @@
 #ifndef VALUES_TYPE_HPP
 #define VALUES_TYPE_HPP
 
-#include <algorithm>  // for min
 #include <cassert>
 #include <cstdint>
 #include <iostream>
