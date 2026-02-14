@@ -7,7 +7,6 @@
 #define VALUES_AGGREGATE_HPP
 
 #include <cassert>
-#include <sstream>
 #include <stdexcept>
 #include <vector>
 

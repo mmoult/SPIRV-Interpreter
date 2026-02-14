@@ -7,7 +7,7 @@
 #define VALUES_PRIMITIVE_HPP
 
 #include <cassert>
-#include <cmath>
+#include <cmath>  // for nanf
 #include <cstdint>  // for uint32_t and int32_t
 #include <sstream>
 #include <stdexcept>

@@ -149,7 +149,7 @@ bool Image::equals(const Value& val) const {
     }
 
     // Do a data analysis
-    // In theory, the data of all mipmaps should be synchronized. Therefore, we can compare only the mimaps with
+    // In theory, the data of all mipmaps should be synchronized. Therefore, we can compare only the mipmaps with
     // most data (mipmap 0)
     const Type& subelement = type.getElement();
     for (unsigned i = 0; i < (xx * yy * zz); i += comps.count) {
@@ -454,7 +454,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
         // should not get *any* blending with the new 1, which represents the top-level 2-3.
         // However, if the coord was between pixels of different groups, the decimal part should be undisturbed.
         // Consider another example:
-        // - coord 1.75 is 3/4 the way between 1 and 2. In the mimap, 0-1 is represented by the new 0, and 2-3 is
+        // - coord 1.75 is 3/4 the way between 1 and 2. In the mipmap, 0-1 is represented by the new 0, and 2-3 is
         // represented by the new 1. This scaling did *not* affect the ratio of the original coord's representation
         // by the now pixel 0 and 1.
 

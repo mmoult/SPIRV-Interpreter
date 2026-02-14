@@ -6,8 +6,8 @@
 #ifndef VALUES_COOPMATRIX_HPP
 #define VALUES_COOPMATRIX_HPP
 
-#include <algorithm>
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 
 #include "aggregate.hpp"

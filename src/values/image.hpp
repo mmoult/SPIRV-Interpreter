@@ -27,7 +27,7 @@ class Image final : public Value {
 
     /// @brief The number of mipmap levels, which decrease in level of detail (LOD).
     /// Each mipmap has half the dimensions of the prior (truncating as needed except when dividing 1). Fields xx, yy,
-    /// and zz determine the dimensions of the mimap with the most detail (index 0). The number of mipmaps must not be
+    /// and zz determine the dimensions of the mipmap with the most detail (index 0). The number of mipmaps must not be
     /// less than 1, nor should it exceed the value of `log2(max(dim.xyz)) + 1`.
     unsigned mipmaps;
 

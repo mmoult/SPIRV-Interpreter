@@ -288,12 +288,6 @@ public:
         this->subElement = &point_to;
     }
 
-    // TODO: deprecate or make private. The nearest valid use is operator==
-    [[deprecated]]
-    inline bool sameBase(const Type& rhs) const {
-        return base == rhs.base;
-    }
-
     inline void nameMember(unsigned i, const std::string& name) noexcept(false) {
         assert(base == DataType::STRUCT);
         if (i >= nameList.size())

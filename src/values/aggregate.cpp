@@ -5,6 +5,8 @@
  */
 #include "aggregate.hpp"
 
+#include <sstream>
+
 void Aggregate::addElements(std::vector<const Value*>& es) noexcept(false) {
     // Test that the size matches the current type's:
     unsigned vecsize = es.size();
