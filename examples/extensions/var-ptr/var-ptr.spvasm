@@ -7,7 +7,7 @@
 ; Each invocation loops 4 times and writes out 4 results each for OpPtrEqual.
 ; The pointers are the lid'th element of gid'th element of the outer array vs
 ; the iteration count mod 4'th element of the gid'th element of the outer
-; array. Results are ordered so each thread writes continguous results.
+; array. Results are ordered so each thread writes contiguous results.
 
 OpCapability Shader
 OpCapability VariablePointers
