@@ -124,7 +124,7 @@ if __name__ == "__main__":
     if platform.system() == "Windows":
         executable_name += ".exe"
 
-    root_path = os.path.dirname(os.path.dirname(__file__))
+    root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     interp_path = os.path.abspath(os.path.join(root_path, "build", "src", executable_name))
 
     # Recursively search through the examples directory or the path passed in
