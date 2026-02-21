@@ -231,7 +231,12 @@ int main(int argc, char* argv[]) {
         "r"
     );
     ArgParse::StringOption set_arg("KEY_VAL");
-    parser.addOption(&set_arg, "set", "Define key-value pair in the default format. May be given more than once.", "s");
+    parser.addOption(
+        &set_arg,
+        "set",
+        "Define an input variable via a key-value pair in the default format. May be given more than once.",
+        "s"
+    );
     ArgParse::Flag single_invoc;
     parser.addOption(
         &single_invoc,
@@ -249,6 +254,13 @@ int main(int argc, char* argv[]) {
         "Creates a template input file with stubs for all needed inputs. If --default is set, the default values "
         "will be printed instead of <type> stubs.",
         "t"
+    );
+    ArgParse::UintOption timeout("TEN_EXPONENT", 0);
+    parser.addOption(
+        &timeout,
+        "timeout",
+        "Set a timeout for the shader in terms of 10^x dynamic instruction executions. A value of 0 means no timeout.",
+        "T"
     );
     ArgParse::Flag unused;
     parser.addOption(
@@ -419,7 +431,7 @@ int main(int argc, char* argv[]) {
 
     // Run the program
     try {
-        program.execute(verbose.enabled, debug.enabled, *format, single_invoc.enabled);
+        program.execute(verbose.enabled, *format, debug.enabled, single_invoc.enabled, timeout.getValue());
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::FAILED_EXE;

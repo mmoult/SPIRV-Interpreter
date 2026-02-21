@@ -119,7 +119,13 @@ public:
 
     std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true);
 
-    void execute(bool verbose, bool debug, ValueFormat& format, bool single_invoc) noexcept(false);
+    /// @brief Executes the program with the current data and entry point
+    /// @param verbose display: whether to print extra info during execution, such as instructions executed and results
+    /// @param format display: the format in which to print output variables if verbose is enabled
+    /// @param debug debug: whether to invoke the debugger
+    /// @param single_invoc debug: whether to run only a single invocation, ignoring others in the workgroup
+    /// @param timeout debug: the maximum number of instructions to execute before timing out
+    void execute(bool verbose, ValueFormat& format, bool debug, bool single_invoc, unsigned timeout) noexcept(false);
 
     ValueMap getVariables(const std::vector<unsigned>& vars, bool prefer_location) const;
 

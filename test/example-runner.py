@@ -65,7 +65,8 @@ def recursive_test(interp_path, launch_dir, verbose):
 
         if program is not None:
             for num, files in configs.items():
-                cmd = [interp_path, program]
+                # A timeout of 5 is 100,000 dynamic instruction executions
+                cmd = [interp_path, program, "-T", "5"]
                 output = False
                 out_file = None
 

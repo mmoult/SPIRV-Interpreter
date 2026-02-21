@@ -568,7 +568,8 @@ std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcep
     return std::tuple(outputs.empty(), total_tests);
 }
 
-void Program::execute(bool verbose, bool debug, ValueFormat& format, bool single_invoc) noexcept(false) {
+void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invoc, unsigned timeout) noexcept(false
+) {
     Instruction& entry_inst = insts[entry];
     DataView& global = data.getGlobal();
 
@@ -699,10 +700,45 @@ void Program::execute(bool verbose, bool debug, ValueFormat& format, bool single
         new_frame->setPC(pre_pc);
     }
 
+    class Timer {
+        std::vector<uint8_t> tens;
+
+    public:
+        Timer(unsigned power_of_ten) {
+            // 0: off
+            // 1: 10 -> |10|
+            // 2: 100 -> |0|1|
+            // 3: 1000 -> |0|10|
+            // 4: 10000 -> |0|0|1|
+            tens.resize(power_of_ten / 2 + 1, 0);
+            tens.back() = power_of_ten % 2 == 0 ? 1 : 10;
+        }
+
+        bool tick() {
+            bool found = false;
+            unsigned index = 0;
+            for (; index < tens.size(); ++index) {
+                if (tens[index] > 0) {
+                    found = true;
+                    tens[index]--;
+                    break;
+                }
+            }
+            if (!found)
+                return true;
+            for (; index-- > 0;)
+                tens[index] = 99;
+            return false;
+        }
+    } timer(timeout);
+
     // Right now, do something like round robin scheduling. In the future, we will want to give other options
     // through the command line
     unsigned next_invoc = num_invocations - 1;
     while (!live_threads.empty()) {
+        if (timeout > 0 && timer.tick())
+            throw std::runtime_error("Execution timed out!");
+
         if (active_threads.empty()) {
             // All active threads have hit a barrier. Unblock all.
             for (unsigned live : live_threads)

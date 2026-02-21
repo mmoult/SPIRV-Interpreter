@@ -70,3 +70,17 @@ This section is in development. Come back later.
 ## Program Control
 
 This section is in development. Come back later.
+
+### Timeout
+SPIR-V programs may contain infinite loops, especially for unintended inputs. When invoking the interpreter, it may be
+undesirable for the execution to extend beyond an anticipated runtime. This is often the case when running testing
+scripts- an infinite loop would prevent the execution from being calculated into the final result.
+
+Using the `-T` or `--timeout` option, the user may specify a fixed number of dynamic instruction executions for the
+program not to exceed, given as a power of 10. For example, 1 is 10^1 = 10 instructions, 2 is 10^2 = 100 instructions,
+and so on.
+
+A dynamic instruction execution is a single instance on a single thread. Therefore, if the same instruction is repeated
+several times in a program, it will be counted multiple times for the dynamic instruction count. If multiple threads run
+an instruction, the instruction will be counted for each thread.
+
