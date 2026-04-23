@@ -42,6 +42,8 @@ struct Statics {
 
     static uint32_t extractUint(const Value* field, const std::string& name);
 
+    static float extractFloat(const Value* field, const std::string& name);
+
 #if defined(COMPILER_GNU)
     [[gnu::no_dangling]]  // GCC erroneously believes this returns a dangling reference. Ignore.
 #endif

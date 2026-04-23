@@ -63,7 +63,7 @@ public:
         return new Struct(elements, names);
     }
 
-    const unsigned getImplicitLod() const {
+    const float getImplicitLod() const {
         return sampler.getImplicitLod();
     }
 

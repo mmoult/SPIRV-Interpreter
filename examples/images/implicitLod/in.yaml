@@ -1,5 +1,5 @@
 fontSampler:
-  sampler: { lod: 0 }
+  sampler: { lod: 0.0 }
   image:
     ref: ""
     dim: [ 2, 2 ]

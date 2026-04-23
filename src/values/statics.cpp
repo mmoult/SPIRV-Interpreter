@@ -28,11 +28,6 @@ const Array& Statics::extractArray(const Value* field, const std::string& name) 
 
 std::vector<float> Statics::extractVec(const Value* field, const std::string& name, unsigned size) {
     const Array& arr = extractArray(field, name);
-    if (arr.getType().getElement().getBase() != DataType::FLOAT) {
-        std::stringstream err;
-        err << "Cannot extract vec" << size << " from \"" << name << "\" because array element is not a float!";
-        throw std::runtime_error(err.str());
-    }
     if (unsigned got_size = arr.getSize(); got_size != size) {
         std::stringstream err;
         err << "Cannot extract vec" << size << " from \"" << name;
@@ -40,8 +35,22 @@ std::vector<float> Statics::extractVec(const Value* field, const std::string& na
         throw std::runtime_error(err.str());
     }
     std::vector<float> output(size);
-    for (unsigned i = 0; i < size; ++i)
-        output[i] = static_cast<const Primitive*>(arr[i])->data.fp32;
+    const DataType base = arr.getType().getElement().getBase();
+    if (base == DataType::UINT) {
+        for (unsigned i = 0; i < size; ++i)
+            output[i] = static_cast<float>(static_cast<const Primitive*>(arr[i])->data.u32);
+    } else if (base == DataType::INT) {
+        for (unsigned i = 0; i < size; ++i)
+            output[i] = static_cast<float>(static_cast<const Primitive*>(arr[i])->data.i32);
+    } else if (base == DataType::FLOAT) {
+        for (unsigned i = 0; i < size; ++i)
+            output[i] = static_cast<const Primitive*>(arr[i])->data.fp32;
+    } else {
+        std::stringstream err;
+        err << "Cannot extract vec" << size << " from \"" << name;
+        err << "\" because array element is not float-compatible!";
+        throw std::runtime_error(err.str());
+    }
     return output;
 }
 
@@ -73,6 +82,7 @@ std::string Statics::extractString(const Value* field, const std::string& name) 
     if (field->getType().getBase() != DataType::STRING) {
         std::stringstream err;
         err << "Cannot extract string from non-string \"" << name << "\"!";
+        throw std::runtime_error(err.str());
     }
     return static_cast<const String&>(*field).get();
 }
@@ -86,8 +96,28 @@ uint32_t Statics::extractUint(const Value* field, const std::string& name) {
     if (field->getType().getBase() != DataType::UINT) {
         std::stringstream err;
         err << "Cannot extract uint from non-uint \"" << name << "\"!";
+        throw std::runtime_error(err.str());
     }
     return static_cast<const Primitive&>(*field).data.u32;
+}
+
+float Statics::extractFloat(const Value* field, const std::string& name) {
+    if (field == nullptr) {
+        std::stringstream err;
+        err << "Cannot extract float from \"" << name << "\" because it is null!";
+        throw std::runtime_error(err.str());
+    }
+    const DataType base = field->getType().getBase();
+    if (base == DataType::UINT) {
+        return static_cast<float>(static_cast<const Primitive&>(*field).data.u32);
+    } else if (base == DataType::INT) {
+        return static_cast<float>(static_cast<const Primitive&>(*field).data.i32);
+    } else if (base != DataType::FLOAT) {
+        std::stringstream err;
+        err << "Cannot extract float from non-float \"" << name << "\"!";
+        throw std::runtime_error(err.str());
+    }
+    return static_cast<const Primitive&>(*field).data.fp32;
 }
 
 const Struct&

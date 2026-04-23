@@ -300,8 +300,7 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
         }
         if (total != size) {
             std::stringstream err;
-            err << "The amount of data provided for the image does not match the dimensions given! Dimensions "
-                   "were ";
+            err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
             err << xx << " x " << yy << " x " << zz << ", with " << comps.count << " active channels. This requires ";
             err << total << " values, however, " << size << " were provided.";
             throw std::runtime_error(err.str());

@@ -13,7 +13,7 @@
 #include "value.hpp"
 
 class Sampler : public Value {
-    unsigned defaultLod;
+    float defaultLod;
 
     inline static const std::vector<std::string> names {"lod"};
 
@@ -30,8 +30,8 @@ public:
     void copyFrom(const Struct& str) noexcept(false) {
         const Struct& other = Statics::extractStruct(static_cast<const Value*>(&str), "Sampler", names);
 
-        // lod: <uint>
-        defaultLod = Statics::extractUint(other[0], names[0]);
+        // lod: <float>
+        defaultLod = Statics::extractFloat(other[0], names[0]);
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override {
@@ -47,7 +47,7 @@ public:
     }
 
     // Right now, the sampler has only a single field:
-    //   lod : <uint>
+    //   lod : float
     Struct* toStruct() const {
         std::vector<Value*> elements;
         elements.reserve(names.size());
@@ -55,7 +55,7 @@ public:
         return new Struct(elements, names);
     }
 
-    const unsigned getImplicitLod() const {
+    const float getImplicitLod() const {
         return defaultLod;
     }
 };

@@ -87,7 +87,7 @@ rs:
     primitive_index: 2
     opaque: true
     vertices:
-    - [ 2.0, -1, -1 ]
+    - [ 2, -1, -1 ]
     - [ 3, 4, 0.5 ]
-    - [ -2, 3.0, 0 ]
+    - [ -2, 3, 0 ]
   procedural_nodes: []
