@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 fragcolor: [ 12345678901234.0 ]
+=======
+fragcolor: 2.0
+>>>>>>> 39da1b6 (Fix OpConstant parsing for 64-bit literals and add example)
