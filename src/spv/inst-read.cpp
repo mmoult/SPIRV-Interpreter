@@ -177,9 +177,12 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         to_load.push_back(Type::UINT);
         break;
     case spv::OpTypeFloat:  // 22
+        to_load.push_back(Type::UINT);
+        break;
     case spv::OpConstant:  // 43
     case spv::OpSpecConstant:  // 50
         to_load.push_back(Type::UINT);
+        optional.push_back(Type::UINT);  // second word for >32-bit literals (e.g. int64, float64)
         break;
     case spv::OpTypeVector:  // 23
     case spv::OpTypeMatrix:  // 24
