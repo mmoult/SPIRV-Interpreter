@@ -52,7 +52,7 @@ void Frame::triggerCallable(unsigned index, Value* callable, AccelStruct* as) {
     this->rt.result = callable;
 
     // hit attribute is never used by callable, so we reuse it to track whether this frame is entry or exit
-    Primitive dummy(0);
+    Primitive dummy(0u);
     this->rt.hitAttribute = static_cast<Value*>(&dummy);
 
     if (this->rt.data != nullptr) {

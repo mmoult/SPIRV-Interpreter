@@ -283,7 +283,7 @@ Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcep
                 throw std::runtime_error("Value parsed is too small to fit in a 32-bit int!");
 
             handler.setIdx(end);
-            return new Primitive(val);
+            return new Primitive(static_cast<int64_t>(val));
         }
     } else {
         // float parsing, which may include exponent after the first digit

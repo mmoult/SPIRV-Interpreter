@@ -174,5 +174,9 @@ auto decode_flt16(X&& value) {
     return flt16_encoder::decode<F>(std::forward<X>(value));
 }
 
+double quantize(double in, unsigned prec);
+
+unsigned digits_of_precision(unsigned bits);
+
 };  // namespace FpConvert
 #endif

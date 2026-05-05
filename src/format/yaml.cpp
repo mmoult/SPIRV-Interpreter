@@ -10,6 +10,7 @@
 #include <iostream>
 #include <vector>
 
+#include "../util/fpconvert.hpp"
 #include "../util/string.hpp"
 #include "../values/aggregate.hpp"
 #include "../values/image.hpp"
@@ -287,7 +288,8 @@ void Yaml::printKey(std::stringstream& out, const std::string& name) const {
 }
 
 void Yaml::printValue(std::stringstream& out, const Value& value, unsigned indents, bool can_compact) const {
-    const auto& type_base = value.getType().getBase();
+    const auto& type = value.getType();
+    auto type_base = type.getBase();
     Struct* structure = nullptr;
 
     switch (type_base) {
@@ -296,7 +298,7 @@ void Yaml::printValue(std::stringstream& out, const Value& value, unsigned inden
             out << " <float>";
             break;
         }
-        float fp = static_cast<const Primitive&>(value).data.fp32;
+        double fp = static_cast<const Primitive&>(value).data.f;
         if (std::isinf(fp)) {
             if (fp >= 0)
                 out << " .inf";
@@ -306,7 +308,8 @@ void Yaml::printValue(std::stringstream& out, const Value& value, unsigned inden
             out << " .NAN";
         else {
             out << ' ';
-            print_float(out, fp);
+            auto digits = FpConvert::digits_of_precision(type.getPrecision());
+            print_float(out, fp, digits);
         }
         break;
     }
@@ -315,21 +318,21 @@ void Yaml::printValue(std::stringstream& out, const Value& value, unsigned inden
             out << " <uint>";
             break;
         }
-        out << ' ' << static_cast<const Primitive&>(value).data.u32;
+        out << ' ' << static_cast<const Primitive&>(value).data.u;
         break;
     case DataType::INT:
         if (templatize) {
             out << " <int>";
             break;
         }
-        out << ' ' << static_cast<const Primitive&>(value).data.i32;
+        out << ' ' << static_cast<const Primitive&>(value).data.i;
         break;
     case DataType::BOOL:
         if (templatize) {
             out << " <bool>";
             break;
         }
-        if (static_cast<const Primitive&>(value).data.b32)
+        if (static_cast<const Primitive&>(value).data.b)
             out << " true";
         else
             out << " false";

@@ -16,8 +16,8 @@ double dot(const Array& first, const Array& second) {
     assert(first.getSize() == second.getSize());
     double dot_product = 0.0;
     for (unsigned i = 0; i < first.getSize(); ++i) {
-        const float second_elem = static_cast<const Primitive*>(second[i])->data.fp32;
-        const float this_elem = static_cast<const Primitive*>(first[i])->data.fp32;
+        const float second_elem = static_cast<const Primitive*>(second[i])->data.f;
+        const float this_elem = static_cast<const Primitive*>(first[i])->data.f;
         dot_product += second_elem * this_elem;
     }
     return dot_product;
@@ -32,8 +32,8 @@ double dot(const Value* first, const Value* second) {
 
     if (v0t.getBase() == DataType::FLOAT) {
         assert(v1t.getBase() == DataType::FLOAT);
-        double d = static_cast<const Primitive&>(v0).data.fp32;
-        return d * static_cast<double>(static_cast<const Primitive&>(v1).data.fp32);
+        double d = static_cast<const Primitive&>(v0).data.f;
+        return d * static_cast<double>(static_cast<const Primitive&>(v1).data.f);
     }
 
     assert(v0t.getBase() == DataType::ARRAY && v1t.getBase() == DataType::ARRAY);
@@ -63,7 +63,7 @@ double determinant(const Array& arr) {
     for (unsigned i = 0; i < size; ++i) {
         const auto& column = static_cast<const Array&>(*arr[i]);
         for (unsigned j = 0; j < size; ++j)
-            matrix.push_back(static_cast<const Primitive*>(column[j])->data.fp32);
+            matrix.push_back(static_cast<const Primitive*>(column[j])->data.f);
     }
 
     // Remember that the matrix is transposed, so we flip x and y in calculation

@@ -73,10 +73,10 @@ bool Aggregate::equals(const Value& val) const {
 }
 
 void Array::copyFrom(const Value& new_val) noexcept(false) {
-    Value::copyFrom(new_val);
     // Runtime arrays have size 0 by default. If this size is 0, then we assume the correct length from what is
     // given now. Afterward, this should no longer have 0 length
     if (elements.empty()) {
+        Value::copyFrom(new_val);
         const Array& other = static_cast<const Array&>(new_val);
         unsigned osize = other.elements.size();
         // Initialize an element for each element in other to copy to

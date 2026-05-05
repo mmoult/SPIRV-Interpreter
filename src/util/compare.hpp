@@ -7,7 +7,7 @@
 #define UTIL_COMPARE_HPP
 
 namespace Compare {
-bool eq_float(float x, float y, unsigned needed_sigfigs);
+bool eq_float(double x, double y, unsigned needed_sigfigs);
 };  // namespace Compare
 
 #endif

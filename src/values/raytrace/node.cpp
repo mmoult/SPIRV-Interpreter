@@ -51,13 +51,13 @@ Ternary BoxNode::step(Trace* trace_p) const {
 
 [[nodiscard]] BoxNode* BoxNode::fromVal(const Value* val) {
     const Struct& str = Statics::extractStruct(val, "BoxNode", names);
-    std::vector<float> mins = Statics::extractVec(str[0], names[0], 3);
-    std::vector<float> maxs = Statics::extractVec(str[1], names[1], 3);
+    std::vector<double> mins = Statics::extractVec(str[0], names[0], 3);
+    std::vector<double> maxs = Statics::extractVec(str[1], names[1], 3);
 
     const Array& child_nodes = Statics::extractArray(str[2], names[2]);
     BoxNode* bn = new BoxNode(mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
     for (unsigned i = 0; i < child_nodes.getSize(); ++i) {
-        std::vector<uint32_t> child_ref = Statics::extractUvec(child_nodes[i], names[2], 2);
+        std::vector<uint64_t> child_ref = Statics::extractUvec(child_nodes[i], names[2], 2);
         bn->children.emplace_back(child_ref[0], child_ref[1]);
     }
     return bn;
@@ -129,7 +129,7 @@ Ternary InstanceNode::step(Trace* trace_p) const {
     glm::mat4x3 world_to_obj;
     ArrayMath::value_to_glm<glm::mat4x3, 4, 3>(transform, world_to_obj, true);
 
-    std::vector<unsigned> ref = Statics::extractUvec(str[1], names[1], 2);
+    std::vector<uint64_t> ref = Statics::extractUvec(str[1], names[1], 2);
     uint32_t id = Statics::extractUint(str[2], names[2]);
     uint32_t custom_index = Statics::extractUint(str[3], names[3]);
     uint32_t mask = Statics::extractUint(str[4], names[4]);
@@ -226,7 +226,7 @@ Ternary TriangleNode::step(Trace* trace_p) const {
     const Value* opaque_v = str[2];
     if (opaque_v == nullptr || opaque_v->getType().getBase() != DataType::BOOL)
         throw std::runtime_error("TriangleNode field \"opaque\" must be a boolean!");
-    bool opaque = static_cast<const Primitive*>(opaque_v)->data.b32;
+    bool opaque = static_cast<const Primitive*>(opaque_v)->data.b;
 
     const Array& vertices_a = Statics::extractArray(str[3], names[3]);
     if (vertices_a.getSize() != 3)
@@ -234,7 +234,7 @@ Ternary TriangleNode::step(Trace* trace_p) const {
     std::vector<glm::vec3> verts;
     verts.resize(3);
     for (unsigned i = 0; i < 3; ++i) {
-        std::vector<float> row = Statics::extractVec(vertices_a[i], "vertices", 3);
+        std::vector<double> row = Statics::extractVec(vertices_a[i], "vertices", 3);
         for (unsigned j = 0; j < 3; ++j)
             verts[i][j] = row[j];
     }
@@ -309,13 +309,13 @@ Ternary ProceduralNode::step(Trace* trace_p) const {
 
 [[nodiscard]] ProceduralNode* ProceduralNode::fromVal(const Value* val) {
     const Struct& str = Statics::extractStruct(val, "ProceduralNode", names);
-    std::vector<float> mins = Statics::extractVec(str[0], names[0], 3);
-    std::vector<float> maxs = Statics::extractVec(str[1], names[1], 3);
+    std::vector<double> mins = Statics::extractVec(str[0], names[0], 3);
+    std::vector<double> maxs = Statics::extractVec(str[1], names[1], 3);
 
     const Value* opaque_v = str[2];
     if (opaque_v == nullptr || opaque_v->getType().getBase() != DataType::BOOL)
         throw std::runtime_error("ProceduralNode field \"opaque\" must be a boolean!");
-    bool opaque = static_cast<const Primitive*>(opaque_v)->data.b32;
+    bool opaque = static_cast<const Primitive*>(opaque_v)->data.b;
 
     uint32_t geom_index = Statics::extractUint(str[3], names[3]);
     uint32_t prim_index = Statics::extractUint(str[4], names[4]);

@@ -34,15 +34,15 @@ struct Statics {
 
     static const Array& extractArray(const Value* field, const std::string& name);
 
-    static std::vector<float> extractVec(const Value* field, const std::string& name, unsigned size);
+    static std::vector<double> extractVec(const Value* field, const std::string& name, unsigned size);
 
-    static std::vector<uint32_t> extractUvec(const Value* field, const std::string& name, unsigned size);
+    static std::vector<uint64_t> extractUvec(const Value* field, const std::string& name, unsigned size);
 
     static std::string extractString(const Value* field, const std::string& name);
 
-    static uint32_t extractUint(const Value* field, const std::string& name);
+    static uint64_t extractUint(const Value* field, const std::string& name);
 
-    static float extractFloat(const Value* field, const std::string& name);
+    static double extractFloat(const Value* field, const std::string& name);
 
 #if defined(COMPILER_GNU)
     [[gnu::no_dangling]]  // GCC erroneously believes this returns a dangling reference. Ignore.

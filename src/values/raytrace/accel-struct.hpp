@@ -106,8 +106,8 @@ public:
     void initTrace(
         const unsigned ray_flags,
         const unsigned cull_mask,
-        const std::vector<float>& ray_origin,
-        const std::vector<float>& ray_direction,
+        const std::vector<double>& ray_origin,
+        const std::vector<double>& ray_direction,
         const float ray_t_min,
         const float ray_t_max,
         const bool use_sbt,
