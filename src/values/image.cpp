@@ -234,8 +234,8 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
                 for (unsigned c = 0; c < gc; ++c) {
                     if (comps[c] == 0)
                         continue;
-                    float norm = img[load_idx + c] / 255.0f;
-                    data[store_idx + comps[c] - 1] = *reinterpret_cast<uint32_t*>(&norm);
+                    double norm = img[load_idx + c] / 255.0;
+                    data[store_idx + comps[c] - 1] = *reinterpret_cast<uint64_t*>(&norm);
                 }
                 load_idx += gc;
                 store_idx += comps.count;
@@ -370,7 +370,7 @@ Struct* Image::toStruct() const {
     // populate the dat array with the image's actual data
     std::vector<Value*> values;
     const Type& dat_type = type.getElement();
-    for (const unsigned dat : data) {
+    for (const uint64_t dat : data) {
         Primitive* prim = new Primitive(dat);
         prim->cast(dat_type);
         values.push_back(prim);

@@ -40,7 +40,7 @@ class Image final : public Value {
     /// 2) a data array
     /// Only one may be provided at a time. Where one is provided, the other must be empty. Internally, both resolve to
     /// this flat data vector.
-    std::vector<uint32_t> data;
+    std::vector<uint64_t> data;
 
     /// @brief A definition for how flat data and pixels correspond to each other
     /// Each of the first four members must be some value 0-4, with no repeats, excepting 0, which indicates disablement

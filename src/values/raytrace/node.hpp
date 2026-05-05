@@ -39,7 +39,10 @@ struct NodeReference {
     NodeReference(unsigned major, unsigned minor) : ptr(nullptr), major(major), minor(minor) {}
 
     [[nodiscard]] inline Array* toArray() const {
-        std::vector<Value*> uvec2 {new Primitive(major), new Primitive(minor)};
+        std::vector<Value*> uvec2 {
+            new Primitive(static_cast<uint64_t>(major)),
+            new Primitive(static_cast<uint64_t>(minor))
+        };
         return new Array(uvec2);
     }
 

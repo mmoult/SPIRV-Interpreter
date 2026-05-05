@@ -2754,9 +2754,9 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             assert(vec_type.getBase() == DataType::FLOAT);
             const auto one = static_cast<Primitive*>(vec_1_val)->data.f;
             const auto two = static_cast<Primitive*>(vec_2_val)->data.f;
-            Primitive prim_single(std::sqrt((one - two) * (one - two)));
+            Primitive prim(std::sqrt((one - two) * (one - two)));
             Value* res = res_type->construct();
-            static_cast<Array&>(*res)[0]->copyFrom(prim_single);
+            res->copyFrom(prim);
             data[result_at].redefine(res);
             break;
         }
@@ -2777,9 +2777,9 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         }
         const auto result = std::sqrt(sum);
 
-        Primitive prim_single(result);
+        Primitive prim(result);
         Value* res = res_type->construct();
-        static_cast<Array&>(*res)[0]->copyFrom(prim_single);
+        res->copyFrom(prim);
         data[result_at].redefine(res);
         break;
     }
@@ -2809,9 +2809,9 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             auto single = static_cast<Primitive*>(vec_val)->data.f;
             if (single != 0.0)
                 single = 1.0;
-            Primitive prim_single(single);
+            Primitive prim(single);
             Value* res = res_type->construct();
-            static_cast<Array&>(*res)[0]->copyFrom(prim_single);
+            res->copyFrom(prim);
             data[result_at].redefine(res);
             break;
         }
@@ -2851,7 +2851,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
 
         // N * (dot(Nref, I) < 0)? +1 : -1
         auto dot_result = ArrayMath::dot(nref_val, i_val);
-        float mult = std::signbit(dot_result) ? 1.0 : -1.0;
+        double mult = std::signbit(dot_result) ? 1.0 : -1.0;
 
         if (res_type->getBase() == DataType::FLOAT) {
             // All must be the same type
@@ -2873,7 +2873,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             const auto& n = static_cast<const Array&>(*n_val);
 
             for (unsigned i = 0; i < res.getSize(); ++i) {
-                Primitive prim(static_cast<float>(static_cast<const Primitive*>(n[i])->data.f * mult));
+                Primitive prim(static_cast<double>(static_cast<const Primitive*>(n[i])->data.f * mult));
                 res[i]->copyFrom(prim);
             }
         }
@@ -2891,11 +2891,11 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         const Type& vec_type = incident_val->getType();
         if (vec_type.getBase() != DataType::ARRAY) {
             assert(vec_type.getBase() == DataType::FLOAT);
-            const float incident = static_cast<Primitive*>(incident_val)->data.f;
-            const float normal = static_cast<Primitive*>(normal_val)->data.f;
-            Primitive prim_single(incident - 2 * (normal * incident) * normal);
+            const double incident = static_cast<Primitive*>(incident_val)->data.f;
+            const double normal = static_cast<Primitive*>(normal_val)->data.f;
+            Primitive prim(incident - 2 * (normal * incident) * normal);
             Value* res = res_type->construct();
-            static_cast<Array&>(*res)[0]->copyFrom(prim_single);
+            res->copyFrom(prim);
             data[result_at].redefine(res);
             break;
         }
@@ -2964,7 +2964,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
                     double second = static_cast<const Primitive*>(n_arr[i])->data.f;
                     element = (first * eta) - (second * etadotsqrtk);
                 }
-                Primitive prim(static_cast<float>(element));
+                Primitive prim(element);
                 res[i]->copyFrom(prim);
             }
         } else {
@@ -2974,7 +2974,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
                 double second = static_cast<const Primitive*>(n_val)->data.f;
                 res = (first * eta) - (second * etadotsqrtk);
             }
-            Primitive prim(static_cast<float>(res));
+            Primitive prim(res);
             ret->copyFrom(prim);
         }
 
@@ -2983,9 +2983,9 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     }
     case GLSLstd450FindILsb: {  // 73
         UnOp op = [](const Primitive* a) {
-            uint32_t count = std::countr_zero(a->data.u);
+            uint64_t count = std::countr_zero(a->data.u);
             if (count >= 32)
-                return 0xFFFF'FFFF;
+                return std::bit_cast<uint64_t>(-1LL);
             return count;
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
@@ -2999,11 +2999,11 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
                 count = std::countl_one(a->data.u);
             else
                 count = std::countl_zero(a->data.u);
-            // At this point, count is in the range [1, 32]. We must translate that into a bit location
-            if (count >= 32)
-                return 0xFFFF'FFFF;
-            // Now range is [1, 31]
-            return static_cast<uint32_t>(31 - count);
+            // At this point, count is in the range [1, 64]. We must translate that into a bit location
+            if (count >= 64)
+                return std::bit_cast<uint64_t>(-1LL);
+            // Now range is [1, 63]
+            return static_cast<uint64_t>(63 - count);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_int_unary_op(checkRef(src_at, data_len), dst, data, op, op);
@@ -3012,10 +3012,10 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     case GLSLstd450FindUMsb: {  // 75
         UnOp op = [](const Primitive* a) {
             int count = std::countl_zero(a->data.u);
-            if (count >= 32)
-                return 0xFFFF'FFFF;
-            // Now range is [0, 31]
-            return static_cast<uint32_t>(31 - count);
+            if (count >= 64)
+                return std::bit_cast<uint64_t>(-1LL);
+            // Now range is [0, 63]
+            return static_cast<uint64_t>(63 - count);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_int_unary_op(checkRef(src_at, data_len), dst, data, op, op);
