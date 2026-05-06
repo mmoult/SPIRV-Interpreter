@@ -31,6 +31,9 @@ struct Primitive final : public Value {
 
     using enum DataType;
 
+    // Gets the raw bits of the primitive by the type. In other words, go from emulation bits to compressed exact bits.
+    uint64_t getRaw() const;
+
 public:
     Primitive(double fp64, unsigned size = 64) : Value(Type::primitive(FLOAT, size)) {
         data.f = static_cast<double>(fp64);
@@ -87,41 +90,14 @@ public:
 
     void copyFrom(const Value& new_val) noexcept(false) override;
 
-    void copyReinterp(const Value& other) noexcept(false) override {
-        // We can reinterpret from any other primitive
-        const auto from_base = other.getType().getBase();
-        if (!isPrimitive(from_base))
-            throw std::runtime_error("Cannot copy reinterp from other non-primitive value!");
-        data.all = static_cast<const Primitive&>(other).data.all;
-        // TODO apply precision modification
-    }
+    void copyReinterp(const Value& other) noexcept(false) override;
 
     /// @brief changes the type of the primitive *without* changing the value
     void cast(const Type& t) {
         type = t;
     }
 
-    bool equals(const Value& val) const override {
-        if (!Value::equals(val))  // guarantees matching types
-            return false;
-        const auto& other = static_cast<const Primitive&>(val);
-        switch (type.getBase()) {
-        case FLOAT: {
-            auto min_precision = std::min(type.getPrecision(), other.type.getPrecision());
-            auto needed_sigfigs = FpConvert::digits_of_precision(min_precision);
-            return Compare::eq_float(data.f, other.data.f, needed_sigfigs);
-        }
-        case UINT:
-            return data.u == other.data.u;
-        case INT:
-            return data.i == other.data.i;
-        case BOOL:
-            return data.b == other.data.b;
-        default:
-            assert(false);
-            return false;
-        }
-    }
+    bool equals(const Value& val) const override;
 
     /// @brief Add the unsigned components of this and addend, saving into sum's unsigned value
     /// @return whether the addition overflowed
