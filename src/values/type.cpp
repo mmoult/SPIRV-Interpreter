@@ -22,7 +22,7 @@
 #include "string.hpp"
 #include "value.hpp"
 
-Value* Type::construct(std::vector<const Value*>* values, bool undef) const {
+Value* Type::construct(bool undef) const {
     switch (base) {
     default:
         throw std::runtime_error("Cannot construct unsupported type!");
@@ -33,22 +33,7 @@ Value* Type::construct(std::vector<const Value*>* values, bool undef) const {
     case DataType::UINT:
     case DataType::INT:
     case DataType::BOOL: {
-        Primitive* prim = new Primitive(*this, undef);
-        if (values == nullptr)
-            return prim;
-        if (values->empty() || values->size() != 1) {
-            delete prim;
-            throw std::runtime_error("Cannot construct primitive from nonzero number of inputs!");
-        }
-
-        const Value* val = (*values)[0];
-        try {
-            prim->copyFrom(*val);
-        } catch (std::exception& e) {
-            delete prim;
-            throw e;
-        }
-        return prim;
+        return new Primitive(*this, undef);
     }
     case DataType::ARRAY:
     case DataType::COOP_MATRIX:
@@ -63,9 +48,9 @@ Value* Type::construct(std::vector<const Value*>* values, bool undef) const {
             agg = static_cast<Aggregate*>(new Struct(*this));
         }
         // try to populate with each of the entries
-        if (values != nullptr)
-            agg->addElements(*values);
-        else if (base != DataType::COOP_MATRIX)
+        if (base != DataType::COOP_MATRIX)
+            // Cooperative matrices don't specify the number of elements in the type; that info must be provided by
+            // the invocation. Defer dummy filling to the use, where we assume that info is known.
             agg->dummyFill(undef);
         return agg;
     }

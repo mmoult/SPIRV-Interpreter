@@ -102,13 +102,6 @@ class Type final : public Valuable {
     inline Type(DataType base, const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list)
         : base(base), subSize(0), subElement(nullptr), subList(sub_list), nameList(name_list), rows(0) {}
 
-    /// @brief Creates a value corresponding to this type, with optional inputs
-    /// @param values an optional vector of values to use
-    /// @param undef whether the values constructed should be undefined
-    /// @return a new value whose ownership belongs to the caller
-    /// @throws if the type cannot be constructed
-    [[nodiscard]] Value* construct(std::vector<const Value*>* values, bool undef = true) const noexcept(false);
-
 public:
     inline Type() noexcept(true) : base(DataType::VOID), subSize(0), subElement(nullptr) {}
     Type(const Type& t) = default;
@@ -132,9 +125,9 @@ public:
     /// @brief Construct an array type
     /// @param array_size the size of the array. The number of elements. Must be > 0 for regular arrays, == 0 for
     ///                   runtime arrays.
-    /// @param element a Type which will outlive this Type. Must not be null. Ownership is not transferred
-    ///                to the constructed array- in other words, the allocator is expected to deallocate element
-    ///                some time after the deallocation of this array
+    /// @param element a Type which will outlive this Type. Must not be null. Ownership is not transferred to the
+    ///                constructed array- in other words, the allocator is expected to deallocate element some time
+    ///                after the deallocation of this array
     static inline Type array(unsigned array_size, const Type& element) {
         return Type(DataType::ARRAY, array_size, &element);
     }
@@ -226,20 +219,11 @@ public:
 
     // Other methods:
 
-    /// @brief Creates a value corresponding to this type, filling in values with dummies as necessary
+    /// @brief Creates a value corresponding to this type
     /// @param undef whether the values constructed should be undefined
     /// @return a new value whose ownership belongs to the caller
     /// @throws if the type cannot be constructed
-    [[nodiscard]] inline Value* construct(bool undef = true) const noexcept(false) {
-        return construct(nullptr, undef);
-    }
-    /// @brief Creates a value corresponding to this type with given inputs (used for fields, elements, etc)
-    /// @param values a vector of values to use
-    /// @return a new value whose ownership belongs to the caller
-    /// @throws if the type cannot be constructed
-    [[nodiscard]] inline Value* construct(std::vector<const Value*>& values) const noexcept(false) {
-        return construct(&values);
-    }
+    [[nodiscard]] Value* construct(bool undef = true) const noexcept(false);
 
     inline const Type& getElement() const {
         assert(
@@ -254,7 +238,7 @@ public:
     }
 
     inline unsigned getPrecision() const {
-        assert(base == DataType::FLOAT || base == DataType::UINT || base == DataType::INT);
+        assert(base == DataType::FLOAT || base == DataType::UINT || base == DataType::INT || base == DataType::BOOL);
         return subSize;
     }
 

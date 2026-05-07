@@ -36,7 +36,7 @@ public:
     }
 
     bool equals(const Value& val) const override {
-        if (!Value::equals(val))  // guarantees matching types
+        if (val.getType().getBase() != DataType::STRING)
             return false;
         const auto& other = static_cast<const String&>(val);
         // I cannot think of why this would be used, but implement it in case...

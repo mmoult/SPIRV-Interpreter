@@ -20,5 +20,5 @@ std::string repeated_string(const unsigned num, const std::string& str);
 /// algorithm.
 /// @param out where to print the string representation of float, fp
 /// @param fp the float to print. Must not be NaN or infinite!
-void print_float(std::stringstream& out, double fp);
+void print_float(std::stringstream& out, double fp, unsigned precision_digits);
 #endif

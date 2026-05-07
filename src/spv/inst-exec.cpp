@@ -113,7 +113,7 @@ Value* atomic_bin_op(
 
     // the spec says the type of val and prev_val must match
     assert(other_val.getType() == prev_val.getType());
-    // We should be able to freely use i32 or u32 for any operation since both operands have the same representation
+    // We should be able to freely use i or u for any operation since both operands have the same representation
     op(prev_val, other_val);
     prev_val.copyFrom(prev_val);  // apply precision masking if needed
     return ret;
@@ -310,35 +310,35 @@ bool Instruction::execute(
         // Modify the from_val as requested
         assert(from_val->getType().getBase() == DataType::UINT || from_val->getType().getBase() == DataType::INT);
         Primitive& prim = static_cast<Primitive&>(*from_val);
-        prim.data.i32 += (opcode == spv::OpAtomicIIncrement) ? 1 : -1;
+        prim.data.i += (opcode == spv::OpAtomicIIncrement) ? 1 : -1;
         prim.copyFrom(prim);  // apply precision masking if needed
         break;
     }
     case spv::OpAtomicIAdd:  // 234
-        ATOMIC_BIN_OP(a.data.i32 += b.data.i32);
+        ATOMIC_BIN_OP(a.data.i += b.data.i);
     case spv::OpAtomicISub:  // 235
-        ATOMIC_BIN_OP(a.data.i32 -= b.data.i32);
+        ATOMIC_BIN_OP(a.data.i -= b.data.i);
     case spv::OpAtomicSMin:  // 236
-        ATOMIC_BIN_OP(a.data.i32 = std::min(a.data.i32, b.data.i32));
+        ATOMIC_BIN_OP(a.data.i = std::min(a.data.i, b.data.i));
     case spv::OpAtomicUMin:  // 237
-        ATOMIC_BIN_OP(a.data.u32 = std::min(a.data.u32, b.data.u32));
+        ATOMIC_BIN_OP(a.data.u = std::min(a.data.u, b.data.u));
     case spv::OpAtomicSMax:  // 238
-        ATOMIC_BIN_OP(a.data.i32 = std::max(a.data.i32, b.data.i32));
+        ATOMIC_BIN_OP(a.data.i = std::max(a.data.i, b.data.i));
     case spv::OpAtomicUMax:  // 239
-        ATOMIC_BIN_OP(a.data.u32 = std::max(a.data.u32, b.data.u32));
+        ATOMIC_BIN_OP(a.data.u = std::max(a.data.u, b.data.u));
     case spv::OpAtomicAnd:  // 240
-        ATOMIC_BIN_OP(a.data.u32 &= b.data.u32);
+        ATOMIC_BIN_OP(a.data.u &= b.data.u);
     case spv::OpAtomicOr:  // 241
-        ATOMIC_BIN_OP(a.data.u32 |= b.data.u32);
+        ATOMIC_BIN_OP(a.data.u |= b.data.u);
     case spv::OpAtomicXor:  // 242
-        ATOMIC_BIN_OP(a.data.u32 ^= b.data.u32);
+        ATOMIC_BIN_OP(a.data.u ^= b.data.u);
     case spv::OpPhi: {  // 245
         unsigned last_label = frame.getLabel();
         // We must find a label in the phi which matches the last block seen
         for (unsigned i = 3; i < operands.size(); i += 2) {
             Value* block = getValue(i, data);
             auto p_block = static_cast<Primitive*>(block);
-            if (p_block->data.u32 == last_label) {
+            if (p_block->data.u == last_label) {
                 dst_val = getValue(i - 1, data);
                 break;
             }
@@ -355,22 +355,22 @@ bool Instruction::execute(
     case spv::OpLabel: {  // 248
         Value* val = getValue(0, data);  // get the label value which has been made earlier
         auto prim = static_cast<Primitive*>(val);
-        frame.setLabel(prim->data.u32);
+        frame.setLabel(prim->data.u);
         break;
     }
     case spv::OpBranch: {  // 249
         Value* dstv = getValue(0, data);
         Primitive* dst = static_cast<Primitive*>(dstv);
-        frame.setPC(dst->data.u32);
+        frame.setPC(dst->data.u);
         inc_pc = false;
         break;
     }
     case spv::OpBranchConditional: {  // 250
         Value* condv = getValue(0, data);
         Primitive* cond = static_cast<Primitive*>(condv);
-        Value* branchv = getValue((cond->data.b32) ? 1 : 2, data);
+        Value* branchv = getValue((cond->data.b) ? 1 : 2, data);
         Primitive* branch = static_cast<Primitive*>(branchv);
-        frame.setPC(branch->data.u32);
+        frame.setPC(branch->data.u);
         inc_pc = false;
         break;
     }
@@ -382,7 +382,7 @@ bool Instruction::execute(
     }
     case spv::OpSwitch: {  // 251
         Value* selectorv = getValue(0, data);
-        int selector = static_cast<Primitive*>(selectorv)->data.i32;
+        int selector = static_cast<Primitive*>(selectorv)->data.i;
         unsigned i = 2;
         for (; i < operands.size(); i += 2) {
             assert(operands[i].type == Token::Type::INT);
@@ -396,7 +396,7 @@ bool Instruction::execute(
             i = 1;  // use default case
         Value* dstv = getValue(i, data);
         Primitive* dst = static_cast<Primitive*>(dstv);
-        frame.setPC(dst->data.u32);
+        frame.setPC(dst->data.u);
         inc_pc = false;
         break;
     }
@@ -439,7 +439,7 @@ bool Instruction::execute(
         // The quad looks like this:
         //   I0 I1
         //   I2 I3
-        switch (dir_prim.data.u32) {
+        switch (dir_prim.data.u) {
         case 0:  // Horizontal
             swap_with = invoc_in_group % 2 == 0 ? invoc_in_group + 1 : invoc_in_group - 1;
             break;
@@ -478,17 +478,17 @@ bool Instruction::execute(
         if (prev_stage != RtStageKind::MISS && prev_stage != RtStageKind::CLOSEST) {
             Value* hit_attrib = nullptr;
             if (prev_stage == RtStageKind::NONE) {
-                const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u32;
-                const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u32;
-                const unsigned offset_sbt = static_cast<Primitive&>(*getValue(3, data)).data.u32;
-                const unsigned stride_sbt = static_cast<Primitive&>(*getValue(4, data)).data.u32;
-                const unsigned miss_index = static_cast<Primitive&>(*getValue(5, data)).data.u32;
+                const unsigned ray_flags = static_cast<Primitive&>(*getValue(1, data)).data.u;
+                const unsigned cull_mask = static_cast<Primitive&>(*getValue(2, data)).data.u;
+                const unsigned offset_sbt = static_cast<Primitive&>(*getValue(3, data)).data.u;
+                const unsigned stride_sbt = static_cast<Primitive&>(*getValue(4, data)).data.u;
+                const unsigned miss_index = static_cast<Primitive&>(*getValue(5, data)).data.u;
 
-                std::vector<float> ray_origin = Statics::extractVec(getValue(6, data), "ray_origin", 3);
-                std::vector<float> ray_direction = Statics::extractVec(getValue(8, data), "ray_direction", 3);
+                std::vector<double> ray_origin = Statics::extractVec(getValue(6, data), "ray_origin", 3);
+                std::vector<double> ray_direction = Statics::extractVec(getValue(8, data), "ray_direction", 3);
 
-                const float ray_t_min = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
-                const float ray_t_max = static_cast<Primitive&>(*getValue(9, data)).data.fp32;
+                const double ray_t_min = static_cast<Primitive&>(*getValue(7, data)).data.f;
+                const double ray_t_max = static_cast<Primitive&>(*getValue(9, data)).data.f;
 
                 // Run it through our implementation of a ray tracing pipeline
                 as.initTrace(
@@ -510,13 +510,13 @@ bool Instruction::execute(
                     // handle the result of the intersection shader
                     hit_attrib = frame.getHitAttribute();
                     Primitive* intersected = static_cast<Primitive*>(frame.getRtResult());
-                    valid_intersect = intersected->data.b32;
+                    valid_intersect = intersected->data.b;
                     delete intersected;
                 } else {
                     assert(prev_stage == RtStageKind::ANY_HIT);
                     // Return from any hit for non-opaque triangle geometry
                     Array& payload = static_cast<Array&>(*frame.getRtResult());
-                    valid_intersect = static_cast<Primitive&>(*payload[0]).data.b32;
+                    valid_intersect = static_cast<Primitive&>(*payload[0]).data.b;
                     // We ignore payload[1] (continue_search) since it indicates whether we should continue the
                     // intersection shader, which we don't have.
                     delete &payload;
@@ -615,7 +615,8 @@ bool Instruction::execute(
                             Primitive pbool(sect.isValidHit());
                             val.copyFrom(pbool);
                         } else {
-                            Primitive pfloat(sect.hitT);
+                            uint32_t prec = val.getType().getPrecision();
+                            Primitive pfloat(FpConvert::quantize(sect.hitT, prec), prec);
                             val.copyReinterp(pfloat);
                         }
                         break;
@@ -670,7 +671,7 @@ bool Instruction::execute(
         if (!frame.isCallableReturn()) {
             const Primitive& index_sbt_prim = static_cast<const Primitive&>(*getValue(0, data));
             assert(index_sbt_prim.getType().getBase() == DataType::UINT);
-            const unsigned index_sbt = index_sbt_prim.data.u32;
+            const unsigned index_sbt = index_sbt_prim.data.u;
             auto& call_data = *getVariable(1, data);
             frame.triggerCallable(index_sbt, &call_data.getVal(), frame.getFromAs());
             // return to this instruction after exit to clean up
@@ -705,7 +706,7 @@ bool Instruction::execute(
         unsigned back_index = pointer.decompose();
         Value* head = getHeadValue(pointer, data);
         Value* ptr = pointer.dereference(*head);
-        bool row_major = static_cast<Primitive*>(getValue(3, data))->data.i32 == 0;
+        bool row_major = static_cast<Primitive*>(getValue(3, data))->data.i == 0;
 
         uint32_t total_elements = result_type->getSize();
         // Split those elements between all in the frame stack
@@ -718,7 +719,7 @@ bool Instruction::execute(
 
         unsigned stride = row_major ? cols : rows;
         if (operands.size() >= 5) {
-            unsigned new_stride = static_cast<Primitive*>(getValue(4, data))->data.u32;
+            unsigned new_stride = static_cast<Primitive*>(getValue(4, data))->data.u;
             if (new_stride < stride)
                 Console::warn("Given stride is less than the major axis length. Load will read overlapping elements!");
             stride = new_stride;
@@ -755,7 +756,7 @@ bool Instruction::execute(
         Value* ptr = pointer.dereference(*head);  // ptr to store data into
         CoopMatrix& mat = *static_cast<CoopMatrix*>(getValue(1, data));
         mat.enforceSize(invocation, num_invocations);
-        bool row_major = static_cast<Primitive*>(getValue(2, data))->data.i32 == 0;
+        bool row_major = static_cast<Primitive*>(getValue(2, data))->data.i == 0;
 
         const Type& mat_type = mat.getType();
         uint32_t total_elements = mat_type.getSize();
@@ -767,7 +768,7 @@ bool Instruction::execute(
 
         unsigned stride = row_major ? cols : rows;
         if (operands.size() >= 4) {
-            unsigned new_stride = static_cast<Primitive*>(getValue(3, data))->data.u32;
+            unsigned new_stride = static_cast<Primitive*>(getValue(3, data))->data.u;
             if (new_stride < stride)
                 Console::warn(
                     "Given stride is less than the major axis length. Store will write overlapping elements!"
@@ -807,7 +808,7 @@ bool Instruction::execute(
         // ⎣ a8 a9 a0 a1 ⎦   ⎢ b6 b7 b8 ⎥   ⎣ c6 c7 c8 ⎦
         //                   ⎣ b9 b0 b1 ⎦
 
-        // Cooperative Matrices distribute the matrix elements across invocations. To compute the matrix multplication,
+        // Cooperative Matrices distribute the matrix elements across invocations. To compute the matrix multiplication,
         // we will have to reach this dispersed data.
         Type& res_type = *getType(0, data);
         auto& amat = static_cast<CoopMatrix&>(*getValue(2, data));
@@ -862,15 +863,15 @@ bool Instruction::execute(
                 // - from b: (col = result_col, row = j)
                 const Primitive* a_el = extract_coop_el((result_row * shared_dim) + j, 2);
                 const Primitive* b_el = extract_coop_el((j * result_num_cols) + result_col, 3);
-                accum += a_el->data.fp32 * b_el->data.fp32;
+                accum += a_el->data.f * b_el->data.f;
             }
 
             // Now add with the accumulator matrix. Since it has the same dimensions as the result, we know that not
             // only is the necessary value within the same invocation's data, but even the same index.
-            accum += static_cast<const Primitive&>(*cmat[i - e_beg]).data.fp32;
+            accum += static_cast<const Primitive&>(*cmat[i - e_beg]).data.f;
 
             // Finally, create the primitive and add it to pending elements
-            elements.push_back(&prims.emplace_back(static_cast<float>(accum)));
+            elements.push_back(&prims.emplace_back(accum));
         }
         result.addElements(elements);
         break;
@@ -889,12 +890,12 @@ bool Instruction::execute(
     case spv::OpRayQueryInitializeKHR: {  // 4473
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
         AccelStruct& as = static_cast<AccelStruct&>(*getValue(1, data));
-        const unsigned ray_flags = static_cast<Primitive&>(*getValue(2, data)).data.u32;
-        const unsigned cull_mask = static_cast<Primitive&>(*getValue(3, data)).data.u32;
-        std::vector<float> ray_origin = Statics::extractVec(getValue(4, data), "ray_origin", 3);
-        const float ray_t_min = static_cast<Primitive&>(*getValue(5, data)).data.fp32;
-        std::vector<float> ray_direction = Statics::extractVec(getValue(6, data), "ray_direction", 3);
-        const float ray_t_max = static_cast<Primitive&>(*getValue(7, data)).data.fp32;
+        const unsigned ray_flags = static_cast<Primitive&>(*getValue(2, data)).data.u;
+        const unsigned cull_mask = static_cast<Primitive&>(*getValue(3, data)).data.u;
+        std::vector<double> ray_origin = Statics::extractVec(getValue(4, data), "ray_origin", 3);
+        const float ray_t_min = static_cast<Primitive&>(*getValue(5, data)).data.f;
+        std::vector<double> ray_direction = Statics::extractVec(getValue(6, data), "ray_direction", 3);
+        const float ray_t_max = static_cast<Primitive&>(*getValue(7, data)).data.f;
 
         ray_query.setAccelStruct(as);
         ray_query.getAccelStruct().initTrace(
@@ -916,7 +917,7 @@ bool Instruction::execute(
     }
     case spv::OpRayQueryGenerateIntersectionKHR: {  // 4475
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(0, data));
-        const float t_hit = static_cast<Primitive&>(*getValue(1, data)).data.fp32;
+        const float t_hit = static_cast<Primitive&>(*getValue(1, data)).data.f;
         ray_query.getAccelStruct().generateIntersection(t_hit);
         break;
     }
@@ -939,12 +940,12 @@ bool Instruction::execute(
         break;
     }
     case spv::OpReportIntersectionKHR: {  // 5334
-        const float t_hit = static_cast<Primitive&>(*getValue(2, data)).data.fp32;
+        const double t_hit = static_cast<Primitive&>(*getValue(2, data)).data.f;
 
         auto prev_stage = frame.getRtTrigger();
         bool valid_intersect = false;
         bool continue_search = true;
-        float t_min = 0.0;
+        double t_min = 0.0;
         Frame* launch_frame = get_launching_frame(frame_stack, RtStageKind::INTERSECTION);
         if (prev_stage == RtStageKind::NONE) {
             // Get data from the ray tracing pipeline if it exists (won't exist if this is run in a dummy pipeline)
@@ -967,8 +968,8 @@ bool Instruction::execute(
         } else {
             // We have returned from the any hit shader. Handle its results
             Array& payload = static_cast<Array&>(*frame.getRtResult());
-            valid_intersect = static_cast<Primitive&>(*payload[0]).data.b32;
-            continue_search = static_cast<Primitive&>(*payload[1]).data.b32;
+            valid_intersect = static_cast<Primitive&>(*payload[0]).data.b;
+            continue_search = static_cast<Primitive&>(*payload[1]).data.b;
 
             frame.disableRaytrace();
             delete &payload;
@@ -977,7 +978,7 @@ bool Instruction::execute(
         if (launch_frame != nullptr) {
             if (valid_intersect) {
                 AccelStruct& as = *launch_frame->getAccelStruct();
-                const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u32;
+                const unsigned hit_kind = static_cast<Primitive&>(*getValue(3, data)).data.u;
                 Intersection& candidate = as.getCandidate();
                 candidate.hitKind = HitKind(hit_kind);
                 candidate.hitT = t_hit;

@@ -42,7 +42,7 @@ TEST_CASE("output", "[json]") {
     SECTION("4 prims") {
         SETUP
         Primitive first(true);
-        Primitive second(-0.2f);
+        Primitive second(-0.2f, 32);
         Primitive third(-3);
         Primitive fourth(false);
         vars["first"] = &first;

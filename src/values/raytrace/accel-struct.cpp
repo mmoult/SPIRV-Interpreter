@@ -114,7 +114,7 @@ void AccelStruct::copyFrom(const Value& new_val) noexcept(false) {
     const Struct& other = Statics::extractStruct(&new_val, "acceleration structure", names);
 
     // tlas: uvec2
-    std::vector<unsigned> tlas_got = Statics::extractUvec(other[0], names[0], 2);
+    std::vector<uint64_t> tlas_got = Statics::extractUvec(other[0], names[0], 2);
     tlas = NodeReference(tlas_got[0], tlas_got[1]);
 
     // Clear any nodes previously held

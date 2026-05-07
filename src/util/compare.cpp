@@ -13,12 +13,12 @@
 
 #include "string.hpp"
 
-std::string to_signed_string(float x) {
+std::string to_signed_string(float x, unsigned digits) {
     std::stringstream f;
     if (!std::signbit(x))
         f << '+';
     // The opposite (-) will be added automatically
-    print_float(f, x);
+    print_float(f, x, digits);
     return f.str();
 }
 
@@ -38,7 +38,7 @@ inline std::tuple<char, char> select(CompareMode diff, char xc, char yc) {
 
 namespace Compare {
 
-bool eq_float(float x, float y, unsigned needed_sigfigs) {
+bool eq_float(double x, double y, unsigned needed_sigfigs) {
     if (x == y)
         return true;
     bool xnan = std::isnan(x);
@@ -51,9 +51,9 @@ bool eq_float(float x, float y, unsigned needed_sigfigs) {
         return false;  // If either are inf, they must == each other
 
     // Compare sigfigs via string. Slow, but should do the job
-    std::string xf = to_signed_string(x);
+    std::string xf = to_signed_string(x, needed_sigfigs);
     unsigned xfl = xf.length();
-    std::string yf = to_signed_string(y);
+    std::string yf = to_signed_string(y, needed_sigfigs);
     unsigned yfl = yf.length();
     unsigned max_len = (xfl >= yfl) ? xfl : yfl;
     bool after_dec = false;

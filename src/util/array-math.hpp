@@ -27,9 +27,9 @@ void value_to_glm(const Array& val, Mat& out, bool extract = false) {
         if (!extract) {
             auto& col = static_cast<const Array&>(*val[i]);
             for (unsigned j = 0; j < Rows; ++j)
-                out[i][j] = static_cast<const Primitive*>(col[j])->data.fp32;
+                out[i][j] = static_cast<const Primitive*>(col[j])->data.f;
         } else {
-            std::vector<float> col = Statics::extractVec(val[i], "matrix", Rows);
+            std::vector<double> col = Statics::extractVec(val[i], "matrix", Rows);
             for (unsigned j = 0; j < 3; ++j)
                 out[i][j] = col[j];
         }

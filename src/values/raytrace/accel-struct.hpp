@@ -44,7 +44,6 @@ private:
 
     Trace trace;
 
-private:
     // TODO: handle the effects of winding order on intersections; currently, front face is CCW
 
     static glm::mat4x3 removeLastRow(glm::mat4 mat) {
@@ -106,8 +105,8 @@ public:
     void initTrace(
         const unsigned ray_flags,
         const unsigned cull_mask,
-        const std::vector<float>& ray_origin,
-        const std::vector<float>& ray_direction,
+        const std::vector<double>& ray_origin,
+        const std::vector<double>& ray_direction,
         const float ray_t_min,
         const float ray_t_max,
         const bool use_sbt,
@@ -335,6 +334,12 @@ public:
     void copyReinterp(const Value& other) noexcept(false) override {
         if (!tryCopyFrom(other))
             throw std::runtime_error("Could not copy reinterp to acceleration struct!");
+    }
+
+    bool equals(const Value& val) const override {
+        // Should not be needed
+        assert(false);
+        return false;
     }
 };
 #endif

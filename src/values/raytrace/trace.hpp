@@ -40,8 +40,8 @@ struct Intersection {
     /// Index automatically assigned by the driver or BVH builder. Should be unique. See:
     /// https://learn.microsoft.com/en-us/windows/win32/direct3d12/primitiveindex
     unsigned primitiveIndex = 0;
-    float hitT = std::numeric_limits<float>::infinity();
-    glm::vec2 barycentrics = glm::vec2(0.0f, 0.0f);
+    double hitT = std::numeric_limits<double>::infinity();
+    glm::vec2 barycentrics = glm::vec2(0.0, 0.0);
     bool isOpaque = true;
     HitKind hitKind = HitKind::UNHIT;
 
@@ -61,10 +61,10 @@ struct Trace {
     // Ray properties
     RayFlags rayFlags = RayFlags(0);
     unsigned cullMask;
-    float rayTMin = 0.0f;
-    float rayTMax = 0.0f;
-    glm::vec3 rayOrigin {0.0f, 0.0f, 0.0f};
-    glm::vec3 rayDirection {0.0f, 0.0f, 0.0f};
+    double rayTMin = 0.0;
+    double rayTMax = 0.0;
+    glm::vec3 rayOrigin {0.0, 0.0, 0.0};
+    glm::vec3 rayDirection {0.0, 0.0, 0.0};
 
     // shader binding table info
     bool useSBT;

@@ -106,7 +106,7 @@ TEST_CASE("i/o", "[yaml]") {
 
     SECTION("challenging keys") {
         // We are testing the key, so the value doesn't really matter
-        Primitive test(-1);
+        Primitive test(static_cast<int64_t>(-1));
 
         // Yaml can handle an identifier with spaces
         circle_test(format, "something or other", test, "something or other: -1");
@@ -125,19 +125,14 @@ TEST_CASE("i/o", "[yaml]") {
         sformat.setIndentSize(5);
 
         constexpr unsigned arr_size = 6;
-        std::vector<Primitive> prims;
-        prims.reserve(arr_size);
-        Type fp32 = Type::primitive(DataType::UINT);
+        Type element = Type::primitive(DataType::UINT, 64);
+        Array test(element, arr_size);
+        test.dummyFill();
 
-        std::vector<const Value*> es;
         for (unsigned i = 0; i < arr_size; ++i) {
-            prims.emplace_back(static_cast<uint32_t>(i));
-            // It should be fine to access the vector pointer directly because we should never assign more than the
-            // initial allocation.
-            es.push_back(&prims[i]);
+            Primitive prim(i);
+            test[i]->copyFrom(prim);
         }
-        Array test(fp32, es.size());
-        test.addElements(es);
 
         circle_test(sformat, "sequence", test,
             "sequence: [\n"
@@ -155,7 +150,7 @@ TEST_CASE("i/o", "[yaml]") {
         for (unsigned j = 0; j < 3; ++j) {
             std::vector<const Value*> es;
             for (unsigned i = 0; i < 4; ++i) {
-                const Value* prim = new Primitive(static_cast<float>(i + j));
+                const Value* prim = new Primitive(i + j);
                 news.push_back(prim);
                 es.push_back(prim);
             }
@@ -266,19 +261,14 @@ TEST_CASE("i/o", "[yaml]") {
         std::vector<const Type*> top_types{&first_type, &second_type};
         Type top_type = Type::structure(top_types, top_names);
 
-        std::vector<const Value*> first_elements;
-        std::vector<const Value*> second_elements;
-        std::vector<Primitive> prims;
-        for (uint32_t i = 0; i < STRUCT_SIZE * 2; ++i)
-            prims.emplace_back(i);
-        // Must push back all of prims before using their addresses in case we needed to expand the vector capacity
-        for (unsigned i = 0; i < STRUCT_SIZE * 2; ++i) {
-            auto& vec = (i < STRUCT_SIZE)? first_elements : second_elements;
-            vec.push_back(&prims[i]);
+        Value* first = first_type.construct(); // first_elements
+        Value* second = second_type.construct(); // second_elements
+        for (uint32_t i = 0; i < STRUCT_SIZE * 2; ++i) {
+            Struct& struc = (i < STRUCT_SIZE)? static_cast<Struct&>(*first) : static_cast<Struct&>(*second);
+            Primitive prim(i);
+            struc[i % STRUCT_SIZE]->copyFrom(prim);
         }
 
-        Value* first = first_type.construct(first_elements);
-        Value* second = second_type.construct(second_elements);
         Struct top(top_type);
         std::vector<const Value*> top_elements{first, second};
         top.addElements(top_elements);

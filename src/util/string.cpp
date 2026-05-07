@@ -17,12 +17,10 @@ std::string repeated_string(const unsigned num, const std::string& str) {
     return out.str();
 }
 
-void print_float(std::stringstream& out, double fp) {
+void print_float(std::stringstream& out, double fp, unsigned precision_digits) {
     assert(!std::isnan(fp));
     assert(!std::isinf(fp));
-    // The number of precision digits to print. A float has roughly 5 digits after the first nonzero. Print through
-    // either 1 digit after the decimal or prec_rem after the first relevant digit, whichever comes *last*.
-    constexpr unsigned PRECISION_DIGITS = 6;
+
     // The number of 0s before we use scientific notation for subnormals.
     constexpr unsigned DIGITS_TO_SCIENTIFIC = 5;
 
@@ -49,7 +47,8 @@ void print_float(std::stringstream& out, double fp) {
     }
     unsigned scientific = 0;
 
-    unsigned max = std::max(dec_idx + 1, PRECISION_DIGITS);
+    // Print through either 1 digit after the decimal or prec_rem after the first relevant digit, whichever comes *last*
+    unsigned max = std::max(dec_idx + 1, precision_digits);
     bool prec_start = false;
     for (;; digit /= 10.0) {
         for (unsigned ii = 1; ii < 11; ++ii) {

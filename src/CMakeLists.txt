@@ -26,6 +26,7 @@ target_sources(spv-interp
     spv/ray-substage.cpp
     util/array-math.cpp
     util/compare.cpp
+    util/fpconvert.cpp
     util/geom-math.cpp
     util/string.cpp
     util/trie.cpp

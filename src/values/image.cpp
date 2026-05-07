@@ -113,7 +113,7 @@ void Image::Component::assertCompatible(const Component& other) {
     const Type& el = type.getElement();
     std::vector<Value*> vals(comps.count, nullptr);
     for (unsigned i = 0; i < comps.count; ++i) {
-        auto prim = new Primitive(0);
+        auto prim = new Primitive(0u);
         prim->cast(el);
         vals[i] = prim;
     }
@@ -131,7 +131,7 @@ std::tuple<unsigned, float> Image::decompose(float val) {
 }
 
 bool Image::equals(const Value& val) const {
-    if (!Value::equals(val))  // guarantees matching types
+    if (val.getType().getBase() != type.getBase())  // guarantees matching types
         return false;
     const Image& other = static_cast<const Image&>(val);
 
@@ -181,7 +181,7 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
     unsigned dim_size = this->type.getDim();
     if (dim_size < 1 || dim_size > 3)
         throw std::runtime_error("Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive.");
-    std::vector<unsigned> dims = Statics::extractUvec(other[1], names[1], dim_size);
+    std::vector<uint64_t> dims = Statics::extractUvec(other[1], names[1], dim_size);
     xx = dims[0];
     if (dim_size > 1) {
         yy = dims[1];
@@ -234,8 +234,8 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
                 for (unsigned c = 0; c < gc; ++c) {
                     if (comps[c] == 0)
                         continue;
-                    float norm = img[load_idx + c] / 255.0f;
-                    data[store_idx + comps[c] - 1] = *reinterpret_cast<uint32_t*>(&norm);
+                    double norm = img[load_idx + c] / 255.0;
+                    data[store_idx + comps[c] - 1] = *reinterpret_cast<uint64_t*>(&norm);
                 }
                 load_idx += gc;
                 store_idx += comps.count;
@@ -370,7 +370,7 @@ Struct* Image::toStruct() const {
     // populate the dat array with the image's actual data
     std::vector<Value*> values;
     const Type& dat_type = type.getElement();
-    for (const unsigned dat : data) {
+    for (const uint64_t dat : data) {
         Primitive* prim = new Primitive(dat);
         prim->cast(dat_type);
         values.push_back(prim);
@@ -393,11 +393,11 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
     auto get = [](const Value* val, DataType base) {
         const auto& prim = static_cast<const Primitive&>(*val);
         if (base == DataType::INT)
-            return static_cast<float>(prim.data.i32);
+            return static_cast<double>(prim.data.i);
         if (base == DataType::UINT)
-            return static_cast<float>(prim.data.u32);
+            return static_cast<double>(prim.data.i);
         assert(base == DataType::FLOAT);
-        return prim.data.fp32;
+        return prim.data.f;
     };
 
     if (!arrayed) {
@@ -543,12 +543,12 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
                 Primitive prim(data[total + chan]);
                 float converted;
                 if (el_base == DataType::FLOAT) {
-                    converted = prim.data.fp32;
+                    converted = prim.data.f;
                 } else if (el_base == DataType::INT) {
-                    converted = prim.data.i32;
+                    converted = prim.data.i;
                 } else {
                     assert(el_base == DataType::UINT);
-                    converted = prim.data.u32;
+                    converted = prim.data.i;
                 }
                 sums[chan] += (converted * weight);
             }
@@ -561,16 +561,16 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
     // Output the channels in the same order defined by the comps
     for (unsigned chan = 0; chan < comps.count; ++chan) {
         float sum = sums[chan];
-        Primitive from(0);
+        Primitive from(0u);
         if (el_base == DataType::FLOAT) {
             from = Primitive(sum);
         } else if (el_base == DataType::INT) {
-            from = Primitive(static_cast<int>(sum));
+            from = Primitive(static_cast<int64_t>(sum));
         } else {
             assert(el_base == DataType::UINT);
             from = Primitive(static_cast<unsigned>(sum));
         }
-        auto* prim = new Primitive(0);
+        auto* prim = new Primitive(0u);
         prim->cast(el);
         prim->copyFrom(from);
         vals[chan] = prim;
@@ -610,17 +610,15 @@ bool Image::write(int x, int y, int z, const Array& texel) {
 
     // fetch the values out of the texel presented
     const Type& el = type.getElement();
-    std::vector<const Value*> values(1, nullptr);
-    values.resize(1);
+    assert(Primitive::isPrimitive(el.getBase()));
+    Primitive& dummy = static_cast<Primitive&>(*el.construct());
     unsigned tex_size = texel.getSize();
     assert(tex_size <= 4);  // texel array to write cannot have more than 4 channels!
     tex_size = std::min(tex_size, comps.count);
     assert(base + tex_size <= data.size());
     for (unsigned i = 0; i < tex_size; ++i) {
-        values[0] = texel[i];
-        const Value* gen = el.construct(values);
-        // Note: gen (and thus el) MUST be a primitive for this to work!
-        uint32_t got = static_cast<const Primitive*>(gen)->data.all;
+        dummy.copyFrom(*texel[i]);
+        auto got = dummy.data.all;
         data[base + i] = got;
     }
 

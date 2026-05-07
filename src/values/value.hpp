@@ -53,15 +53,8 @@ public:
 
     /// @brief compares whether the two values (this and val) are equal.
     ///
-    /// Similarly to `copyFrom`, this implementation will only verify that the types match. Implement a more complete
-    /// comparison in all subclasses.
-    ///
-    /// The method is necessary for all types which may be in the shader output.
-    ///
     /// @param val the other value to compare against.
-    virtual bool equals(const Value& val) const {
-        return type == val.type;
-    }
+    virtual bool equals(const Value& val) const = 0;
 
     /// @brief Recursively applies a function to this value and all sub-values, in post-order traversal.
     ///

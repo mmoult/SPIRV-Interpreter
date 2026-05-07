@@ -7,8 +7,7 @@
 
 #include <cctype>  // for std::isspace
 #include <cmath>
-#include <cstdint>  // for uint32_t and int32_t
-#include <istream>
+#include <cstdint>  // for uint64_t and int64_t
 #include <limits>  // for inf and nan
 #include <stdexcept>
 
@@ -190,9 +189,9 @@ Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcep
     // Next, we check for special nums (inf and nan)
     switch (isSpecialFloat(handler)) {
     case SpecialFloatResult::F_INF:
-        return new Primitive(std::numeric_limits<float>::infinity() * (sign ? 1 : -1));
+        return new Primitive(std::numeric_limits<double>::infinity() * (sign ? 1 : -1));
     case SpecialFloatResult::F_NAN:
-        return new Primitive(std::numeric_limits<float>::quiet_NaN() * (sign ? 1 : -1));
+        return new Primitive(std::numeric_limits<double>::quiet_NaN() * (sign ? 1 : -1));
     default:
         break;
     }
@@ -255,7 +254,7 @@ Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcep
         // Integral type- use either int or uint
         if (sign) {
             // Assume the larger uint type
-            uint32_t val = 0;
+            uint64_t val = 0;
             if (!parseIntWithMax(val, UINT32_MAX, line, idx, end))
                 throw std::runtime_error("Value parsed is too big to fit in a 32-bit uint!");
 
@@ -263,24 +262,24 @@ Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcep
             return new Primitive(val);
         } else {
             // Use int to apply the negation
-            int32_t val = 0;
+            int64_t val = 0;
             bool too_small = false;
             // compare with logic in parseIntWithMax
             for (unsigned ii = idx; ii < end; ++ii) {
                 char digit = line[ii] - '0';
-                if (INT32_MIN / 10 > val) {
+                if (INT64_MIN / 10 > val) {
                     too_small = true;
                     break;
                 }
                 val *= 10;
-                if (INT32_MIN + digit > val) {
+                if (INT64_MIN + digit > val) {
                     too_small = true;
                     break;
                 }
                 val -= digit;
             }
             if (too_small)
-                throw std::runtime_error("Value parsed is too small to fit in a 32-bit int!");
+                throw std::runtime_error("Value parsed is too small to fit in a 64-bit int!");
 
             handler.setIdx(end);
             return new Primitive(val);
@@ -292,7 +291,7 @@ Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcep
         if (!sign)
             val *= -1;
         handler.setIdx(end);
-        return new Primitive(static_cast<float>(val));
+        return new Primitive(val);
     }
 }
 

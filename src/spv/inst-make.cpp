@@ -43,12 +43,11 @@
 #include "frame.hpp"
 #include "token.hpp"
 
-template<typename T>
-Value* construct_from_vec(const std::vector<T>& vec, const Type* res_type) {
-    std::vector<const Value*> pointers(vec.size(), nullptr);
-    for (unsigned i = 0; i < pointers.size(); ++i)
-        pointers[i] = &vec[i];
-    return res_type->construct(pointers);
+Value* construct_from_vec(const std::vector<Primitive>& vec, const Type* res_type) {
+    Array& res = static_cast<Array&>(*res_type->construct());
+    for (auto i = 0; i < vec.size(); ++i)
+        res[i]->copyFrom(vec[i]);
+    return &res;
 }
 
 const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
@@ -172,7 +171,7 @@ Value* Instruction::handleImage(
                     const Value* bias = getNext();
                     // bias must be a float per the spec
                     assert(bias->getType().getBase() == DataType::FLOAT);
-                    lod += static_cast<const Primitive*>(bias)->data.fp32;
+                    lod += static_cast<const Primitive*>(bias)->data.f;
                     break;
                 }
                 CASE(ImageOperandsConstOffsetShift) : CASE(ImageOperandsOffsetShift) : {
@@ -186,13 +185,13 @@ Value* Instruction::handleImage(
                             const auto& shp = static_cast<const Primitive&>(*(sh[j]));
                             switch (j) {
                             case 0:
-                                x += shp.data.i32;
+                                x += shp.data.i;
                                 break;
                             case 1:
-                                y += shp.data.i32;
+                                y += shp.data.i;
                                 break;
                             case 2:
-                                z += shp.data.i32;
+                                z += shp.data.i;
                                 break;
                             default:
                                 throw std::runtime_error("Offset coordinate count exceeds components usable!");
@@ -200,23 +199,23 @@ Value* Instruction::handleImage(
                         }
                     } else {
                         assert(shift_type == DataType::INT);
-                        x += static_cast<const Primitive&>(*shifts).data.i32;
+                        x += static_cast<const Primitive&>(*shifts).data.i;
                     }
                     break;
                 }
                 CASE(ImageOperandsLodShift) : {
                     const Value* lodv = getNext();
                     const auto& lodp = static_cast<const Primitive&>(*lodv);
-                    Primitive prim(0.0f);
+                    Primitive prim(0.0);
                     prim.copyFrom(lodp);
-                    lod = prim.data.fp32;
+                    lod = prim.data.f;
                     break;
                 }
                 CASE(ImageOperandsMinLodShift) : {
                     const Value* min_lodv = getNext();
                     assert(min_lodv->getType().getBase() == DataType::FLOAT);
                     // spec explicitly requires it to be a floating point scalar
-                    lod = std::max(lod, static_cast<const Primitive&>(*min_lodv).data.fp32);
+                    lod = std::max(lod, static_cast<float>(static_cast<const Primitive&>(*min_lodv).data.f));
                 }
             default:
                 throw std::runtime_error("Cannot handle unsupported image qualifier operand!");
@@ -243,11 +242,11 @@ Value* Instruction::handleImage(
 Primitive multiply_same(const Primitive& x, const Primitive& y) {
     switch (x.getType().getBase()) {
     case DataType::FLOAT:
-        return Primitive(x.data.fp32 * y.data.fp32);
+        return Primitive(x.data.f * y.data.f);
     case DataType::UINT:
-        return Primitive(x.data.u32 * y.data.u32);
+        return Primitive(x.data.u * y.data.u);
     case DataType::INT:
-        return Primitive(x.data.i32 * y.data.i32);
+        return Primitive(x.data.i * y.data.i);
     default:
         throw std::invalid_argument("Can only multiply primitives of type float, uint, or int!");
     }
@@ -259,13 +258,13 @@ Primitive multiply_same(const Primitive& x, const Primitive& y) {
 void accum_same(Primitive& x, const Primitive& y) {
     switch (x.getType().getBase()) {
     case DataType::FLOAT:
-        x.data.fp32 += y.data.fp32;
+        x.data.f += y.data.f;
         break;
     case DataType::UINT:
-        x.data.u32 += y.data.u32;
+        x.data.u += y.data.u;
         break;
     case DataType::INT:
-        x.data.i32 += y.data.i32;
+        x.data.i += y.data.i;
         break;
     default:
         throw std::invalid_argument("Can only multiply primitives of type float, uint, or int!");
@@ -326,32 +325,30 @@ void element_bin_op(
         type == DataType::VOID || ((element_base(*src1) == element_base(*src2)) &&
                                    "Cannot perform element-wise operation on operands of different bases!")
     );
-    std::vector<Primitive> prims;
-    std::vector<const Value*> pprims;
+
+    Value* res = data[dst.type].getType()->construct();
 
     if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
         assert(type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX);
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         assert((op1.getSize() == op2.getSize()) && "Cannot do binary operation on arrays of different size!");
-        unsigned asize = op1.getSize();
-        prims.reserve(asize);
-        pprims.reserve(asize);
-        for (unsigned i = 0; i < asize; ++i) {
+        Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, op1.getSize());
+
+        for (unsigned i = 0; i < op1.getSize(); ++i) {
             auto result = op(static_cast<const Primitive*>(op1[i]), static_cast<const Primitive*>(op2[i]));
-            prims.emplace_back(result);
-            pprims.push_back(&prims[i]);
+            arr[i]->copyFrom(result);
         }
     } else {
         assert(type2.getBase() != DataType::ARRAY);
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         auto result = op(op1, op2);
-        prims.emplace_back(result);
-        pprims.push_back(&prims[0]);
+        res->copyFrom(result);
     }
 
-    Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
 
@@ -387,18 +384,17 @@ void element_shift_op(
     unsigned bin1,
     const OpDst& dst,
     DataView& data,
-    std::function<unsigned(const Primitive*, const Primitive*)>& op
+    std::function<uint64_t(const Primitive*, const Primitive*)>& op
 ) {
     const Value* src1 = data[bin0].getValue();
     const Value* src2 = data[bin1].getValue();
     const Type& dst_type = *data[dst.type].getType();
 
     // Operate on two primitive arrays or two primitive scalars
-    std::vector<Primitive> prims;
-    std::vector<const Value*> pprims;
     const Type& tbase = src1->getType();
     auto tb = element_base(*src1);
     assert((tb == DataType::UINT || tb == DataType::INT) && "Cannot perform shift operation on non-integral element!");
+    Value* res = dst_type.construct();
 
     if (tbase.getBase() == DataType::ARRAY || tbase.getBase() == DataType::COOP_MATRIX) {
         const Array& op1 = *static_cast<const Array*>(src1);
@@ -406,25 +402,25 @@ void element_shift_op(
         assert((op1.getSize() == op2.getSize()) && "Cannot do shift operation on arrays of different size!");
         unsigned asize = op1.getSize();
         const auto& dbase = dst_type.getElement();
+        Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, asize);
 
-        prims.reserve(asize);
-        pprims.reserve(asize);
         for (unsigned i = 0; i < asize; ++i) {
-            unsigned result = op(static_cast<const Primitive*>(op1[i]), static_cast<const Primitive*>(op2[i]));
-            Primitive& prim = prims.emplace_back(result);
+            auto result = op(static_cast<const Primitive*>(op1[i]), static_cast<const Primitive*>(op2[i]));
+            Primitive prim(result);
             prim.cast(dbase);
-            pprims.push_back(&prims[i]);
+            arr[i]->copyFrom(prim);
         }
     } else {
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
-        unsigned result = op(op1, op2);
-        Primitive& prim = prims.emplace_back(result);
+        auto result = op(op1, op2);
+        Primitive prim(result);
         prim.cast(dst_type);
-        pprims.push_back(&prims[0]);
+        res->copyFrom(prim);
     }
 
-    Value* res = dst_type.construct(pprims);
     data[dst.at].redefine(res);
 }
 
@@ -491,31 +487,28 @@ using UnOp = std::function<Primitive(const Primitive*)>;
 
 void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataView& data, UnOp& op) {
     const Value* src1 = data[unary].getValue();
-
-    // Operate on a single primitive scalar or array of primitives
-    const Type& type = src1->getType();
-    std::vector<Primitive> prims;
-    std::vector<const Value*> pprims;
     assert(element_base(*src1) == chtype && "Cannot do unary operation on other-typed element!");
 
+    const Type& type = *data[dst.type].getType();
+    Value* res = type.construct();
+
+    // Operate on a single primitive scalar or array of primitives
     if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
         const Array& operand = *static_cast<const Array*>(src1);
-        unsigned asize = operand.getSize();
-        prims.reserve(asize);
-        pprims.reserve(asize);
-        for (unsigned i = 0; i < asize; ++i) {
+        Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, operand.getSize());
+
+        for (unsigned i = 0; i < operand.getSize(); ++i) {
             auto result = op(static_cast<const Primitive*>(operand[i]));
-            prims.emplace_back(result);
-            pprims.push_back(&prims[i]);
+            arr[i]->copyFrom(result);
         }
     } else {
         const Primitive* operand = static_cast<const Primitive*>(src1);
         auto result = op(operand);
-        prims.emplace_back(result);
-        pprims.push_back(&prims[0]);
+        res->copyFrom(result);
     }
 
-    Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
 
@@ -528,6 +521,42 @@ void element_int_unary_op(unsigned unary, const OpDst& dst, DataView& data, UnOp
     );
 
     element_unary_op(dt, unary, dst, data, (dt == DataType::UINT) ? u_op : i_op);
+}
+
+// Unary operation that is limited to FP16 or FP32 precision in the spec
+void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std::function<float(float)>& op) {
+    const Value* src1 = data[unary].getValue();
+    const Type& type = *data[dst.type].getType();
+    DataType btype = type.getBase();
+    unsigned prec;
+    if (btype == DataType::ARRAY || btype == DataType::COOP_MATRIX) {
+        const auto& el_type = type.getElement();
+        btype = el_type.getBase();
+        prec = el_type.getPrecision();
+    } else
+        prec = type.getPrecision();
+    assert(btype == DataType::FLOAT && "Cannot do unary operation on non-float element!");
+    assert(prec == 16 || prec == 32);
+
+    Value* res = type.construct();
+    // Operate on a single primitive scalar or array of primitives
+    if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
+        const Array& operand = *static_cast<const Array*>(src1);
+        Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, operand.getSize());
+
+        for (unsigned i = 0; i < operand.getSize(); ++i) {
+            const auto* element = static_cast<const Primitive*>(operand[i]);
+            Primitive prim(static_cast<double>(op(element->data.f)));
+            arr[i]->copyFrom(prim);
+        }
+    } else {
+        const Primitive* operand = static_cast<const Primitive*>(src1);
+        Primitive prim(static_cast<double>(op(operand->data.f)));
+        res->copyFrom(prim);
+    }
+    data[dst.at].redefine(res);
 }
 
 using TernOp = std::function<Primitive(const Primitive*, const Primitive*, const Primitive*)>;
@@ -554,8 +583,7 @@ void element_tern_op(
         (element_base(*src1) == element_base(*src2) && element_base(*src2) == element_base(*src3) &&
          "Cannot use operands of different bases!")
     );
-    std::vector<Primitive> prims;
-    std::vector<const Value*> pprims;
+    Value* res = data[dst.type].getType()->construct();
 
     if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
         assert(
@@ -569,16 +597,16 @@ void element_tern_op(
             (op1.getSize() == op2.getSize()) && (op2.getSize() == op3.getSize()) &&
             "Cannot do binary operation on arrays of different size!"
         );
-        unsigned asize = op1.getSize();
-        prims.reserve(asize);
-        pprims.reserve(asize);
-        for (unsigned i = 0; i < asize; ++i) {
+        Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, op1.getSize());
+
+        for (unsigned i = 0; i < op1.getSize(); ++i) {
             auto result =
                 op(static_cast<const Primitive*>(op1[i]),
                    static_cast<const Primitive*>(op2[i]),
                    static_cast<const Primitive*>(op3[i]));
-            prims.emplace_back(result);
-            pprims.push_back(&prims[i]);
+            arr[i]->copyFrom(result);
         }
     } else {
         assert(
@@ -589,11 +617,9 @@ void element_tern_op(
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         const Primitive* op3 = static_cast<const Primitive*>(src3);
         auto result = op(op1, op2, op3);
-        prims.emplace_back(result);
-        pprims.push_back(&prims[0]);
+        res->copyFrom(result);
     }
 
-    Value* res = data[dst.type].getType()->construct(pprims);
     data[dst.at].redefine(res);
 }
 
@@ -614,10 +640,10 @@ void element_tern_op(
 // expected not to overflow or underflow.
 #define INT_E_BIN_OP(BIN_OP) \
     { \
-        BinOp uufx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.u32; }; \
-        BinOp uifx = [](const Primitive* a, const Primitive* b) { return a->data.u32 BIN_OP b->data.i32; }; \
-        BinOp iufx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.u32; }; \
-        BinOp iifx = [](const Primitive* a, const Primitive* b) { return a->data.i32 BIN_OP b->data.i32; }; \
+        BinOp uufx = [](const Primitive* a, const Primitive* b) { return a->data.u BIN_OP b->data.u; }; \
+        BinOp uifx = [](const Primitive* a, const Primitive* b) { return a->data.u BIN_OP b->data.i; }; \
+        BinOp iufx = [](const Primitive* a, const Primitive* b) { return a->data.i BIN_OP b->data.u; }; \
+        BinOp iifx = [](const Primitive* a, const Primitive* b) { return a->data.i BIN_OP b->data.i; }; \
         element_int_bin_op( \
             checkRef(src_at, data_len), \
             checkRef(src_at + 1, data_len), \
@@ -632,8 +658,8 @@ void element_tern_op(
     }
 #define INT_E_UNARY_OP(UNARY_OP) \
     { \
-        UnOp ufx = [](const Primitive* a) { return UNARY_OP a->data.u32; }; \
-        UnOp ifx = [](const Primitive* a) { return UNARY_OP a->data.i32; }; \
+        UnOp ufx = [](const Primitive* a) { return UNARY_OP a->data.u; }; \
+        UnOp ifx = [](const Primitive* a) { return UNARY_OP a->data.i; }; \
         element_int_unary_op( \
             checkRef(src_at, data_len), \
             OpDst {checkRef(dst_type_at, data_len), result_at}, \
@@ -645,7 +671,7 @@ void element_tern_op(
     }
 // Element shift operation, which may have integral operands
 #define E_SHIFT_OP(SHIFT_OP) \
-    std::function<unsigned(const Primitive*, const Primitive*)> op = SHIFT_OP; \
+    std::function<uint64_t(const Primitive*, const Primitive*)> op = SHIFT_OP; \
     OpDst dst {checkRef(dst_type_at, data_len), result_at}; \
     element_shift_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, op);
 // Typical unary operation
@@ -654,6 +680,13 @@ void element_tern_op(
         UnOp op = [](const Primitive* a) { return UNARY_OP; }; \
         OpDst dst {checkRef(dst_type_at, data_len), result_at}; \
         element_unary_op(DataType::E_TYPE, checkRef(src_at, data_len), dst, data, op); \
+        break; \
+    }
+#define PRECISION_E_UNARY_OP(UNARY_OP) \
+    { \
+        std::function<float(float)> op = [](float a) { return UNARY_OP; }; \
+        OpDst dst {checkRef(dst_type_at, data_len), result_at}; \
+        element_prec_unary_op(checkRef(src_at, data_len), dst, data, op); \
         break; \
     }
 #define E_TERN_OP(E_TYPE, OP_LAMBDA) \
@@ -716,7 +749,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         if (val->getType().getBase() != DataType::UINT)
             throw std::runtime_error("Corrupted extension information!");
         const Primitive& prim = *static_cast<Primitive*>(val);
-        Extension ext = static_cast<Extension>(prim.data.u32);
+        Extension ext = static_cast<Extension>(prim.data.u);
         switch (ext) {
         case Extension::GLSL_STD_450:
             return makeResultGlsl(data, location, result_at);
@@ -858,8 +891,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         // Unlike OpTypeVector, the length is stored in an OpConstant
         Primitive& len_val = *static_cast<Primitive*>(getValue(src_at, data));
         data[result_at].redefine(new Type(
-            // The size must be a positive integer, so we can safely pull from u32
-            Type::array(len_val.data.u32, *sub)
+            // The size must be a positive integer, so we can safely pull from u
+            Type::array(len_val.data.u, *sub)
         ));
         break;
     }
@@ -943,16 +976,62 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpConstantFalse:  // 42
         data[result_at].redefine(new Primitive(opcode == spv::OpConstantTrue));
         break;
-    case spv::OpConstant: {  // 43
+    case spv::OpConstant:  // 43
+    case spv::OpSpecConstant: {  // 50
         // integer or floating point constant
-        Type* ret = getType(dst_type_at, data);
+        Type& type = *getType(dst_type_at, data);
         assert(operands[2].type == Token::Type::UINT);
-        unsigned val = std::get<unsigned>(operands[2].raw);
-        if (ret->getBase() == DataType::FLOAT)
-            val = Primitive::fpConvertTypeToEmu(val, ret->getPrecision());
-        Primitive* prim = new Primitive(val);
-        prim->cast(*ret);
-        data[result_at].redefine(prim);
+        uint64_t raw = std::get<unsigned>(operands[2].raw);
+        auto prec = type.getPrecision();
+        if (prec > 32) {
+            assert(operands[3].type == Token::Type::UINT);
+            raw |= static_cast<uint64_t>(std::get<unsigned>(operands[3].raw)) << 32;
+        }
+
+        Primitive* prim = new Primitive(type, false);
+        // Convert from a literal uint to the required emulation type
+        switch (type.getBase()) {
+        case DataType::INT: {
+            // Copy the sign bits
+            assert(prec <= 64);
+            uint64_t bitmask = (prec == 64) ? ~0ULL : (1ULL << prec) - 1;
+            if (raw & (1ULL << (prec - 1)))
+                raw |= ~bitmask;
+            else
+                raw &= bitmask;
+            prim->data.all = raw;
+            break;
+        }
+        case DataType::FLOAT:
+            switch (prec) {
+            case 16:
+                prim->data.f = FpConvert::decode_flt16<double>(raw);
+                break;
+            case 32:
+                prim->data.f = static_cast<double>(std::bit_cast<float>(static_cast<uint32_t>(raw)));
+                break;
+            case 64:
+                prim->data.f = std::bit_cast<double>(raw);
+                break;
+            default:
+                throw std::runtime_error("Unsupported float precision for literal!");
+            }
+            break;
+        default:
+            // No special conversion necessary
+            prim->data.all = raw;
+            break;
+        }
+        // We assume the literal is in-bounds for the type, otherwise the SPIR-V would be malformed.
+
+        if (opcode == spv::OpConstant) {
+            data[result_at].redefine(prim);
+        } else {
+            Variable* var = new Variable(prim, spv::StorageClass::StorageClassPushConstant, true);
+            applyVarDeco(queue, *var, result_at);
+            selectName(*var);
+            data[result_at].redefine(var);
+        }
         break;
     }
     case spv::OpConstantComposite:  // 44
@@ -984,18 +1063,22 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 values = replacement;
             }
         }
-        auto* val = ret->construct(values);
+        Array& arr = static_cast<Array&>(*ret->construct());
+        if (ret->getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, values.size());
+        for (unsigned i = 0; i < values.size(); ++i)
+            arr[i]->copyFrom(*values[i]);
         auto set_unsized = [&](Value& seen) {
             if (seen.getType().getBase() == DataType::COOP_MATRIX)
                 static_cast<CoopMatrix&>(seen).setUnsized();
             return true;
         };
-        val->recursiveApply(set_unsized);
+        arr.recursiveApply(set_unsized);
 
         if (opcode != spv::OpSpecConstantComposite) {
-            data[result_at].redefine(val);
+            data[result_at].redefine(&arr);
         } else {
-            Variable* var = new Variable(val, spv::StorageClass::StorageClassPushConstant, true);
+            Variable* var = new Variable(&arr, spv::StorageClass::StorageClassPushConstant, true);
             applyVarDeco(queue, *var, result_at);
             selectName(*var);
             data[result_at].redefine(var);
@@ -1012,17 +1095,6 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         // Note: booleans cannot have non-standard precision
         Primitive* default_val = new Primitive(opcode == spv::OpSpecConstantTrue);
         Variable* var = new Variable(default_val, spv::StorageClass::StorageClassPushConstant, true);
-        applyVarDeco(queue, *var, result_at);
-        selectName(*var);
-        data[result_at].redefine(var);
-        break;
-    }
-    case spv::OpSpecConstant: {  // 50
-        Type* ret = getType(dst_type_at, data);
-        assert(operands[2].type == Token::Type::UINT);
-        Primitive* prim = new Primitive(std::get<unsigned>(operands[2].raw));
-        prim->cast(*ret);
-        Variable* var = new Variable(prim, spv::StorageClass::StorageClassPushConstant, true);
         applyVarDeco(queue, *var, result_at);
         selectName(*var);
         data[result_at].redefine(var);
@@ -1112,9 +1184,9 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 switch (static_cast<spv::ExecutionMode>(std::get<uint32_t>(deco->operands[1].raw))) {
                 case spv::ExecutionMode::ExecutionModeLocalSizeId:
                     assert(deco->operands.size() == 5);
-                    ep->sizeX = static_cast<const Primitive*>(deco->getValue(src_at, data))->data.u32;
-                    ep->sizeY = static_cast<const Primitive*>(deco->getValue(src_at + 1, data))->data.u32;
-                    ep->sizeZ = static_cast<const Primitive*>(deco->getValue(src_at + 2, data))->data.u32;
+                    ep->sizeX = static_cast<const Primitive*>(deco->getValue(src_at, data))->data.u;
+                    ep->sizeY = static_cast<const Primitive*>(deco->getValue(src_at + 1, data))->data.u;
+                    ep->sizeZ = static_cast<const Primitive*>(deco->getValue(src_at + 2, data))->data.u;
                     break;
                 default:
                     break;
@@ -1152,7 +1224,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             if (const auto at_base = at->getType().getBase(); at_base != DataType::UINT && at_base != DataType::INT)
                 throw std::runtime_error("AccessChain index is not an integer!");
             const Primitive& pat = *static_cast<const Primitive*>(at);
-            indices.push_back(pat.data.u32);
+            indices.push_back(pat.data.u);
         }
         Type* point_to = getType(dst_type_at, data);
         assert(point_to != nullptr);
@@ -1188,7 +1260,10 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             throw std::runtime_error(error.str());
         }
         Type* retType = getType(dst_type_at, data);
-        data[result_at].redefine(retType->construct(vals));
+        Array& arr = static_cast<Array&>(*retType->construct());
+        for (unsigned i = 0; i < vals.size(); ++i)
+            arr[i]->copyFrom(*vals[i]);
+        data[result_at].redefine(&arr);
         break;
     }
     case spv::OpCompositeExtract: {  // 81
@@ -1305,28 +1380,28 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         const Value* image_v = getValue(src_at, data);
         const Value* lod_v = getValue(src_at + 1, data);
         // "Level of Detail is used to compute which mipmap level to query and must be a 32-bit integer type scalar."
-        uint32_t lod = static_cast<const Primitive*>(lod_v)->data.u32;
+        uint32_t lod = static_cast<const Primitive*>(lod_v)->data.u;
         const Image& image = static_cast<const Image&>(*image_v);
-        std::array<unsigned, 4> size = image.getSize(lod);
+        std::array<uint32_t, 4> size = image.getSize(lod);
         Type* ret_type = getType(dst_type_at, data);
         Value* ret = ret_type->construct();
         Array& arr = *static_cast<Array*>(ret);
         assert(arr.getSize() <= 4);
         for (unsigned i = 0; i < arr.getSize(); ++i) {
-            Primitive prim(size[i]);
+            Primitive prim(static_cast<uint64_t>(size[i]));
             arr[i]->copyFrom(prim);
         }
         data[result_at].redefine(ret);
         break;
     }
     case spv::OpConvertFToU:  // 109
-        TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint32_t>(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint64_t>(a->data.f));
     case spv::OpConvertFToS:  // 110
-        TYPICAL_E_UNARY_OP(FLOAT, static_cast<int32_t>(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, static_cast<int64_t>(a->data.f));
     case spv::OpConvertSToF:  // 111
-        TYPICAL_E_UNARY_OP(INT, static_cast<float>(a->data.i32));
+        TYPICAL_E_UNARY_OP(INT, static_cast<double>(a->data.i));
     case spv::OpConvertUToF:  // 112
-        TYPICAL_E_UNARY_OP(UINT, static_cast<float>(a->data.u32));
+        TYPICAL_E_UNARY_OP(UINT, static_cast<double>(a->data.u));
     case spv::OpUConvert:  // 113
                            // Convert from Int or Uint -> Uint
     case spv::OpSConvert:  // 114
@@ -1351,47 +1426,47 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpSNegate:  // 126
         INT_E_UNARY_OP(-);
     case spv::OpFNegate:  // 127
-        TYPICAL_E_UNARY_OP(FLOAT, -a->data.fp32);
+        TYPICAL_E_UNARY_OP(FLOAT, -a->data.f);
     case spv::OpIAdd:  // 128
         INT_E_BIN_OP(+);
     case spv::OpFAdd:  // 129
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 + b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f + b->data.f);
     case spv::OpISub:  // 130
         INT_E_BIN_OP(-);
     case spv::OpFSub:  // 131
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 - b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f - b->data.f);
     case spv::OpIMul:  // 132
         INT_E_BIN_OP(*);
     case spv::OpFMul:  // 133
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 * b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f * b->data.f);
     case spv::OpUDiv:  // 134
-        TYPICAL_E_BIN_OP(UINT, a->data.u32 / b->data.u32);
+        TYPICAL_E_BIN_OP(UINT, a->data.u / b->data.u);
     case spv::OpSDiv:  // 135
-        TYPICAL_E_BIN_OP(INT, a->data.i32 / b->data.i32);
+        TYPICAL_E_BIN_OP(INT, a->data.i / b->data.i);
     case spv::OpFDiv: {  // 136
         OpDst dst {checkRef(0, data_len), result_at};
         BinOp op = [](const Primitive* a, const Primitive* b) {
-            if (b->data.fp32 == 0.0) {  // divisor is neg or pos zero
+            if (b->data.f == 0.0) {  // divisor is neg or pos zero
                 Console::warn("FDiv undefined since divisor is 0! Defaults to IEEE754.");
-                if (std::isnan(a->data.fp32))
-                    return a->data.fp32;
-                if (a->data.fp32 == 0.0)
-                    return std::nanf("1");
-                float ret = std::numeric_limits<float>::infinity();
-                return (std::signbit(b->data.fp32) != std::signbit(a->data.fp32)) ? -ret : ret;
+                if (std::isnan(a->data.f))
+                    return a->data.f;
+                if (a->data.f == 0.0)
+                    return std::nan("1");
+                double ret = std::numeric_limits<double>::infinity();
+                return (std::signbit(b->data.f) != std::signbit(a->data.f)) ? -ret : ret;
             }
-            return a->data.fp32 / b->data.fp32;
+            return a->data.f / b->data.f;
         };
         element_bin_op(checkRef(2, data_len), checkRef(3, data_len), dst, data, op, DataType::FLOAT);
         break;
     }
     case spv::OpUMod: {  // 137
         BinOp fx = [](const Primitive* a, const Primitive* b) {
-            if (b->data.u32 == 0) {
+            if (b->data.u == 0) {
                 Console::warn("UMod undefined since divisor is 0!");
-                return Primitive(0u);
+                return Primitive(static_cast<uint64_t>(0));
             }
-            return Primitive(a->data.u32 % b->data.u32);
+            return Primitive(a->data.u % b->data.u);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::UINT);
@@ -1399,15 +1474,15 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpSRem: {  // 138
         BinOp fx = [](const Primitive* a, const Primitive* b) {
-            if (b->data.i32 == 0) {
+            if (b->data.i == 0) {
                 Console::warn("SRem undefined since divisor is 0!");
-                return Primitive(0);
+                return Primitive(static_cast<uint64_t>(0));
             }
-            if (a->data.i32 == std::numeric_limits<int32_t>::min() && b->data.i32 == -1) {
+            if (a->data.i == std::numeric_limits<int64_t>::min() && b->data.i == -1) {
                 Console::warn("SRem undefined since dividend is INT_MIN and divisor is -1 causing overflow!");
-                return Primitive(0);
+                return Primitive(static_cast<uint64_t>(0));
             }
-            return Primitive(a->data.i32 % b->data.i32);
+            return Primitive(a->data.i % b->data.i);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::INT);
@@ -1415,18 +1490,18 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpSMod: {  // 139
         BinOp fx = [](const Primitive* a, const Primitive* b) {
-            if (b->data.i32 == 0) {
+            if (b->data.i == 0) {
                 Console::warn("SMod undefined since divisor is 0!");
-                return Primitive(0);
+                return Primitive(static_cast<uint64_t>(0));
             }
-            if (a->data.i32 == std::numeric_limits<int32_t>::min() && b->data.i32 == -1) {
+            if (a->data.i == std::numeric_limits<int64_t>::min() && b->data.i == -1) {
                 Console::warn("SMod undefined since dividend is INT_MIN and divisor is -1 causing overflow!");
-                return Primitive(0);
+                return Primitive(static_cast<uint64_t>(0));
             }
-            int res = a->data.i32 % b->data.i32;
-            if (res != 0 && ((a->data.i32 ^ b->data.i32) < 0)) {
+            int64_t res = a->data.i % b->data.i;
+            if (res != 0 && ((a->data.i ^ b->data.i) < 0)) {
                 // If the dividend and divisor have different signs, we need to adjust the result
-                res += b->data.i32;
+                res += b->data.i;
             }
             return Primitive(res);
         };
@@ -1436,11 +1511,11 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpFRem: {  // 140
         BinOp fx = [](const Primitive* a, const Primitive* b) {
-            if (b->data.fp32 == 0.0) {
+            if (b->data.f == 0.0) {
                 Console::warn("FRem undefined since divisor is 0!");
-                return std::nanf("1");
+                return std::nan("1");
             }
-            return a->data.fp32 - b->data.fp32 * std::trunc(a->data.fp32 / b->data.fp32);
+            return a->data.f - b->data.f * std::trunc(a->data.f / b->data.f);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
@@ -1448,11 +1523,11 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpFMod: {  // 141
         BinOp fx = [](const Primitive* a, const Primitive* b) {
-            if (b->data.fp32 == 0.0) {
+            if (b->data.f == 0.0) {
                 Console::warn("FMod undefined since divisor is 0!");
-                return std::nanf("1");
+                return std::nan("1");
             }
-            return a->data.fp32 - b->data.fp32 * std::floor(a->data.fp32 / b->data.fp32);
+            return a->data.f - b->data.f * std::floor(a->data.f / b->data.f);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
@@ -1472,21 +1547,15 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             throw std::runtime_error("Could not load scalar in VectorTimesScalar!");
         const Primitive& scal = *static_cast<Primitive*>(scal_val);
 
-        unsigned size = vec.getSize();
-        std::vector<Primitive> floats;
-        std::vector<const Value*> pfloats;
-        floats.reserve(size);
-        pfloats.reserve(size);
-        for (unsigned i = 0; i < size; ++i) {
+        Type* res_type = getType(dst_type_at, data);
+        Array& res = *static_cast<Array*>(res_type->construct());
+        for (unsigned i = 0; i < vec.getSize(); ++i) {
             const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
-            Primitive& created = floats.emplace_back(0.f);
-            created.data.fp32 = vec_e.data.fp32 * scal.data.fp32;
-            pfloats.push_back(&floats[i]);
+            Primitive intermed(vec_e.data.f * scal.data.f);
+            res[i]->copyFrom(intermed);
         }
 
-        Type* res_type = getType(dst_type_at, data);
-        Value* res = res_type->construct(pfloats);
-        data[result_at].redefine(res);
+        data[result_at].redefine(&res);
         break;
     }
     case spv::OpMatrixTimesScalar: {  // 143
@@ -1526,7 +1595,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         unsigned b = vres.getSize();
         unsigned a = vec.getSize();
         for (unsigned i = 0; i < b; ++i) {
-            Primitive el(0);
+            Primitive el(static_cast<uint64_t>(0));
             const Array& mcolumn = *static_cast<const Array*>(mat[i]);
             for (unsigned j = 0; j < a; ++j) {
                 const Primitive& vecv = *static_cast<const Primitive*>(vec[j]);
@@ -1560,7 +1629,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         unsigned a = vres.getSize();
         unsigned b = vec.getSize();
         for (unsigned i = 0; i < a; ++i) {
-            Primitive el(0);
+            Primitive el(static_cast<uint64_t>(0));
             for (unsigned j = 0; j < b; ++j) {
                 const Array& mcolumn = *static_cast<const Array*>(mat[j]);
                 const Primitive& matv = *static_cast<const Primitive*>(mcolumn[i]);
@@ -1594,7 +1663,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             Array& res_column = *static_cast<Array*>(mres[i]);
             for (unsigned j = 0; j < a; ++j) {
                 const auto& rcolumn = static_cast<const Array&>(*(rmat[i]));
-                Primitive el(0);
+                Primitive el(static_cast<uint64_t>(0));
                 for (unsigned k = 0; k < b; ++k) {
                     // Get (k, j) in left, (i, k) in right
                     const auto& lcolumn = static_cast<const Array&>(*(lmat[k]));
@@ -1649,7 +1718,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         assert(op0.getSize() == op1.getSize() && "The operands to OpDot must have matching sizes!");
 
         double product = ArrayMath::dot(op0, op1);
-        Primitive tot_prim(static_cast<float>(product));
+        Primitive tot_prim(product);
         Value* ret = getType(dst_type_at, data)->construct();
         ret->copyFrom(tot_prim);
         data[result_at].redefine(ret);
@@ -1658,7 +1727,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpIAddCarry: {  // 149
         // Despite being called I (for int), only uints are allowed as inputs
         ExtArithOp op = [](const Primitive* a, const Primitive* b, Primitive* f, Primitive* s) {
-            s->data.u32 = (a->uAdd(b, f)) ? 1 : 0;
+            s->data.u = (a->uAdd(b, f)) ? 1 : 0;
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_extended_arith_op(
@@ -1673,7 +1742,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpISubBorrow: {  // 150
         ExtArithOp op = [](const Primitive* a, const Primitive* b, Primitive* f, Primitive* s) {
-            s->data.u32 = (a->uSub(b, f)) ? 1 : 0;
+            s->data.u = (a->uSub(b, f)) ? 1 : 0;
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_extended_arith_op(
@@ -1712,7 +1781,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         bool any = false;
         for (unsigned i = 0; i < size; ++i) {
             const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
-            any |= vec_e.data.b32;
+            any |= vec_e.data.b;
         }
         data[result_at].redefine(new Primitive(any));
         break;
@@ -1730,25 +1799,25 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         bool all = true;
         for (unsigned i = 0; i < size; ++i) {
             const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
-            all &= vec_e.data.b32;
+            all &= vec_e.data.b;
         }
         data[result_at].redefine(new Primitive(all));
         break;
     }
     case spv::OpIsNan:  // 156
-        TYPICAL_E_UNARY_OP(FLOAT, std::isnan(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::isnan(a->data.f));
     case spv::OpIsInf:  // 157
-        TYPICAL_E_UNARY_OP(FLOAT, std::isinf(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::isinf(a->data.f));
     case spv::OpLogicalEqual:  // 164
-        TYPICAL_E_BIN_OP(BOOL, a->data.b32 == b->data.b32);
+        TYPICAL_E_BIN_OP(BOOL, a->data.b == b->data.b);
     case spv::OpLogicalNotEqual:  // 165
-        TYPICAL_E_BIN_OP(BOOL, a->data.b32 != b->data.b32);
+        TYPICAL_E_BIN_OP(BOOL, a->data.b != b->data.b);
     case spv::OpLogicalOr:  // 166
-        TYPICAL_E_BIN_OP(BOOL, a->data.b32 || b->data.b32);
+        TYPICAL_E_BIN_OP(BOOL, a->data.b || b->data.b);
     case spv::OpLogicalAnd:  // 167
-        TYPICAL_E_BIN_OP(BOOL, a->data.b32 && b->data.b32);
+        TYPICAL_E_BIN_OP(BOOL, a->data.b && b->data.b);
     case spv::OpLogicalNot:  // 168
-        TYPICAL_E_UNARY_OP(BOOL, !(a->data.b32));
+        TYPICAL_E_UNARY_OP(BOOL, !(a->data.b));
     case spv::OpSelect: {  // 169
         Value* condition = getValue(src_at, data);
         Value* first = getValue(src_at + 1, data);
@@ -1761,7 +1830,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             // Simple case, we can choose between the two options
             assert(dt == DataType::BOOL);
             auto cond = static_cast<Primitive*>(condition);
-            Value* to_use = (cond->data.b32) ? first : second;
+            Value* to_use = (cond->data.b) ? first : second;
             // Now we must clone to result
             Value* cloned = to_use->getType().construct();
             cloned->copyFrom(*to_use);
@@ -1790,7 +1859,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             std::vector<const Value*> es;
             for (unsigned i = 0; i < cond_size; ++i) {
                 const auto& cond_bool = static_cast<const Primitive&>(*cond_arr[i]);
-                es.push_back(cond_bool.data.b32 ? first_agg[i] : second_agg[i]);
+                es.push_back(cond_bool.data.b ? first_agg[i] : second_agg[i]);
             }
 
             Type* res_type = getType(dst_type_at, data);
@@ -1807,71 +1876,71 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpINotEqual:  // 171
         INT_E_BIN_OP(!=);
     case spv::OpUGreaterThan:  // 172
-        TYPICAL_E_BIN_OP(UINT, a->data.u32 > b->data.u32);
+        TYPICAL_E_BIN_OP(UINT, a->data.u > b->data.u);
     case spv::OpSGreaterThan:  // 173
-        TYPICAL_E_BIN_OP(INT, a->data.i32 > b->data.i32);
+        TYPICAL_E_BIN_OP(INT, a->data.i > b->data.i);
     case spv::OpUGreaterThanEqual:  // 174
-        TYPICAL_E_BIN_OP(UINT, a->data.u32 >= b->data.u32);
+        TYPICAL_E_BIN_OP(UINT, a->data.u >= b->data.u);
     case spv::OpSGreaterThanEqual:  // 175
-        TYPICAL_E_BIN_OP(INT, a->data.i32 >= b->data.i32);
+        TYPICAL_E_BIN_OP(INT, a->data.i >= b->data.i);
     case spv::OpULessThan:  // 176
-        TYPICAL_E_BIN_OP(UINT, a->data.u32 < b->data.u32);
+        TYPICAL_E_BIN_OP(UINT, a->data.u < b->data.u);
     case spv::OpSLessThan:  // 177
-        TYPICAL_E_BIN_OP(INT, a->data.i32 < b->data.i32);
+        TYPICAL_E_BIN_OP(INT, a->data.i < b->data.i);
     case spv::OpULessThanEqual:  // 178
-        TYPICAL_E_BIN_OP(UINT, a->data.u32 <= b->data.u32);
+        TYPICAL_E_BIN_OP(UINT, a->data.u <= b->data.u);
     case spv::OpSLessThanEqual:  // 179
-        TYPICAL_E_BIN_OP(INT, a->data.i32 <= b->data.i32);
+        TYPICAL_E_BIN_OP(INT, a->data.i <= b->data.i);
     case spv::OpFOrdEqual:  // 180
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 == b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f == b->data.f);
     case spv::OpFUnordEqual:  // 181
-        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 == b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.f) || std::isnan(b->data.f) || a->data.f == b->data.f);
     case spv::OpFOrdNotEqual:  // 182
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 != b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f != b->data.f);
     case spv::OpFUnordNotEqual:  // 183
-        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 != b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.f) || std::isnan(b->data.f) || a->data.f != b->data.f);
     case spv::OpFOrdLessThan:  // 184
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 < b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f < b->data.f);
     case spv::OpFUnordLessThan:  // 185
-        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 < b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.f) || std::isnan(b->data.f) || a->data.f < b->data.f);
     case spv::OpFOrdGreaterThan:  // 186
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 > b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f > b->data.f);
     case spv::OpFUnordGreaterThan:  // 187
-        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 > b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.f) || std::isnan(b->data.f) || a->data.f > b->data.f);
     case spv::OpFOrdLessThanEqual:  // 188
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 <= b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f <= b->data.f);
     case spv::OpFUnordLessThanEqual:  // 189
-        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 <= b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.f) || std::isnan(b->data.f) || a->data.f <= b->data.f);
     case spv::OpFOrdGreaterThanEqual:  // 190
-        TYPICAL_E_BIN_OP(FLOAT, a->data.fp32 >= b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, a->data.f >= b->data.f);
     case spv::OpFUnordGreaterThanEqual:  // 191
-        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.fp32) || std::isnan(b->data.fp32) || a->data.fp32 >= b->data.fp32);
+        TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.f) || std::isnan(b->data.f) || a->data.f >= b->data.f);
     case spv::OpShiftRightLogical: {  // 194
-        E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u32 >> b->data.u32; });
+        E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u >> b->data.u; });
         break;
     }
     case spv::OpShiftRightArithmetic: {  // 195
         const auto* val = getValue(src_at, data);
         const auto type = val->getType();
-        unsigned prec_minus_one;
-        if (type.getBase() == DataType::ARRAY)
-            prec_minus_one = type.getElement().getPrecision();
-        else
-            prec_minus_one = type.getPrecision();
-        --prec_minus_one;
-        E_SHIFT_OP([&prec_minus_one](const Primitive* a, const Primitive* b) {
-            uint32_t base = a->data.u32;
-            bool sign = (base >> prec_minus_one) > 0;
-            base &= std::numeric_limits<uint32_t>::max() / 2;
-            uint32_t shifted = base >> b->data.u32;
-            // put the sign bit back where it was prior to the shift
-            shifted |= static_cast<uint32_t>(sign) << prec_minus_one;
+        auto prec = type.getPrecision();
+        uint64_t bitmask = (prec == 64) ? ~0ULL : (1ULL << prec) - 1;
+        E_SHIFT_OP([bitmask](const Primitive* a, const Primitive* b) {
+            auto base = a->data.u;
+            // Fill the shifted bits with the sign bit.
+            // We emulate integer at 64-bit precision, so the sign bit is bit 63.
+            bool sign = (base & (1ULL << 63)) > 0;
+            auto shifted = base >> b->data.u;
+            if (sign)
+                shifted |= ~bitmask;
+            else
+                shifted &= bitmask;
+            // fill in the bits from the sign
             return shifted;
         });
         break;
     }
     case spv::OpShiftLeftLogical: {  // 196
-        E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u32 << b->data.u32; });
+        E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u << b->data.u; });
         break;
     }
     case spv::OpBitwiseOr:  // 197
@@ -1886,7 +1955,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         const auto& offset_p = static_cast<const Primitive&>(*getValue(src_at + 2, data));
         if (auto base = offset_p.getType().getBase(); base != DataType::INT && base != DataType::UINT)
             throw std::runtime_error("The type of bitfield insert offset operand must be an integer!");
-        uint32_t offset = offset_p.data.u32;
+        uint32_t offset = offset_p.data.u;
         const auto& count_p = static_cast<const Primitive&>(*getValue(src_at + 3, data));
         if (auto base = count_p.getType().getBase(); base != DataType::INT && base != DataType::UINT)
             throw std::runtime_error("The type of bitfield insert count operand must be an integer!");
@@ -1899,15 +1968,15 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         assert(base_base == DataType::INT || base_base == DataType::UINT);
         assert(insert_base == DataType::INT || insert_base == DataType::UINT);
 
-        uint32_t src_mask = ((1 << count_p.data.u32) - 1);
+        uint32_t src_mask = ((1 << count_p.data.u) - 1);
         uint32_t insertion_mask = ~(src_mask << offset);
 
         BinOp fx_s = [&](const Primitive* a, const Primitive* b) {
-            return int32_t((a->data.u32 & insertion_mask) | ((b->data.u32 & src_mask) << offset));
+            return int32_t((a->data.u & insertion_mask) | ((b->data.u & src_mask) << offset));
         };
         BinOp fx_u = [&](const Primitive* a, const Primitive* b) {
-            uint32_t base = (a->data.u32 & insertion_mask);
-            uint32_t insert = ((b->data.u32 & src_mask) << offset);
+            uint32_t base = (a->data.u & insertion_mask);
+            uint32_t insert = ((b->data.u & src_mask) << offset);
             return insert | base;
         };
         bool is_result_signed = type_base(*getType(dst_type_at, data)) == DataType::INT;
@@ -1937,30 +2006,30 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         const auto& count_p = static_cast<const Primitive&>(*getValue(src_at + 2, data));
         if (auto base = count_p.getType().getBase(); base != DataType::INT && base != DataType::UINT)
             throw std::runtime_error("The type of bitfield extract count operand must be an integer!");
-        uint32_t mask = ((1 << count_p.data.u32) - 1);
+        uint32_t mask = ((1 << count_p.data.u) - 1);
 
         uint32_t single, other;
         if (extend && mask != 0) {
-            single = (0x1 << (count_p.data.u32 - 1));
-            other = (0xFFFF'FFFF >> (32 - count_p.data.u32)) << count_p.data.u32;
+            single = (0x1 << (count_p.data.u - 1));
+            other = (0xFFFF'FFFF >> (32 - count_p.data.u)) << count_p.data.u;
         }
 
         UnOp ufx = [&](const Primitive* a) {
             if (mask == 0)
-                return Primitive(static_cast<uint32_t>(0));
-            uint32_t val = (a->data.u32 >> offset_p.data.u32) & mask;
+                return Primitive(static_cast<uint64_t>(0));
+            uint32_t val = (a->data.u >> offset_p.data.u) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
             return Primitive(val);
         };
         UnOp ifx = [&](const Primitive* a) {
             if (mask == 0)
-                return Primitive(static_cast<int32_t>(0));
-            uint32_t val = (a->data.u32 >> offset_p.data.u32) & mask;
+                return Primitive(static_cast<uint64_t>(0));
+            uint32_t val = (a->data.u >> offset_p.data.u) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
             Primitive prim(-1);
-            prim.data.u32 = val;
+            prim.data.u = val;
             return prim;
         };
         element_int_unary_op(
@@ -1983,11 +2052,11 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         assert(width <= 32);  // TODO: Handle higher precisions
 
         UnOp op = [width, type](const Primitive* a) {
-            // In a bit reverse, we can handle either i32 or u32 as u32
+            // In a bit reverse, we can handle either i or u as u
             uint32_t res = 0;
             unsigned max = width - 1;
             for (unsigned i = 0; i < width; ++i)
-                res |= ((a->data.u32 >> i) & 1) << (max - i);
+                res |= ((a->data.u >> i) & 1) << (max - i);
             Primitive ret(res);
             ret.cast(*type);
             return ret;
@@ -2029,9 +2098,9 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             // case uvec2
             Array& address_components = static_cast<Array&>(*address_ptr);
             assert(address_components.getSize() == 2);
-            // address = static_cast<Primitive&>(*(address_components[0])).data.u32;
+            // address = static_cast<Primitive&>(*(address_components[0])).data.u;
             // address <<= 32;
-            // uint32_t lower = static_cast<Primitive&>(*(address_components[1])).data.u32;
+            // uint32_t lower = static_cast<Primitive&>(*(address_components[1])).data.u;
             // address |= lower;
         } else {
             // case uint64_t
@@ -2061,8 +2130,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
 
         int32_t dot_product = 0;
         for (unsigned i = 0; i < op0.getSize(); ++i) {
-            const int32_t second_elem = static_cast<const Primitive*>(op1[i])->data.i32;
-            const int32_t this_elem = static_cast<const Primitive*>(op0[i])->data.i32;
+            const int32_t second_elem = static_cast<const Primitive*>(op1[i])->data.i;
+            const int32_t this_elem = static_cast<const Primitive*>(op0[i])->data.i;
             dot_product += second_elem * this_elem;
         }
         Primitive tot_prim(dot_product);
@@ -2078,7 +2147,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         const auto& cols = static_cast<const Primitive&>(*getValue(src_at + 2, data));
         // We don't care about "MatrixUse" in the interpreter. It doesn't affect how we store the data.
 
-        data[result_at].redefine(new Type(Type::coopMatrix(scope.data.u32, rows.data.u32, cols.data.u32, *sub)));
+        data[result_at].redefine(new Type(Type::coopMatrix(scope.data.u, rows.data.u, cols.data.u, *sub)));
         break;
     }
     case spv::OpTypeRayQueryKHR: {  // 4472
@@ -2087,7 +2156,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpRayQueryGetIntersectionTypeKHR: {  // 4479
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         unsigned type;
         switch (ray_query.getAccelStruct().getIntersectionType(intersection)) {
         default:  // Intersection::Type::None:
@@ -2112,77 +2181,77 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpRayQueryGetRayTMinKHR: {  // 6016
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getTrace().rayTMin);
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetRayFlagsKHR: {  // 6017
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        Type* res_type = getType(dst_type_at, data);
         Primitive res(ray_query.getAccelStruct().getTrace().rayFlags.get());
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetIntersectionTKHR: {  // 6018
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
-        Type* res_type = getType(dst_type_at, data);
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         Primitive res(ray_query.getAccelStruct().getIntersectionT(intersection));
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetIntersectionInstanceCustomIndexKHR: {  // 6019
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
-        Type* res_type = getType(dst_type_at, data);
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         Primitive res(ray_query.getAccelStruct().getIntersectionInstanceCustomIndex(intersection));
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetIntersectionInstanceIdKHR: {  // 6020
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
-        Type* res_type = getType(dst_type_at, data);
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         Primitive res(ray_query.getAccelStruct().getIntersectionInstanceId(intersection));
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR: {  // 6021
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
-        Type* res_type = getType(dst_type_at, data);
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         Primitive res(ray_query.getAccelStruct().getIntersectionInstanceShaderBindingTableRecordOffset(intersection));
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetIntersectionGeometryIndexKHR: {  // 6022
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
-        Type* res_type = getType(dst_type_at, data);
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         Primitive res(ray_query.getAccelStruct().getIntersectionGeometryIndex(intersection));
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetIntersectionPrimitiveIndexKHR: {  // 6023
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
-        Type* res_type = getType(dst_type_at, data);
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         Primitive res(ray_query.getAccelStruct().getIntersectionPrimitiveIndex(intersection));
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(res);
+        data[result_at].redefine(ret);
         break;
     }
     case spv::OpRayQueryGetIntersectionBarycentricsKHR: {  // 6024
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         std::vector<Primitive> barycentrics = ray_query.getIntersectionBarycentrics(intersection);
         const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(barycentrics, res_type));
@@ -2190,11 +2259,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpRayQueryGetIntersectionFrontFaceKHR: {  // 6025
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         Type* res_type = getType(dst_type_at, data);
-        Primitive res(ray_query.getAccelStruct().getIntersectionFrontFace(intersection));
-        std::vector<const Value*> values {&res};
-        data[result_at].redefine(res_type->construct(values));
+        Primitive prim(ray_query.getAccelStruct().getIntersectionFrontFace(intersection));
+        Value* res = res_type->construct();
+        res->copyFrom(prim);
+        data[result_at].redefine(res);
         break;
     }
     case spv::OpRayQueryGetIntersectionCandidateAABBOpaqueKHR: {  // 6026
@@ -2204,7 +2274,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpRayQueryGetIntersectionObjectRayDirectionKHR: {  // 6027
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         std::vector<Primitive> direction = ray_query.getIntersectionObjectRayDirection(intersection);
         const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(direction, res_type));
@@ -2212,7 +2282,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpRayQueryGetIntersectionObjectRayOriginKHR: {  // 6028
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
         std::vector<Primitive> origin = ray_query.getIntersectionObjectRayOrigin(intersection);
         const Type* res_type = getType(dst_type_at, data);
         data[result_at].redefine(construct_from_vec(origin, res_type));
@@ -2234,7 +2304,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpRayQueryGetIntersectionObjectToWorldKHR: {  // 6031
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
 
         Type* res_type = getType(dst_type_at, data);
         Array& result = static_cast<Array&>(*res_type->construct());
@@ -2255,7 +2325,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpRayQueryGetIntersectionWorldToObjectKHR: {  // 6032
         RayQuery& ray_query = static_cast<RayQuery&>(*getFromPointer(2, data));
-        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u32 == 1;
+        const bool intersection = static_cast<Primitive&>(*getValue(src_at + 1, data)).data.u == 1;
 
         Type* res_type = getType(dst_type_at, data);
         Array& result = static_cast<Array&>(*res_type->construct());
@@ -2296,11 +2366,11 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         throw std::runtime_error(err.str());
     }
     case GLSLstd450Round:  // 1
-        TYPICAL_E_UNARY_OP(FLOAT, std::round(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::round(a->data.f));
     case GLSLstd450RoundEven: {  // 2
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         UnOp op = [](const Primitive* a) {
-            auto whole = a->data.fp32;
+            auto whole = a->data.f;
             auto frac = std::abs(std::modf(whole, &whole));
             bool to_trunc;
             if (frac < 0.5)
@@ -2313,84 +2383,84 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             if (to_trunc)
                 return whole;
             else
-                return whole + (std::signbit(whole) ? -1.0f : 1.0f);
+                return whole + (std::signbit(whole) ? -1.0 : 1.0);
         };
         element_unary_op(DataType::FLOAT, checkRef(src_at, data_len), dst, data, op);
         break;
     }
     case GLSLstd450Trunc:  // 3
-        TYPICAL_E_UNARY_OP(FLOAT, std::trunc(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::trunc(a->data.f));
     case GLSLstd450FAbs:  // 4
-        TYPICAL_E_UNARY_OP(FLOAT, std::abs(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::abs(a->data.f));
     case GLSLstd450SAbs:  // 5
-        TYPICAL_E_UNARY_OP(INT, (a->data.i32 > 0) ? a->data.i32 : -a->data.i32);
+        TYPICAL_E_UNARY_OP(INT, (a->data.i > 0) ? a->data.i : -a->data.i);
     case GLSLstd450FSign: {  // 6
         UnOp op = [](const Primitive* a) {
-            bool sgnbit = std::signbit(a->data.fp32);
-            return (a->data.fp32 == 0.0) ? (sgnbit ? -0.0f : 0.0f) : (sgnbit ? -1.0f : 1.0f);
+            bool sgnbit = std::signbit(a->data.f);
+            return (a->data.f == 0.0) ? (sgnbit ? -0.0 : 0.0) : (sgnbit ? -1.0 : 1.0);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_unary_op(DataType::FLOAT, checkRef(src_at, data_len), dst, data, op);
         break;
     }
     case GLSLstd450SSign:  // 7
-        TYPICAL_E_UNARY_OP(INT, std::clamp(a->data.i32, -1, 1));
+        TYPICAL_E_UNARY_OP(INT, std::clamp(a->data.i, static_cast<int64_t>(-1L), static_cast<int64_t>(1L)));
     case GLSLstd450Floor:  // 8
-        TYPICAL_E_UNARY_OP(FLOAT, std::floor(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::floor(a->data.f));
     case GLSLstd450Ceil:  // 9
-        TYPICAL_E_UNARY_OP(FLOAT, std::ceil(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::ceil(a->data.f));
     case GLSLstd450Fract:  // 10
-        TYPICAL_E_UNARY_OP(FLOAT, a->data.fp32 - std::floor(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, a->data.f - std::floor(a->data.f));
     case GLSLstd450Radians:  // 11
-        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * std::numbers::pi / 180.0));
+        PRECISION_E_UNARY_OP(a * std::numbers::pi / 180.0);
     case GLSLstd450Degrees:  // 12
-        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(a->data.fp32 * 180.0 / std::numbers::pi));
+        PRECISION_E_UNARY_OP(a * 180.0 / std::numbers::pi);
     case GLSLstd450Sin:  // 13
-        TYPICAL_E_UNARY_OP(FLOAT, std::sin(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::sin(a));
     case GLSLstd450Cos:  // 14
-        TYPICAL_E_UNARY_OP(FLOAT, std::cos(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::cos(a));
     case GLSLstd450Tan:  // 15
-        TYPICAL_E_UNARY_OP(FLOAT, std::tan(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::tan(a));
     case GLSLstd450Asin:  // 16
-        TYPICAL_E_UNARY_OP(FLOAT, std::asin(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::asin(a));
     case GLSLstd450Acos:  // 17
-        TYPICAL_E_UNARY_OP(FLOAT, std::acos(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::acos(a));
     case GLSLstd450Atan:  // 18
-        TYPICAL_E_UNARY_OP(FLOAT, std::atan(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::atan(a));
     case GLSLstd450Sinh:  // 19
-        TYPICAL_E_UNARY_OP(FLOAT, std::sinh(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::sinh(a));
     case GLSLstd450Cosh:  // 20
-        TYPICAL_E_UNARY_OP(FLOAT, std::cosh(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::cosh(a));
     case GLSLstd450Tanh:  // 21
-        TYPICAL_E_UNARY_OP(FLOAT, std::tanh(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::tanh(a));
     case GLSLstd450Asinh:  // 22
-        TYPICAL_E_UNARY_OP(FLOAT, std::asinh(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::asinh(a));
     case GLSLstd450Acosh:  // 23
-        TYPICAL_E_UNARY_OP(FLOAT, std::acosh(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::acosh(a));
     case GLSLstd450Atanh:  // 24
-        TYPICAL_E_UNARY_OP(FLOAT, std::atanh(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::atanh(a));
     case GLSLstd450Atan2:  // 25
-        TYPICAL_E_BIN_OP(FLOAT, std::atan2(a->data.fp32, b->data.fp32));
+        TYPICAL_E_BIN_OP(FLOAT, std::atan2(static_cast<float>(a->data.f), static_cast<float>(b->data.f)));
     case GLSLstd450Pow:  // 26
-        TYPICAL_E_BIN_OP(FLOAT, std::pow(a->data.fp32, b->data.fp32));
+        TYPICAL_E_BIN_OP(FLOAT, std::pow(static_cast<float>(a->data.f), static_cast<float>(b->data.f)));
     case GLSLstd450Exp:  // 27
-        TYPICAL_E_UNARY_OP(FLOAT, std::exp(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::exp(a));
     case GLSLstd450Log:  // 28
-        TYPICAL_E_UNARY_OP(FLOAT, std::log(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::log(a));
     case GLSLstd450Exp2:  // 29
-        TYPICAL_E_UNARY_OP(FLOAT, std::exp2(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::exp2(a));
     case GLSLstd450Log2:  // 30
-        TYPICAL_E_UNARY_OP(FLOAT, std::log2(a->data.fp32));
+        PRECISION_E_UNARY_OP(std::log2(a));
     case GLSLstd450Sqrt:  // 31
-        TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.fp32));
+        TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.f));
     case GLSLstd450InverseSqrt:  // 32
-        TYPICAL_E_UNARY_OP(FLOAT, static_cast<float>(1.0 / std::sqrt(a->data.fp32)));
+        TYPICAL_E_UNARY_OP(FLOAT, 1.0 / std::sqrt(a->data.f));
     case GLSLstd450Determinant: {  // 33
         const Type* res_type = getType(dst_type_at, data);
         Value* ret = res_type->construct();
         const Value* matrix = getValue(src_at, data);
         auto result = ArrayMath::determinant(static_cast<const Array&>(*matrix));
-        Primitive prim(static_cast<float>(result));
+        Primitive prim(result);
         ret->copyFrom(prim);
         data[result_at].redefine(ret);
         break;
@@ -2454,8 +2524,8 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         }
 
         UnOp op = [&](const Primitive* a) {
-            float whole;
-            float fract = std::modf(a->data.fp32, &whole);
+            double whole;
+            double fract = std::modf(a->data.f, &whole);
             Primitive whole_pr(whole);
             if (comp == -1)
                 whole_val->copyFrom(whole_pr);
@@ -2484,9 +2554,9 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         auto& agg = static_cast<Aggregate&>(*res);
 
         auto op = [](const Value* input, Value* fract, Value* whole) {
-            Primitive f(0.0f);
-            Primitive w(0.0f);
-            f.data.fp32 = std::modf(static_cast<const Primitive*>(input)->data.fp32, &w.data.fp32);
+            Primitive f(0.0);
+            Primitive w(0.0);
+            f.data.f = std::modf(static_cast<const Primitive*>(input)->data.f, &w.data.f);
 
             fract->copyFrom(f);
             whole->copyFrom(w);
@@ -2509,40 +2579,40 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         break;
     }
     case GLSLstd450FMin:  // 37
-        TYPICAL_E_BIN_OP(FLOAT, std::min(a->data.fp32, b->data.fp32));
+        TYPICAL_E_BIN_OP(FLOAT, std::min(a->data.f, b->data.f));
     case GLSLstd450UMin:  // 38
-        TYPICAL_E_BIN_OP(UINT, std::min(a->data.u32, b->data.u32));
+        TYPICAL_E_BIN_OP(UINT, std::min(a->data.u, b->data.u));
     case GLSLstd450SMin:  // 39
-        TYPICAL_E_BIN_OP(INT, std::min(a->data.i32, b->data.i32));
+        TYPICAL_E_BIN_OP(INT, std::min(a->data.i, b->data.i));
     case GLSLstd450FMax:  // 40
-        TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.fp32, b->data.fp32));
+        TYPICAL_E_BIN_OP(FLOAT, std::max(a->data.f, b->data.f));
     case GLSLstd450UMax:  // 41
-        TYPICAL_E_BIN_OP(UINT, std::max(a->data.u32, b->data.u32));
+        TYPICAL_E_BIN_OP(UINT, std::max(a->data.u, b->data.u));
     case GLSLstd450SMax:  // 42
-        TYPICAL_E_BIN_OP(INT, std::max(a->data.i32, b->data.i32));
+        TYPICAL_E_BIN_OP(INT, std::max(a->data.i, b->data.i));
     case GLSLstd450FClamp: {  // 43
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
-            if (minVal->data.fp32 > maxVal->data.fp32)
+            if (minVal->data.f > maxVal->data.f)
                 Console::warn("FClamp undefined since minVal > maxVal!");
-            return std::clamp(x->data.fp32, minVal->data.fp32, maxVal->data.fp32);
+            return std::clamp(x->data.f, minVal->data.f, maxVal->data.f);
         };
         E_TERN_OP(FLOAT, fx);
         break;
     }
     case GLSLstd450UClamp: {  // 44
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
-            if (minVal->data.u32 > maxVal->data.u32)
+            if (minVal->data.u > maxVal->data.u)
                 Console::warn("UClamp undefined since minVal > maxVal!");
-            return std::clamp(x->data.u32, minVal->data.u32, maxVal->data.u32);
+            return std::clamp(x->data.u, minVal->data.u, maxVal->data.u);
         };
         E_TERN_OP(UINT, fx);
         break;
     }
     case GLSLstd450SClamp: {  // 45
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
-            if (minVal->data.i32 > maxVal->data.i32)
+            if (minVal->data.i > maxVal->data.i)
                 Console::warn("SClamp undefined since minVal > maxVal!");
-            return std::clamp(x->data.i32, minVal->data.i32, maxVal->data.i32);
+            return std::clamp(x->data.i, minVal->data.i, maxVal->data.i);
         };
         E_TERN_OP(INT, fx);
         break;
@@ -2553,25 +2623,25 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         //   std::lerp   = x + a(y - x)
         // However, we cannot use std::lerp because it has NaN edge behavior which isn't described in the SPIR-V spec.
         TernOp fx = [](const Primitive* x, const Primitive* y, const Primitive* a) {
-            return x->data.fp32 * (1.0f - a->data.fp32) + y->data.fp32 * a->data.fp32;
+            return x->data.f * (1.0 - a->data.f) + y->data.f * a->data.f;
         };
         E_TERN_OP(FLOAT, fx);
         break;
     }
     // GLSLstd450IMix missing documentation
     case GLSLstd450Step:  // 48
-        TYPICAL_E_BIN_OP(FLOAT, ((b->data.fp32 < a->data.fp32) ? 0.0f : 1.0f));
+        TYPICAL_E_BIN_OP(FLOAT, ((b->data.f < a->data.f) ? 0.0 : 1.0));
     case GLSLstd450SmoothStep: {  // 49
         TernOp fx = [](const Primitive* lo, const Primitive* hi, const Primitive* x) {
-            float t = std::clamp((x->data.fp32 - lo->data.fp32) / (hi->data.fp32 - lo->data.fp32), 0.0f, 1.0f);
-            return t * t * (3.0f - 2.0f * t);
+            double t = std::clamp((x->data.f - lo->data.f) / (hi->data.f - lo->data.f), 0.0, 1.0);
+            return t * t * (3.0 - 2.0 * t);
         };
         E_TERN_OP(FLOAT, fx);
         break;
     }
     case GLSLstd450Fma: {  // 50
         TernOp fx = [](const Primitive* a, const Primitive* b, const Primitive* c) {
-            return (a->data.fp32 * b->data.fp32) + c->data.fp32;
+            return (a->data.f * b->data.f) + c->data.f;
         };
         E_TERN_OP(FLOAT, fx);
         break;
@@ -2581,22 +2651,22 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     case GLSLstd450PackHalf2x16:  // 58
     {
         // input of vec2 -> 32-bit integer
-        std::function<uint32_t(float f)> pack;
+        std::function<uint32_t(double f)> pack;
         switch (ext_opcode) {
         case GLSLstd450PackSnorm2x16:
-            pack = [](float f) {
-                float res = std::round(std::clamp(double(f), -1.0, 1.0) * 32767.0);
+            pack = [](double f) {
+                double res = std::round(std::clamp(f, -1.0, 1.0) * 32767.0);
                 return uint32_t(int16_t(res));
             };
             break;
         case GLSLstd450PackUnorm2x16:
-            pack = [](float f) {
-                float res = std::round(std::clamp(double(f), 0.0, 1.0) * 65535.0);
+            pack = [](double f) {
+                double res = std::round(std::clamp(f, 0.0, 1.0) * 65535.0);
                 return uint32_t(uint16_t(res));
             };
             break;
         case GLSLstd450PackHalf2x16:
-            pack = [](float f) { return uint32_t(FpConvert::encode_flt16(f)); };
+            pack = [](double f) { return uint32_t(FpConvert::encode_flt16(f)); };
             break;
         default:
             assert(false);  // unhandled case!
@@ -2605,12 +2675,12 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         const auto& input = static_cast<const Array&>(*getValue(src_at, data));
         assert(input.getSize() == 2);
         assert(input.getType().getElement().getBase() == DataType::FLOAT);
-        uint32_t res_lo = pack(static_cast<const Primitive*>(input[0])->data.fp32);
-        uint32_t res_hi = pack(static_cast<const Primitive*>(input[1])->data.fp32);
+        uint32_t res_lo = pack(static_cast<const Primitive*>(input[0])->data.f);
+        uint32_t res_hi = pack(static_cast<const Primitive*>(input[1])->data.f);
 
         const Type* res_type = getType(dst_type_at, data);
         Primitive& ret = static_cast<Primitive&>(*res_type->construct());
-        ret.data.u32 = (res_hi << 16) | res_lo;  // set it raw. Could plausibly be an int, but need to access u32
+        ret.data.u = (res_hi << 16) | res_lo;  // set it raw. Could plausibly be an int, but need to access u
         data[result_at].redefine(&ret);
         break;
     }
@@ -2624,18 +2694,18 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         constexpr unsigned SIZE = 2;
 
         uint16_t u[SIZE] = {0};
-        uint32_t p = input.data.fp32;
+        uint32_t p = input.data.f;
         for (unsigned i = 0; (i < SIZE) && (p > 0); ++i, p >>= 16)
             u[i] = p & 0xFFFF;
 
-        float f[SIZE];
+        double f[SIZE];
         for (unsigned i = 0; i < SIZE; ++i) {
             if (SIGN) {
                 int16_t num = int16_t(u[i]);
-                float tmp = static_cast<float>(num);
+                auto tmp = static_cast<double>(num);
                 f[i] = std::clamp(tmp / 32767.0, -1.0, 1.0);
             } else {
-                float tmp = static_cast<float>(u[i]);
+                auto tmp = static_cast<double>(u[i]);
                 f[i] = tmp / 65535.0;
             }
         }
@@ -2653,11 +2723,11 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         assert(ret.getSize() == 2);
 
         const auto& input = static_cast<const Primitive&>(*getValue(src_at, data));
-        uint32_t all_bits = input.data.u32;
+        uint32_t all_bits = input.data.u;
         for (unsigned i = 0; i < 2; ++i, all_bits >>= 16) {
             uint16_t bits = uint16_t(all_bits & 0xFFFF);
-            // The spec requires the output to be FP32 floats
-            static_cast<Primitive*>(ret[i])->data.fp32 = FpConvert::decode_flt16<float>(bits);
+            // The spec requires the output to be f floats
+            static_cast<Primitive*>(ret[i])->data.f = FpConvert::decode_flt16<double>(bits);
         }
         data[result_at].redefine(&ret);
         break;
@@ -2672,18 +2742,18 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         constexpr unsigned SIZE = 4;
 
         uint8_t u[SIZE] = {0};
-        uint32_t p = input.data.fp32;
+        uint32_t p = input.data.f;
         for (unsigned i = 0; (i < SIZE) && (p > 0); ++i, p >>= 8)
             u[i] = p & 0xFF;
 
-        float f[SIZE];
+        double f[SIZE];
         for (unsigned i = 0; i < SIZE; ++i) {
             if (SIGN) {
                 int8_t num = int8_t(u[i]);
-                float tmp = static_cast<float>(num);
+                auto tmp = static_cast<double>(num);
                 f[i] = std::clamp(tmp / 127.0, -1.0, 1.0);
             } else {
-                float tmp = static_cast<float>(u[i]);
+                auto tmp = static_cast<double>(u[i]);
                 f[i] = tmp / 255.0;
             }
         }
@@ -2712,13 +2782,13 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
 
         double total = 0;
         for (unsigned i = 0; i < arr.getSize(); ++i) {
-            auto n = static_cast<const Primitive*>(arr[i])->data.fp32;
+            auto n = static_cast<const Primitive*>(arr[i])->data.f;
             total += n * n;
         }
         if (total != 0)
             total = std::sqrt(total);
 
-        Primitive tot_prim(static_cast<float>(total));
+        Primitive tot_prim(total);
         ret->copyFrom(tot_prim);
         data[result_at].redefine(ret);
         break;
@@ -2733,11 +2803,11 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         const Type& vec_type = vec_1_val->getType();
         if (vec_type.getBase() != DataType::ARRAY) {
             assert(vec_type.getBase() == DataType::FLOAT);
-            const float one = static_cast<Primitive*>(vec_1_val)->data.fp32;
-            const float two = static_cast<Primitive*>(vec_2_val)->data.fp32;
-            Primitive prim_single(std::sqrt((one - two) * (one - two)));
-            std::vector<const Value*> pfloats {&prim_single};
-            Value* res = res_type->construct(pfloats);
+            const auto one = static_cast<Primitive*>(vec_1_val)->data.f;
+            const auto two = static_cast<Primitive*>(vec_2_val)->data.f;
+            Primitive prim(std::sqrt((one - two) * (one - two)));
+            Value* res = res_type->construct();
+            res->copyFrom(prim);
             data[result_at].redefine(res);
             break;
         }
@@ -2749,24 +2819,24 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         const Array& vec_2 = *static_cast<Array*>(vec_2_val);
         assert(vec_1.getSize() == vec_2.getSize());
 
-        float sum = 0.0f;
+        auto sum = 0.0;
         for (unsigned i = 0; i < vec_1.getSize(); ++i) {
-            const float vec_1_i = static_cast<const Primitive*>(vec_1[i])->data.fp32;
-            const float vec_2_i = static_cast<const Primitive*>(vec_2[i])->data.fp32;
-            const float diff = vec_1_i - vec_2_i;
+            const auto vec_1_i = static_cast<const Primitive*>(vec_1[i])->data.f;
+            const auto vec_2_i = static_cast<const Primitive*>(vec_2[i])->data.f;
+            const auto diff = vec_1_i - vec_2_i;
             sum += (diff * diff);
         }
-        const float result = std::sqrt(sum);
+        const auto result = std::sqrt(sum);
 
-        Primitive prim_single(result);
-        std::vector<const Value*> pfloats {&prim_single};
-        Value* res = res_type->construct(pfloats);
+        Primitive prim(result);
+        Value* res = res_type->construct();
+        res->copyFrom(prim);
         data[result_at].redefine(res);
         break;
     }
     case GLSLstd450Cross: {  // 68
-        std::vector<float> x = Statics::extractVec(getValue(src_at, data), "Cross Operand x", 3);
-        std::vector<float> y = Statics::extractVec(getValue(src_at + 1, data), "Cross Operand y", 3);
+        std::vector<double> x = Statics::extractVec(getValue(src_at, data), "Cross Operand x", 3);
+        std::vector<double> y = Statics::extractVec(getValue(src_at + 1, data), "Cross Operand y", 3);
         Type* res_type = getType(dst_type_at, data);
         Value* res = res_type->construct();
 
@@ -2787,12 +2857,12 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         if (vec_type.getBase() != DataType::ARRAY) {
             // "Normalize" a scalar value
             assert(vec_type.getBase() == DataType::FLOAT);
-            auto single = static_cast<Primitive*>(vec_val)->data.fp32;
+            auto single = static_cast<Primitive*>(vec_val)->data.f;
             if (single != 0.0)
                 single = 1.0;
-            Primitive prim_single(single);
-            std::vector<const Value*> pfloats {&prim_single};
-            Value* res = res_type->construct(pfloats);
+            Primitive prim(single);
+            Value* res = res_type->construct();
+            res->copyFrom(prim);
             data[result_at].redefine(res);
             break;
         }
@@ -2805,25 +2875,21 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         double vsize = 0;
         for (unsigned i = 0; i < size; ++i) {
             const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
-            vsize += vec_e.data.fp32 * vec_e.data.fp32;
+            vsize += vec_e.data.f * vec_e.data.f;
         }
         vsize = std::sqrt(vsize);
 
-        std::vector<Primitive> floats;
-        std::vector<const Value*> pfloats;
-        floats.reserve(size);
-        pfloats.reserve(size);
+        Array& res = static_cast<Array&>(*res_type->construct());
         for (unsigned i = 0; i < size; ++i) {
             const Primitive& vec_e = *static_cast<const Primitive*>(vec[i]);
-            auto component = vec_e.data.fp32;
+            auto component = vec_e.data.f;
             if (vsize != 0)
                 component /= vsize;
-            Primitive& created = floats.emplace_back(static_cast<float>(component));
-            pfloats.push_back(&created);
+            Primitive created(component);
+            res[i]->copyFrom(created);
         }
 
-        Value* res = res_type->construct(pfloats);
-        data[result_at].redefine(res);
+        data[result_at].redefine(&res);
         break;
     }
     case GLSLstd450FaceForward: {  // 70
@@ -2836,7 +2902,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
 
         // N * (dot(Nref, I) < 0)? +1 : -1
         auto dot_result = ArrayMath::dot(nref_val, i_val);
-        float mult = std::signbit(dot_result) ? 1.0 : -1.0;
+        double mult = std::signbit(dot_result) ? 1.0 : -1.0;
 
         if (res_type->getBase() == DataType::FLOAT) {
             // All must be the same type
@@ -2844,7 +2910,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             assert(i_val->getType().getBase() == DataType::FLOAT);
             assert(nref_val->getType().getBase() == DataType::FLOAT);
 
-            Primitive prim(static_cast<const Primitive*>(n_val)->data.fp32 * mult);
+            Primitive prim(static_cast<const Primitive*>(n_val)->data.f * mult);
             ret->copyFrom(prim);
         } else {
             assert(n_val->getType().getBase() == DataType::ARRAY);
@@ -2858,7 +2924,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             const auto& n = static_cast<const Array&>(*n_val);
 
             for (unsigned i = 0; i < res.getSize(); ++i) {
-                Primitive prim(static_cast<float>(static_cast<const Primitive*>(n[i])->data.fp32 * mult));
+                Primitive prim(static_cast<double>(static_cast<const Primitive*>(n[i])->data.f * mult));
                 res[i]->copyFrom(prim);
             }
         }
@@ -2876,11 +2942,11 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         const Type& vec_type = incident_val->getType();
         if (vec_type.getBase() != DataType::ARRAY) {
             assert(vec_type.getBase() == DataType::FLOAT);
-            const float incident = static_cast<Primitive*>(incident_val)->data.fp32;
-            const float normal = static_cast<Primitive*>(normal_val)->data.fp32;
-            Primitive prim_single(incident - 2 * (normal * incident) * normal);
-            std::vector<const Value*> pfloats {&prim_single};
-            Value* res = res_type->construct(pfloats);
+            const double incident = static_cast<Primitive*>(incident_val)->data.f;
+            const double normal = static_cast<Primitive*>(normal_val)->data.f;
+            Primitive prim(incident - 2 * (normal * incident) * normal);
+            Value* res = res_type->construct();
+            res->copyFrom(prim);
             data[result_at].redefine(res);
             break;
         }
@@ -2895,32 +2961,28 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
 
         //   2 * dot(N, I) * N
         std::vector<double> second_term;
-        const double scaled_dot_product = 2.0f * dot_product;
+        const double scaled_dot_product = 2.0 * dot_product;
         for (unsigned i = 0; i < normal.getSize(); ++i) {
-            const double normal_elem = static_cast<const Primitive*>(normal[i])->data.fp32;
+            const double normal_elem = static_cast<const Primitive*>(normal[i])->data.f;
             second_term.push_back(scaled_dot_product * normal_elem);
         }
 
         //   I - (2 * dot(N, I) * N)
         std::vector<double> result;
         for (unsigned i = 0; i < incident.getSize(); ++i) {
-            const double incident_elem = static_cast<const Primitive*>(incident[i])->data.fp32;
+            const double incident_elem = static_cast<const Primitive*>(incident[i])->data.f;
             result.push_back(incident_elem - second_term[i]);
         }
 
         // Finished calculations; now store them
         assert(result.size() == incident.getSize());
-        std::vector<Primitive> floats;
-        floats.reserve(result.size());
-        std::vector<const Value*> pfloats;
-        pfloats.reserve(result.size());
+        Array& res = static_cast<Array&>(*res_type->construct());
         for (unsigned i = 0; i < result.size(); ++i) {
-            floats.push_back(Primitive(static_cast<float>(result[i])));
-            pfloats.push_back(&floats[i]);
+            Primitive prim(result[i]);
+            res[i]->copyFrom(prim);
         }
 
-        Value* res = res_type->construct(pfloats);
-        data[result_at].redefine(res);
+        data[result_at].redefine(&res);
         break;
     }
     case GLSLstd450Refract: {  // 72
@@ -2937,7 +2999,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
 
         double dotni = ArrayMath::dot(n_val, i_val);
         assert(eta_val->getType().getBase() == DataType::FLOAT && "Eta in Refract operation must be a scalar float!");
-        double eta = static_cast<const Primitive*>(eta_val)->data.fp32;
+        double eta = static_cast<const Primitive*>(eta_val)->data.f;
         double k = 1.0 - eta * eta * (1.0 - dotni * dotni);
         double etadotsqrtk = (k < 0.0) ? 0.0 : (eta * dotni + std::sqrt(k));
 
@@ -2949,21 +3011,21 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             for (unsigned i = 0; i < res.getSize(); ++i) {
                 double element = 0.0;
                 if (k >= 0.0) {
-                    double first = static_cast<const Primitive*>(i_arr[i])->data.fp32;
-                    double second = static_cast<const Primitive*>(n_arr[i])->data.fp32;
+                    double first = static_cast<const Primitive*>(i_arr[i])->data.f;
+                    double second = static_cast<const Primitive*>(n_arr[i])->data.f;
                     element = (first * eta) - (second * etadotsqrtk);
                 }
-                Primitive prim(static_cast<float>(element));
+                Primitive prim(element);
                 res[i]->copyFrom(prim);
             }
         } else {
             double res = 0.0;
             if (k >= 0.0) {
-                double first = static_cast<const Primitive*>(i_val)->data.fp32;
-                double second = static_cast<const Primitive*>(n_val)->data.fp32;
+                double first = static_cast<const Primitive*>(i_val)->data.f;
+                double second = static_cast<const Primitive*>(n_val)->data.f;
                 res = (first * eta) - (second * etadotsqrtk);
             }
-            Primitive prim(static_cast<float>(res));
+            Primitive prim(res);
             ret->copyFrom(prim);
         }
 
@@ -2972,9 +3034,9 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     }
     case GLSLstd450FindILsb: {  // 73
         UnOp op = [](const Primitive* a) {
-            uint32_t count = std::countr_zero(a->data.u32);
+            uint64_t count = std::countr_zero(a->data.u);
             if (count >= 32)
-                return 0xFFFF'FFFF;
+                return std::bit_cast<uint64_t>(-1LL);
             return count;
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
@@ -2984,15 +3046,15 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     case GLSLstd450FindSMsb: {  // 74
         UnOp op = [](const Primitive* a) {
             int count;
-            if (a->data.i32 < 0)
-                count = std::countl_one(a->data.u32);
+            if (a->data.i < 0)
+                count = std::countl_one(a->data.u);
             else
-                count = std::countl_zero(a->data.u32);
-            // At this point, count is in the range [1, 32]. We must translate that into a bit location
-            if (count >= 32)
-                return 0xFFFF'FFFF;
-            // Now range is [1, 31]
-            return static_cast<uint32_t>(31 - count);
+                count = std::countl_zero(a->data.u);
+            // At this point, count is in the range [1, 64]. We must translate that into a bit location
+            if (count >= 64)
+                return std::bit_cast<uint64_t>(-1LL);
+            // Now range is [1, 63]
+            return static_cast<uint64_t>(63 - count);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_int_unary_op(checkRef(src_at, data_len), dst, data, op, op);
@@ -3000,11 +3062,11 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     }
     case GLSLstd450FindUMsb: {  // 75
         UnOp op = [](const Primitive* a) {
-            int count = std::countl_zero(a->data.u32);
-            if (count >= 32)
-                return 0xFFFF'FFFF;
-            // Now range is [0, 31]
-            return static_cast<uint32_t>(31 - count);
+            int count = std::countl_zero(a->data.u);
+            if (count >= 64)
+                return std::bit_cast<uint64_t>(-1LL);
+            // Now range is [0, 63]
+            return static_cast<uint64_t>(63 - count);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_int_unary_op(checkRef(src_at, data_len), dst, data, op, op);
@@ -3070,12 +3132,12 @@ bool Instruction::makeResultPrintf(DataView& data, unsigned location, unsigned r
                         Primitive& prim = static_cast<Primitive&>(*val);
 
                         if (base == DataType::FLOAT)
-                            printf(cnow, prim.data.fp32);
+                            printf(cnow, prim.data.f);
                         else if (base == DataType::UINT || base == DataType::BOOL)
-                            printf(cnow, prim.data.u32);
+                            printf(cnow, prim.data.u);
                         else {
                             assert(base == DataType::INT);
-                            printf(cnow, prim.data.i32);
+                            printf(cnow, prim.data.i);
                         }
                     } else {
                         if (base != DataType::STRING)

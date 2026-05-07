@@ -51,9 +51,14 @@ public:
 
     void addElements(std::vector<const Value*>& es) noexcept(false);
 
-    void dummyFill(bool undef = true) noexcept(false) {
-        for (unsigned i = 0; i < getSize(); ++i) {
-            Value* val = getTypeAt(i).construct(undef);
+    void dummyFill(bool undef = true, unsigned size = 0) noexcept(false) {
+        if (size == 0)
+            size = getSize();
+        else
+            assert(type.getBase() == DataType::COOP_MATRIX);
+
+        for (unsigned i = 0; i < size; ++i) {
+            Value* val = getTypeAt(i).construct();
             elements.push_back(val);
         }
     }

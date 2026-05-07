@@ -579,9 +579,9 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
         const Aggregate& sizeAgg = static_cast<const Aggregate&>(workSizeVar.getVal());
         // Update the entry point
         EntryPoint& ep = entry_inst.getEntryPoint(global);
-        ep.sizeX = static_cast<const Primitive*>(sizeAgg[0])->data.u32;
-        ep.sizeY = static_cast<const Primitive*>(sizeAgg[1])->data.u32;
-        ep.sizeZ = static_cast<const Primitive*>(sizeAgg[2])->data.u32;
+        ep.sizeX = static_cast<const Primitive*>(sizeAgg[0])->data.u;
+        ep.sizeY = static_cast<const Primitive*>(sizeAgg[1])->data.u;
+        ep.sizeZ = static_cast<const Primitive*>(sizeAgg[2])->data.u;
     }
     const EntryPoint& ep = entry_inst.getEntryPoint(global);
     unsigned num_invocations = single_invoc ? 1 : (ep.sizeX * ep.sizeY * ep.sizeZ);
@@ -629,9 +629,9 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
                 assert(global_invoc_id->getVal().getType().getBase() == DataType::ARRAY);
                 const auto& ids = static_cast<const Array&>(global_invoc_id->getVal());
                 // deconstruct local ids from the given global
-                local_x = static_cast<const Primitive&>(*ids[0]).data.u32 % ep.sizeX;
-                local_y = static_cast<const Primitive&>(*ids[1]).data.u32 % ep.sizeY;
-                local_z = static_cast<const Primitive&>(*ids[2]).data.u32 % ep.sizeZ;
+                local_x = static_cast<const Primitive&>(*ids[0]).data.u % ep.sizeX;
+                local_y = static_cast<const Primitive&>(*ids[1]).data.u % ep.sizeY;
+                local_z = static_cast<const Primitive&>(*ids[2]).data.u % ep.sizeZ;
             } else {
                 Variable* v = new Variable(*global_invoc_id);
                 Array arr(tUint, 3);
@@ -649,16 +649,16 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
                 // This is the highest-level invocation builtin. Get the current settings to update any lower
                 assert(global_invoc_id->getVal().getType().getBase() == DataType::ARRAY);
                 const auto& ids = static_cast<const Array&>(global_invoc_id->getVal());
-                local_x = static_cast<const Primitive&>(*ids[0]).data.u32;
-                local_y = static_cast<const Primitive&>(*ids[1]).data.u32;
-                local_z = static_cast<const Primitive&>(*ids[2]).data.u32;
+                local_x = static_cast<const Primitive&>(*ids[0]).data.u;
+                local_y = static_cast<const Primitive&>(*ids[1]).data.u;
+                local_z = static_cast<const Primitive&>(*ids[2]).data.u;
                 // TODO: should we throw an error if the local sizes given exceed the workgroup size?
             } else {
                 Variable* v = new Variable(*local_invoc_id);
                 Array arr(tUint, 3);
-                const Primitive gid_x(local_x);
-                const Primitive gid_y(local_y);
-                const Primitive gid_z(local_z);
+                const Primitive gid_x(static_cast<uint64_t>(local_x));
+                const Primitive gid_y(static_cast<uint64_t>(local_y));
+                const Primitive gid_z(static_cast<uint64_t>(local_z));
                 std::vector<const Value*> elements {&gid_x, &gid_y, &gid_z};
                 arr.addElements(elements);
                 v->getVal().copyFrom(arr);
@@ -678,7 +678,7 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
                     index = (local_z * ep.sizeX * ep.sizeY) + (local_y * ep.sizeX) + local_x;
                 else
                     index = i;
-                const Primitive idx(index);
+                const Primitive idx(static_cast<uint64_t>(index));
                 v->getVal().copyFrom(idx);
                 invoc_global->local(localInvocIdx).redefine(v);
             }
