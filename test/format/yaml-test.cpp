@@ -106,7 +106,7 @@ TEST_CASE("i/o", "[yaml]") {
 
     SECTION("challenging keys") {
         // We are testing the key, so the value doesn't really matter
-        Primitive test(-1L);
+        Primitive test(static_cast<int64_t>(-1));
 
         // Yaml can handle an identifier with spaces
         circle_test(format, "something or other", test, "something or other: -1");
