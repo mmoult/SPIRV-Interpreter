@@ -206,7 +206,7 @@ Value* Instruction::handleImage(
                 CASE(ImageOperandsLodShift) : {
                     const Value* lodv = getNext();
                     const auto& lodp = static_cast<const Primitive&>(*lodv);
-                    Primitive prim(0.0f);
+                    Primitive prim(0.0);
                     prim.copyFrom(lodp);
                     lod = prim.data.f;
                     break;
@@ -1464,7 +1464,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         BinOp fx = [](const Primitive* a, const Primitive* b) {
             if (b->data.u == 0) {
                 Console::warn("UMod undefined since divisor is 0!");
-                return Primitive(0UL);
+                return Primitive(static_cast<uint64_t>(0));
             }
             return Primitive(a->data.u % b->data.u);
         };
@@ -1476,11 +1476,11 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         BinOp fx = [](const Primitive* a, const Primitive* b) {
             if (b->data.i == 0) {
                 Console::warn("SRem undefined since divisor is 0!");
-                return Primitive(0UL);
+                return Primitive(static_cast<uint64_t>(0));
             }
             if (a->data.i == std::numeric_limits<int64_t>::min() && b->data.i == -1) {
                 Console::warn("SRem undefined since dividend is INT_MIN and divisor is -1 causing overflow!");
-                return Primitive(0UL);
+                return Primitive(static_cast<uint64_t>(0));
             }
             return Primitive(a->data.i % b->data.i);
         };
@@ -1492,13 +1492,13 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         BinOp fx = [](const Primitive* a, const Primitive* b) {
             if (b->data.i == 0) {
                 Console::warn("SMod undefined since divisor is 0!");
-                return Primitive(0UL);
+                return Primitive(static_cast<uint64_t>(0));
             }
             if (a->data.i == std::numeric_limits<int64_t>::min() && b->data.i == -1) {
                 Console::warn("SMod undefined since dividend is INT_MIN and divisor is -1 causing overflow!");
-                return Primitive(0UL);
+                return Primitive(static_cast<uint64_t>(0));
             }
-            auto res = a->data.i % b->data.i;
+            int64_t res = a->data.i % b->data.i;
             if (res != 0 && ((a->data.i ^ b->data.i) < 0)) {
                 // If the dividend and divisor have different signs, we need to adjust the result
                 res += b->data.i;
@@ -1595,7 +1595,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         unsigned b = vres.getSize();
         unsigned a = vec.getSize();
         for (unsigned i = 0; i < b; ++i) {
-            Primitive el(0UL);
+            Primitive el(static_cast<uint64_t>(0));
             const Array& mcolumn = *static_cast<const Array*>(mat[i]);
             for (unsigned j = 0; j < a; ++j) {
                 const Primitive& vecv = *static_cast<const Primitive*>(vec[j]);
@@ -1629,7 +1629,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         unsigned a = vres.getSize();
         unsigned b = vec.getSize();
         for (unsigned i = 0; i < a; ++i) {
-            Primitive el(0UL);
+            Primitive el(static_cast<uint64_t>(0));
             for (unsigned j = 0; j < b; ++j) {
                 const Array& mcolumn = *static_cast<const Array*>(mat[j]);
                 const Primitive& matv = *static_cast<const Primitive*>(mcolumn[i]);
@@ -1663,7 +1663,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             Array& res_column = *static_cast<Array*>(mres[i]);
             for (unsigned j = 0; j < a; ++j) {
                 const auto& rcolumn = static_cast<const Array&>(*(rmat[i]));
-                Primitive el(0UL);
+                Primitive el(static_cast<uint64_t>(0));
                 for (unsigned k = 0; k < b; ++k) {
                     // Get (k, j) in left, (i, k) in right
                     const auto& lcolumn = static_cast<const Array&>(*(lmat[k]));
@@ -2016,7 +2016,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
 
         UnOp ufx = [&](const Primitive* a) {
             if (mask == 0)
-                return Primitive(0UL);
+                return Primitive(static_cast<uint64_t>(0));
             uint32_t val = (a->data.u >> offset_p.data.u) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
@@ -2024,7 +2024,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         };
         UnOp ifx = [&](const Primitive* a) {
             if (mask == 0)
-                return Primitive(0L);
+                return Primitive(static_cast<uint64_t>(0));
             uint32_t val = (a->data.u >> offset_p.data.u) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
@@ -2383,7 +2383,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
             if (to_trunc)
                 return whole;
             else
-                return whole + (std::signbit(whole) ? -1.0f : 1.0f);
+                return whole + (std::signbit(whole) ? -1.0 : 1.0);
         };
         element_unary_op(DataType::FLOAT, checkRef(src_at, data_len), dst, data, op);
         break;
@@ -2397,14 +2397,14 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     case GLSLstd450FSign: {  // 6
         UnOp op = [](const Primitive* a) {
             bool sgnbit = std::signbit(a->data.f);
-            return (a->data.f == 0.0) ? (sgnbit ? -0.0f : 0.0f) : (sgnbit ? -1.0f : 1.0f);
+            return (a->data.f == 0.0) ? (sgnbit ? -0.0 : 0.0) : (sgnbit ? -1.0 : 1.0);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_unary_op(DataType::FLOAT, checkRef(src_at, data_len), dst, data, op);
         break;
     }
     case GLSLstd450SSign:  // 7
-        TYPICAL_E_UNARY_OP(INT, std::clamp(a->data.i, -1L, 1L));
+        TYPICAL_E_UNARY_OP(INT, std::clamp(a->data.i, static_cast<int64_t>(-1L), static_cast<int64_t>(1L)));
     case GLSLstd450Floor:  // 8
         TYPICAL_E_UNARY_OP(FLOAT, std::floor(a->data.f));
     case GLSLstd450Ceil:  // 9
@@ -2554,8 +2554,8 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         auto& agg = static_cast<Aggregate&>(*res);
 
         auto op = [](const Value* input, Value* fract, Value* whole) {
-            Primitive f(0.0f);
-            Primitive w(0.0f);
+            Primitive f(0.0);
+            Primitive w(0.0);
             f.data.f = std::modf(static_cast<const Primitive*>(input)->data.f, &w.data.f);
 
             fract->copyFrom(f);
@@ -2623,14 +2623,14 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         //   std::lerp   = x + a(y - x)
         // However, we cannot use std::lerp because it has NaN edge behavior which isn't described in the SPIR-V spec.
         TernOp fx = [](const Primitive* x, const Primitive* y, const Primitive* a) {
-            return x->data.f * (1.0f - a->data.f) + y->data.f * a->data.f;
+            return x->data.f * (1.0 - a->data.f) + y->data.f * a->data.f;
         };
         E_TERN_OP(FLOAT, fx);
         break;
     }
     // GLSLstd450IMix missing documentation
     case GLSLstd450Step:  // 48
-        TYPICAL_E_BIN_OP(FLOAT, ((b->data.f < a->data.f) ? 0.0f : 1.0f));
+        TYPICAL_E_BIN_OP(FLOAT, ((b->data.f < a->data.f) ? 0.0 : 1.0));
     case GLSLstd450SmoothStep: {  // 49
         TernOp fx = [](const Primitive* lo, const Primitive* hi, const Primitive* x) {
             double t = std::clamp((x->data.f - lo->data.f) / (hi->data.f - lo->data.f), 0.0, 1.0);
@@ -2819,7 +2819,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         const Array& vec_2 = *static_cast<Array*>(vec_2_val);
         assert(vec_1.getSize() == vec_2.getSize());
 
-        auto sum = 0.0f;
+        auto sum = 0.0;
         for (unsigned i = 0; i < vec_1.getSize(); ++i) {
             const auto vec_1_i = static_cast<const Primitive*>(vec_1[i])->data.f;
             const auto vec_2_i = static_cast<const Primitive*>(vec_2[i])->data.f;
@@ -2961,7 +2961,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
 
         //   2 * dot(N, I) * N
         std::vector<double> second_term;
-        const double scaled_dot_product = 2.0f * dot_product;
+        const double scaled_dot_product = 2.0 * dot_product;
         for (unsigned i = 0; i < normal.getSize(); ++i) {
             const double normal_elem = static_cast<const Primitive*>(normal[i])->data.f;
             second_term.push_back(scaled_dot_product * normal_elem);
