@@ -102,8 +102,8 @@ public:
             throw std::runtime_error("Could not copy reinterp to ray query!");
     }
 
-    bool equals(const Value &val) const override {
-        assert(false); // should not be needed
+    bool equals(const Value& val) const override {
+        assert(false);  // should not be needed
         return false;
     }
 };

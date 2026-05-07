@@ -334,6 +334,8 @@ void element_bin_op(
         const Array& op2 = *static_cast<const Array*>(src2);
         assert((op1.getSize() == op2.getSize()) && "Cannot do binary operation on arrays of different size!");
         Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, op1.getSize());
 
         for (unsigned i = 0; i < op1.getSize(); ++i) {
             auto result = op(static_cast<const Primitive*>(op1[i]), static_cast<const Primitive*>(op2[i]));
@@ -401,6 +403,8 @@ void element_shift_op(
         unsigned asize = op1.getSize();
         const auto& dbase = dst_type.getElement();
         Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, asize);
 
         for (unsigned i = 0; i < asize; ++i) {
             auto result = op(static_cast<const Primitive*>(op1[i]), static_cast<const Primitive*>(op2[i]));
@@ -492,6 +496,8 @@ void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataVie
     if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
         const Array& operand = *static_cast<const Array*>(src1);
         Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, operand.getSize());
 
         for (unsigned i = 0; i < operand.getSize(); ++i) {
             auto result = op(static_cast<const Primitive*>(operand[i]));
@@ -537,6 +543,8 @@ void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std
     if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
         const Array& operand = *static_cast<const Array*>(src1);
         Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, operand.getSize());
 
         for (unsigned i = 0; i < operand.getSize(); ++i) {
             const auto* element = static_cast<const Primitive*>(operand[i]);
@@ -590,6 +598,8 @@ void element_tern_op(
             "Cannot do binary operation on arrays of different size!"
         );
         Array& arr = static_cast<Array&>(*res);
+        if (arr.getType().getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, op1.getSize());
 
         for (unsigned i = 0; i < op1.getSize(); ++i) {
             auto result =
@@ -1054,6 +1064,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             }
         }
         Array& arr = static_cast<Array&>(*ret->construct());
+        if (ret->getBase() == DataType::COOP_MATRIX)
+            arr.dummyFill(true, values.size());
         for (unsigned i = 0; i < values.size(); ++i)
             arr[i]->copyFrom(*values[i]);
         auto set_unsized = [&](Value& seen) {

@@ -336,7 +336,7 @@ public:
             throw std::runtime_error("Could not copy reinterp to acceleration struct!");
     }
 
-    bool equals(const Value &val) const override {
+    bool equals(const Value& val) const override {
         // Should not be needed
         assert(false);
         return false;

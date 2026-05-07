@@ -49,6 +49,8 @@ Value* Type::construct(bool undef) const {
         }
         // try to populate with each of the entries
         if (base != DataType::COOP_MATRIX)
+            // Cooperative matrices don't specify the number of elements in the type; that info must be provided by
+            // the invocation. Defer dummy filling to the use, where we assume that info is known.
             agg->dummyFill(undef);
         return agg;
     }
