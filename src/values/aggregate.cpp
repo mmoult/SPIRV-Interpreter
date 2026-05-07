@@ -40,7 +40,7 @@ void Aggregate::inferType() {
         assert(type.getBase() == DataType::STRUCT);
         // Replace each of the sub elements with the field's type
         for (unsigned i = 0; i < elements.size(); ++i)
-            type.replaceFieldType(&elements[0]->getType(), i);
+            type.replaceFieldType(&elements[i]->getType(), i);
     }
 }
 

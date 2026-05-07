@@ -32,7 +32,7 @@ unsigned Instruction::checkRef(unsigned idx, unsigned len) const noexcept(false)
     if (result_at >= len) {
         std::stringstream err;
         err << "Reference found (" << result_at << ") beyond data bound (" << len << ")!";
-        throw new std::runtime_error(err.str());
+        throw std::runtime_error(err.str());
     }
     return result_at;
 }

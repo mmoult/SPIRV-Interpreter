@@ -645,7 +645,7 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
             }
         }
         if (local_invoc_id != nullptr) {
-            if (single_invoc && global_invoc_id == nullptr) {
+            if (single_invoc && global_invoc_id != nullptr) {
                 // This is the highest-level invocation builtin. Get the current settings to update any lower
                 assert(global_invoc_id->getVal().getType().getBase() == DataType::ARRAY);
                 const auto& ids = static_cast<const Array&>(global_invoc_id->getVal());

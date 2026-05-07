@@ -588,9 +588,8 @@ std::array<unsigned, 4> Image::getSize(uint32_t lod) const {
 
 bool Image::write(int x, int y, int z, const Array& texel) {
     // Verify that the texel to write to is in bounds
-    bool oob = false;
-    if (x < 0 || y < 0 || z < 0)
-        oob = true;
+    bool oob = (x < 0 || y < 0 || z < 0);
+
     unsigned xu = static_cast<unsigned>(x);
     unsigned yu = static_cast<unsigned>(y);
     unsigned zu = static_cast<unsigned>(z);
