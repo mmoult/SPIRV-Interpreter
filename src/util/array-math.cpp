@@ -16,8 +16,8 @@ double dot(const Array& first, const Array& second) {
     assert(first.getSize() == second.getSize());
     double dot_product = 0.0;
     for (unsigned i = 0; i < first.getSize(); ++i) {
-        const float second_elem = static_cast<const Primitive*>(second[i])->data.f;
-        const float this_elem = static_cast<const Primitive*>(first[i])->data.f;
+        const auto second_elem = static_cast<const Primitive*>(second[i])->data.f;
+        const auto this_elem = static_cast<const Primitive*>(first[i])->data.f;
         dot_product += second_elem * this_elem;
     }
     return dot_product;

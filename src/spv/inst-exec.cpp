@@ -615,7 +615,8 @@ bool Instruction::execute(
                             Primitive pbool(sect.isValidHit());
                             val.copyFrom(pbool);
                         } else {
-                            Primitive pfloat(sect.hitT);
+                            uint32_t prec = val.getType().getPrecision();
+                            Primitive pfloat(FpConvert::quantize(sect.hitT, prec), prec);
                             val.copyReinterp(pfloat);
                         }
                         break;
@@ -807,7 +808,7 @@ bool Instruction::execute(
         // ⎣ a8 a9 a0 a1 ⎦   ⎢ b6 b7 b8 ⎥   ⎣ c6 c7 c8 ⎦
         //                   ⎣ b9 b0 b1 ⎦
 
-        // Cooperative Matrices distribute the matrix elements across invocations. To compute the matrix multplication,
+        // Cooperative Matrices distribute the matrix elements across invocations. To compute the matrix multiplication,
         // we will have to reach this dispersed data.
         Type& res_type = *getType(0, data);
         auto& amat = static_cast<CoopMatrix&>(*getValue(2, data));
@@ -870,7 +871,7 @@ bool Instruction::execute(
             accum += static_cast<const Primitive&>(*cmat[i - e_beg]).data.f;
 
             // Finally, create the primitive and add it to pending elements
-            elements.push_back(&prims.emplace_back(static_cast<float>(accum)));
+            elements.push_back(&prims.emplace_back(accum));
         }
         result.addElements(elements);
         break;
@@ -939,12 +940,12 @@ bool Instruction::execute(
         break;
     }
     case spv::OpReportIntersectionKHR: {  // 5334
-        const float t_hit = static_cast<Primitive&>(*getValue(2, data)).data.f;
+        const double t_hit = static_cast<Primitive&>(*getValue(2, data)).data.f;
 
         auto prev_stage = frame.getRtTrigger();
         bool valid_intersect = false;
         bool continue_search = true;
-        float t_min = 0.0;
+        double t_min = 0.0;
         Frame* launch_frame = get_launching_frame(frame_stack, RtStageKind::INTERSECTION);
         if (prev_stage == RtStageKind::NONE) {
             // Get data from the ray tracing pipeline if it exists (won't exist if this is run in a dummy pipeline)

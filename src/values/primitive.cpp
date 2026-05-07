@@ -97,15 +97,15 @@ uint64_t Primitive::getRaw() const {
     switch (type.getBase()) {
     case FLOAT:
         switch (prec) {
-            case 64:
-                return std::bit_cast<uint64_t>(data.f);
-            case 32:
-                return std::bit_cast<uint32_t>(static_cast<float>(data.f));
-            case 16:
-                return FpConvert::encode_flt16(data.f);
-            default:
-                assert(false);  // unsupported precision
-                return 0;
+        case 64:
+            return std::bit_cast<uint64_t>(data.f);
+        case 32:
+            return std::bit_cast<uint32_t>(static_cast<float>(data.f));
+        case 16:
+            return FpConvert::encode_flt16(data.f);
+        default:
+            assert(false);  // unsupported precision
+            return 0;
         }
     case UINT:
         return data.u;
@@ -130,44 +130,46 @@ void Primitive::copyReinterp(const Value& other) noexcept(false) {
     uint64_t from_other = static_cast<const Primitive&>(other).getRaw();
 
     switch (to_base) {
-        case FLOAT:
-            switch (to_prec) {
-            case 64:
-                data.all = from_other;
-                break;
-            case 32:
-                data.f = static_cast<double>(std::bit_cast<float>(static_cast<uint32_t>(from_other)));
-                break;
-            case 16:
-                data.f = static_cast<double>(FpConvert::decode_flt16(static_cast<uint16_t>(from_other)));
-                break;
-            default:
-                assert(false);  // unsupported precision
-                break;
-            }
-            break;
-        case UINT:
+    case FLOAT:
+        switch (to_prec) {
+        case 64:
             data.all = from_other;
             break;
-        case INT: {
-            data.all = from_other;
-            uint64_t bitmask = (to_prec == 64) ? ~0ULL : (1ULL << to_prec) - 1;
-            // If the sign bit for the precision is set, copy across to all emulation bits
-            if (data.all & (1ULL << (to_prec - 1)))
-                data.all |= ~bitmask;
-            else
-                data.all &= bitmask;
+        case 32:
+            data.f = static_cast<double>(std::bit_cast<float>(static_cast<uint32_t>(from_other)));
+            break;
+        case 16:
+            data.f = static_cast<double>(FpConvert::decode_flt16(static_cast<uint16_t>(from_other)));
+            break;
+        default:
+            assert(false);  // unsupported precision
             break;
         }
-        default:
-            assert(to_base == BOOL);
-            data.b = from_other != 0;
-            break;
+        break;
+    case UINT:
+        data.all = from_other;
+        break;
+    case INT: {
+        data.all = from_other;
+        uint64_t bitmask = (to_prec == 64) ? ~0ULL : (1ULL << to_prec) - 1;
+        // If the sign bit for the precision is set, copy across to all emulation bits
+        if (data.all & (1ULL << (to_prec - 1)))
+            data.all |= ~bitmask;
+        else
+            data.all &= bitmask;
+        break;
+    }
+    default:
+        assert(to_base == BOOL);
+        data.b = from_other != 0;
+        break;
     }
 }
 
 bool Primitive::equals(const Value& val) const {
-    if (!Value::equals(val))  // guarantees matching types
+    // Intentionally don't call super. Primitives don't need exactly matching types for the values to match since the
+    // precisions may differ but still mean the same.
+    if (type.getBase() != val.getType().getBase())
         return false;
     const auto& other = static_cast<const Primitive&>(val);
     switch (type.getBase()) {

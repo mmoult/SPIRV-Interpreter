@@ -35,23 +35,25 @@ struct Primitive final : public Value {
     uint64_t getRaw() const;
 
 public:
+    // Construct a primitive with the emulated value. If the value needs to be quantized or masked, that should be done
+    // prior to the constructor call.
     Primitive(double fp64, unsigned size = 64) : Value(Type::primitive(FLOAT, size)) {
-        data.f = static_cast<double>(fp64);
+        data.f = fp64;
         assert(size <= 64);
     }
     Primitive(uint64_t u64, unsigned size = 64) : Value(Type::primitive(UINT, size)) {
-        data.u = static_cast<uint64_t>(u64);
+        data.u = u64;
         assert(size <= 64);
     }
     Primitive(uint32_t u32) : Value(Type::primitive(UINT, 32)) {
         data.u = static_cast<uint64_t>(u32);
     }
     Primitive(int64_t i64, unsigned size = 64) : Value(Type::primitive(INT, size)) {
-        data.i = static_cast<int64_t>(i64);
+        data.i = i64;
         assert(size <= 64);
     }
     Primitive(int32_t i32) : Value(Type::primitive(INT, 32)) {
-        data.i = static_cast<int64_t>(i32);
+        data.i = i32;
     }
     Primitive(bool b32) : Value(Type::primitive(BOOL)) {
         data.b = b32;

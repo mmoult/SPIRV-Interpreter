@@ -58,5 +58,12 @@ public:
     const float getImplicitLod() const {
         return defaultLod;
     }
+
+    bool equals(const Value& val) const override {
+        if (val.getType().getBase() != DataType::SAMPLER)
+            return false;
+        const auto& other = static_cast<const Sampler&>(val);
+        return other.defaultLod == defaultLod;
+    }
 };
 #endif

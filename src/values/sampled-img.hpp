@@ -73,5 +73,12 @@ public:
     const Image& getImage() const {
         return image;
     }
+
+    bool equals(const Value& val) const override {
+        if (val.getType().getBase() != DataType::SAMPLED_IMG)
+            return false;
+        const auto& other = static_cast<const SampledImage&>(val);
+        return other.sampler.equals(sampler) && other.image.equals(image);
+    }
 };
 #endif

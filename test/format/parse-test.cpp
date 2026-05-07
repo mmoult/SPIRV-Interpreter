@@ -70,7 +70,7 @@ void check_float(TestFormat& format, float val) {
     tos << val;
     std::string str = tos.str();
     Primitive* prim = parse_num(str, format);
-    float got = prim->data.fp32;
+    float got = prim->data.f;
     auto type = prim->getType().getBase();
     delete prim;
     REQUIRE(got == val);
@@ -81,7 +81,7 @@ void check_int(TestFormat& format, int val) {
     tos << val;
     std::string str = tos.str();
     Primitive* prim = parse_num(str, format);
-    float got = prim->data.i32;
+    int got = prim->data.i;
     auto type = prim->getType().getBase();
     delete prim;
     REQUIRE(got == val);
@@ -92,7 +92,7 @@ void check_uint(TestFormat& format, int val) {
     tos << val;
     std::string str = tos.str();
     Primitive* prim = parse_num(str, format);
-    float got = prim->data.u32;
+    unsigned got = prim->data.u;
     auto type = prim->getType().getBase();
     delete prim;
     REQUIRE(got == val);
@@ -131,9 +131,9 @@ TEST_CASE("construction", "[parse]") {
         REQUIRE(val->getType().getBase() == DataType::ARRAY);
         REQUIRE(val->getType().getElement().getBase() == DataType::FLOAT);
         Array& arr = static_cast<Array&>(*val);
-        REQUIRE(static_cast<Primitive&>(*arr[0]).data.fp32 == 2.0f);
-        REQUIRE(static_cast<Primitive&>(*arr[1]).data.fp32 == -5.0f);
-        REQUIRE(static_cast<Primitive&>(*arr[2]).data.fp32 == 1.5f);
+        REQUIRE(static_cast<Primitive&>(*arr[0]).data.f == 2.0f);
+        REQUIRE(static_cast<Primitive&>(*arr[1]).data.f == -5.0f);
+        REQUIRE(static_cast<Primitive&>(*arr[2]).data.f == 1.5f);
         delete val;
     }
 }

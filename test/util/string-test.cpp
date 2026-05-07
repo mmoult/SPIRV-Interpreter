@@ -10,7 +10,7 @@
 
 std::string to_string(float x) {
     std::stringstream s;
-    print_float(s, x);
+    print_float(s, x, 6);
     auto str = s.str();  // copied for debugging purposes
     return str;
 }

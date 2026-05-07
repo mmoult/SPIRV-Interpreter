@@ -131,7 +131,7 @@ std::tuple<unsigned, float> Image::decompose(float val) {
 }
 
 bool Image::equals(const Value& val) const {
-    if (!Value::equals(val))  // guarantees matching types
+    if (val.getType().getBase() != type.getBase())  // guarantees matching types
         return false;
     const Image& other = static_cast<const Image&>(val);
 

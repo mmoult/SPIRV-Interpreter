@@ -389,8 +389,6 @@ void element_shift_op(
     const Type& dst_type = *data[dst.type].getType();
 
     // Operate on two primitive arrays or two primitive scalars
-    std::vector<Primitive> prims;
-    std::vector<const Value*> pprims;
     const Type& tbase = src1->getType();
     auto tb = element_base(*src1);
     assert((tb == DataType::UINT || tb == DataType::INT) && "Cannot perform shift operation on non-integral element!");
@@ -519,6 +517,40 @@ void element_int_unary_op(unsigned unary, const OpDst& dst, DataView& data, UnOp
     element_unary_op(dt, unary, dst, data, (dt == DataType::UINT) ? u_op : i_op);
 }
 
+// Unary operation that is limited to FP16 or FP32 precision in the spec
+void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std::function<float(float)>& op) {
+    const Value* src1 = data[unary].getValue();
+    const Type& type = *data[dst.type].getType();
+    DataType btype = type.getBase();
+    unsigned prec;
+    if (btype == DataType::ARRAY || btype == DataType::COOP_MATRIX) {
+        const auto& el_type = type.getElement();
+        btype = el_type.getBase();
+        prec = el_type.getPrecision();
+    } else
+        prec = type.getPrecision();
+    assert(btype == DataType::FLOAT && "Cannot do unary operation on non-float element!");
+    assert(prec == 16 || prec == 32);
+
+    Value* res = type.construct();
+    // Operate on a single primitive scalar or array of primitives
+    if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
+        const Array& operand = *static_cast<const Array*>(src1);
+        Array& arr = static_cast<Array&>(*res);
+
+        for (unsigned i = 0; i < operand.getSize(); ++i) {
+            const auto* element = static_cast<const Primitive*>(operand[i]);
+            Primitive prim(static_cast<double>(op(element->data.f)));
+            arr[i]->copyFrom(prim);
+        }
+    } else {
+        const Primitive* operand = static_cast<const Primitive*>(src1);
+        Primitive prim(static_cast<double>(op(operand->data.f)));
+        res->copyFrom(prim);
+    }
+    data[dst.at].redefine(res);
+}
+
 using TernOp = std::function<Primitive(const Primitive*, const Primitive*, const Primitive*)>;
 
 void element_tern_op(
@@ -638,6 +670,13 @@ void element_tern_op(
         UnOp op = [](const Primitive* a) { return UNARY_OP; }; \
         OpDst dst {checkRef(dst_type_at, data_len), result_at}; \
         element_unary_op(DataType::E_TYPE, checkRef(src_at, data_len), dst, data, op); \
+        break; \
+    }
+#define PRECISION_E_UNARY_OP(UNARY_OP) \
+    { \
+        std::function<float(float)> op = [](float a) { return UNARY_OP; }; \
+        OpDst dst {checkRef(dst_type_at, data_len), result_at}; \
+        element_prec_unary_op(checkRef(src_at, data_len), dst, data, op); \
         break; \
     }
 #define E_TERN_OP(E_TYPE, OP_LAMBDA) \
@@ -2361,45 +2400,45 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
     case GLSLstd450Fract:  // 10
         TYPICAL_E_UNARY_OP(FLOAT, a->data.f - std::floor(a->data.f));
     case GLSLstd450Radians:  // 11
-        TYPICAL_E_UNARY_OP(FLOAT, a->data.f * std::numbers::pi / 180.0);
+        PRECISION_E_UNARY_OP(a * std::numbers::pi / 180.0);
     case GLSLstd450Degrees:  // 12
-        TYPICAL_E_UNARY_OP(FLOAT, a->data.f * 180.0 / std::numbers::pi);
+        PRECISION_E_UNARY_OP(a * 180.0 / std::numbers::pi);
     case GLSLstd450Sin:  // 13
-        TYPICAL_E_UNARY_OP(FLOAT, std::sin(a->data.f));
+        PRECISION_E_UNARY_OP(std::sin(a));
     case GLSLstd450Cos:  // 14
-        TYPICAL_E_UNARY_OP(FLOAT, std::cos(a->data.f));
+        PRECISION_E_UNARY_OP(std::cos(a));
     case GLSLstd450Tan:  // 15
-        TYPICAL_E_UNARY_OP(FLOAT, std::tan(a->data.f));
+        PRECISION_E_UNARY_OP(std::tan(a));
     case GLSLstd450Asin:  // 16
-        TYPICAL_E_UNARY_OP(FLOAT, std::asin(a->data.f));
+        PRECISION_E_UNARY_OP(std::asin(a));
     case GLSLstd450Acos:  // 17
-        TYPICAL_E_UNARY_OP(FLOAT, std::acos(a->data.f));
+        PRECISION_E_UNARY_OP(std::acos(a));
     case GLSLstd450Atan:  // 18
-        TYPICAL_E_UNARY_OP(FLOAT, std::atan(a->data.f));
+        PRECISION_E_UNARY_OP(std::atan(a));
     case GLSLstd450Sinh:  // 19
-        TYPICAL_E_UNARY_OP(FLOAT, std::sinh(a->data.f));
+        PRECISION_E_UNARY_OP(std::sinh(a));
     case GLSLstd450Cosh:  // 20
-        TYPICAL_E_UNARY_OP(FLOAT, std::cosh(a->data.f));
+        PRECISION_E_UNARY_OP(std::cosh(a));
     case GLSLstd450Tanh:  // 21
-        TYPICAL_E_UNARY_OP(FLOAT, std::tanh(a->data.f));
+        PRECISION_E_UNARY_OP(std::tanh(a));
     case GLSLstd450Asinh:  // 22
-        TYPICAL_E_UNARY_OP(FLOAT, std::asinh(a->data.f));
+        PRECISION_E_UNARY_OP(std::asinh(a));
     case GLSLstd450Acosh:  // 23
-        TYPICAL_E_UNARY_OP(FLOAT, std::acosh(a->data.f));
+        PRECISION_E_UNARY_OP(std::acosh(a));
     case GLSLstd450Atanh:  // 24
-        TYPICAL_E_UNARY_OP(FLOAT, std::atanh(a->data.f));
+        PRECISION_E_UNARY_OP(std::atanh(a));
     case GLSLstd450Atan2:  // 25
-        TYPICAL_E_BIN_OP(FLOAT, std::atan2(a->data.f, b->data.f));
+        TYPICAL_E_BIN_OP(FLOAT, std::atan2(static_cast<float>(a->data.f), static_cast<float>(b->data.f)));
     case GLSLstd450Pow:  // 26
-        TYPICAL_E_BIN_OP(FLOAT, std::pow(a->data.f, b->data.f));
+        TYPICAL_E_BIN_OP(FLOAT, std::pow(static_cast<float>(a->data.f), static_cast<float>(b->data.f)));
     case GLSLstd450Exp:  // 27
-        TYPICAL_E_UNARY_OP(FLOAT, std::exp(a->data.f));
+        PRECISION_E_UNARY_OP(std::exp(a));
     case GLSLstd450Log:  // 28
-        TYPICAL_E_UNARY_OP(FLOAT, std::log(a->data.f));
+        PRECISION_E_UNARY_OP(std::log(a));
     case GLSLstd450Exp2:  // 29
-        TYPICAL_E_UNARY_OP(FLOAT, std::exp2(a->data.f));
+        PRECISION_E_UNARY_OP(std::exp2(a));
     case GLSLstd450Log2:  // 30
-        TYPICAL_E_UNARY_OP(FLOAT, std::log2(a->data.f));
+        PRECISION_E_UNARY_OP(std::log2(a));
     case GLSLstd450Sqrt:  // 31
         TYPICAL_E_UNARY_OP(FLOAT, std::sqrt(a->data.f));
     case GLSLstd450InverseSqrt:  // 32

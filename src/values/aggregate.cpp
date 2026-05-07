@@ -61,7 +61,7 @@ void Aggregate::copyFrom(const Value& new_val) noexcept(false) {
 }
 
 bool Aggregate::equals(const Value& val) const {
-    if (!Value::equals(val))  // guarantees matching types
+    if (val.getType().getBase() != type.getBase())
         return false;
     const auto& other = static_cast<const Aggregate&>(val);
     // Shouldn't have to test lengths since that is encoded in the type
