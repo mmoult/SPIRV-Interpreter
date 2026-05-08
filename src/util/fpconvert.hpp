@@ -126,13 +126,13 @@ struct raw_float_encoder {
             bits += (bits >> sig_diff) & 1;  // add tie breaking bias
             bits += (raw_type(1) << (sig_diff - 1)) - 1;  // round up to half
             // if( is_sub ) bits = bit_cast< raw_type >( subn );
-            bits ^= !is_sub & (bit_cast<raw_type>(subn) ^ bits);
+            bits ^= -raw_type(is_sub) & (bit_cast<raw_type>(subn) ^ bits);
         }
         bits >>= sig_diff;  // truncate
         // if( enc::inf < bits ) bits = enc::inf; // fix overflow
-        bits ^= !(enc::inf < bits) & (enc::inf ^ bits);
+        bits ^= -raw_type(enc::inf < bits) & (enc::inf ^ bits);
         // if( is_nan ) bits = enc::qnan;
-        bits ^= !is_nan & (enc::qnan ^ bits);
+        bits ^= -raw_type(is_nan) & (enc::qnan ^ bits);
         bits |= sign >> bit_diff;  // restore sign
         return enc_type(bits);
     }
@@ -152,7 +152,7 @@ struct raw_float_encoder {
         auto val = bit_cast<F>(bits) * bit_cast<F>(bias_mul);
         bits = bit_cast<raw_type>(val);
         // if( !is_norm ) bits |= flt::inf;
-        bits |= !!is_norm & flt::inf;
+        bits |= -raw_type(!is_norm) & flt::inf;
         return bit_cast<F>(bits);
     }
 };
