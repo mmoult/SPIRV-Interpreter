@@ -45,7 +45,7 @@
 
 Value* construct_from_vec(const std::vector<Primitive>& vec, const Type* res_type) {
     Array& res = static_cast<Array&>(*res_type->construct());
-    for (auto i = 0; i < vec.size(); ++i)
+    for (size_t i = 0; i < vec.size(); ++i)
         res[i]->copyFrom(vec[i]);
     return &res;
 }
@@ -641,8 +641,8 @@ void element_tern_op(
 #define INT_E_BIN_OP(BIN_OP) \
     { \
         BinOp uufx = [](const Primitive* a, const Primitive* b) { return a->data.u BIN_OP b->data.u; }; \
-        BinOp uifx = [](const Primitive* a, const Primitive* b) { return a->data.u BIN_OP b->data.i; }; \
-        BinOp iufx = [](const Primitive* a, const Primitive* b) { return a->data.i BIN_OP b->data.u; }; \
+        BinOp uifx = [](const Primitive* a, const Primitive* b) { return a->data.u BIN_OP b->data.u; }; \
+        BinOp iufx = [](const Primitive* a, const Primitive* b) { return a->data.u BIN_OP b->data.u; }; \
         BinOp iifx = [](const Primitive* a, const Primitive* b) { return a->data.i BIN_OP b->data.i; }; \
         element_int_bin_op( \
             checkRef(src_at, data_len), \
