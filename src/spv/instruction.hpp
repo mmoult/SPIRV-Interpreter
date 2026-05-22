@@ -89,7 +89,7 @@ public:
     /// @param specs a list of ref indices in data pointing to specialization constants
     /// @param provided a map of input variables. Needed for spec constants
     /// @param entry_point an entry point instruction to get the execution model
-    void ioGen(
+    void registerInterface(
         DataView& data,
         std::vector<unsigned>& ins,
         std::vector<unsigned>& outs,
@@ -97,6 +97,9 @@ public:
         ValueMap& provided,
         const Instruction& entry_point
     ) const noexcept(false);
+
+    /// @brief Returns whether this instruction should have registerInterface called. Not every instruction needs it.
+    bool canInterface() const;
 
     spv::BuiltIn getVarBuiltIn(DataView& data) const {
         // The source of the variable could be OpVariable or some spec const variant.

@@ -50,8 +50,8 @@ Some shaders require some special steps to properly generate the template file:
 In summary, here is a comprehensive list of steps which may be taken to guarantee correct and total template generation:
 1. For all raytracing substages, generate extra input files. For example, consider a raytracing pipeline with an rgen
 shader, closest hit shader, and miss shader. The closest hit and miss shaders are substages and rgen is the main stage.
-Run `spirv-run -r closest.json rchit.spv` and `spirv-run -r miss.json rmiss.spv` (replacing the dummy names shown with
-the actual file paths and desired template outputs).
+Run `spirv-run -r -t closest.json rchit.spv` and `spirv-run -r -t miss.json rmiss.spv` (replacing the dummy names shown
+with the actual file paths and desired template outputs).
 2. Generate an initial template for the main shader stage. This will give you a template with all input variables when
 set to default specialization constant values (if any specialization constants) and an empty shader binding table (for
 raytracing only). Replace stubs with actual values.

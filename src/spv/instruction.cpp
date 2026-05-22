@@ -70,7 +70,20 @@ Value* Instruction::getFromPointer(unsigned index, DataView& data) const noexcep
     return pointer.dereference(*head);
 }
 
-void Instruction::ioGen(
+bool Instruction::canInterface() const {
+    switch (opcode) {
+    case spv::OpSpecConstantTrue:
+    case spv::OpSpecConstantFalse:
+    case spv::OpSpecConstant:
+    case spv::OpSpecConstantComposite:
+    case spv::OpVariable:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void Instruction::registerInterface(
     DataView& data,
     std::vector<unsigned>& ins,
     std::vector<unsigned>& outs,
@@ -78,16 +91,7 @@ void Instruction::ioGen(
     ValueMap& provided,
     const Instruction& entry_point
 ) const noexcept(false) {
-    switch (opcode) {
-    case spv::OpSpecConstantTrue:
-    case spv::OpSpecConstantFalse:
-    case spv::OpSpecConstant:
-    case spv::OpSpecConstantComposite:
-    case spv::OpVariable:
-        break;
-    default:
-        return;
-    }
+    assert(canInterface());
 
     Variable& var = *getVariable(1, data);
     unsigned id = std::get<unsigned>(operands[1].raw);

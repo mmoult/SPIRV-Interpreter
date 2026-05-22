@@ -41,7 +41,6 @@ struct RayTraceSubstage {
     // The acceleration struct from which this substage was generated. Used to set up rt fields in any recursive stage.
     AccelStruct* callingAs = nullptr;
 
-
     ValueMap getVariables(const std::vector<unsigned>& vars) const {
         ValueMap ret;
         for (const auto v : vars) {
@@ -63,52 +62,8 @@ public:
 
     /// @brief handle the given instruction, which is in a static context
     /// @param inst the instruction to handle
-    /// @return whether the instruction was adequately handled and should skip ioGen
-    bool handleStaticInst(const Instruction& inst) {
-        const Variable* var_p = (*data)[inst.getResult()].getVariable();
-        if (var_p == nullptr)
-            return false;
-        const Variable& var = *var_p;
-        unsigned loc = inst.getResult();
-
-        switch (var.getBuiltIn()) {
-        case spv::BuiltIn::BuiltInWorldRayOriginKHR:
-            worldRayOrigin.push_back(loc);
-            return true;
-        case spv::BuiltIn::BuiltInWorldRayDirectionKHR:
-            worldRayDirection.push_back(loc);
-            return true;
-        case spv::BuiltIn::BuiltInRayTmaxKHR:
-            rayTMax.push_back(loc);
-            return true;
-        case spv::BuiltIn::BuiltInRayTminKHR:
-            rayTMin.push_back(loc);
-            return true;
-        case spv::BuiltIn::BuiltInInstanceCustomIndexKHR:
-            instanceCustomIndex.push_back(loc);
-            return true;
-        case spv::BuiltIn::BuiltInRayGeometryIndexKHR:
-            geomIndex.push_back(loc);
-            return true;
-        default:
-            break;
-        }
-
-        // Check the storage class and type to find payload and accel struct
-        if (var.getVal().getType().getBase() == DataType::ACCEL_STRUCT) {
-            accelStruct = loc;
-            return true;
-        }
-        spv::StorageClass storage = var.getStorageClass();
-        if (storage == spv::StorageClassIncomingRayPayloadKHR || storage == spv::StorageClassIncomingCallableDataNV) {
-            payload = loc;
-            return true;
-        } else if (storage == spv::StorageClassHitAttributeKHR) {
-            hitAttribute = loc;
-            return true;
-        }
-        return false;
-    }
+    /// @return whether the instruction was adequately handled and should skip registerInterface
+    bool handleStaticInst(const Instruction& inst);
 
     /// @brief Set up all inputs except the hit attribute, which takes some special processing
     void setUpInputs(DataView& dat, AccelStruct* as, Value& payload, const InstanceNode* instance) const;
@@ -122,7 +77,7 @@ public:
     [[nodiscard]] Value*
     setUpHitAttribute(RtStageKind stage, DataView& dat, glm::vec2 barycentrics, Value* hit_attribute) const;
 
-    /// @brief Get a map of the record input, used primarily for generating templates
+    /// @brief Get a map of the record input, used primarily for generating templates.
     /// Although an overwhelming majority of values in the substage should be derived from a location or a builtin,
     /// there is an allowance to record-specific values. These values need to be passed per-substage.
     ValueMap getRecordInputs() const;

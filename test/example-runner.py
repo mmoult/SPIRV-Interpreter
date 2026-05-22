@@ -48,6 +48,7 @@ def recursive_test(interp_path, launch_dir, verbose):
     file_types = ["in", "out", "print"]
     for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True):
         program = None
+        multiple_programs = False
         configs = dict()
         error = False
         for file in files:
@@ -67,11 +68,13 @@ def recursive_test(interp_path, launch_dir, verbose):
                     configs[num][i] = file
             else:
                 if file.endswith(".spv"):
+                    if program is not None:
+                        multiple_programs = True
                     program = file
             if error:
                 break
 
-        if program is not None:
+        if program is not None and not multiple_programs:
             for num, files in configs.items():
                 # A timeout of 5 is 100,000 dynamic instruction executions
                 cmd = [interp_path, program, "-T", "5"]

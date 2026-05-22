@@ -1,5 +1,6 @@
 {
-	"gl_LaunchIDEXT" : [ 0, 0, 0 ],
+	"gl_LaunchIDEXT" : [ 2, 1, 1 ],
+	"gl_LaunchSizeEXT" : [ 3, 3, 3 ],
 	"image" : {
 		"ref" : "",
 		"dim" : [ 3, 3 ],
@@ -17,13 +18,12 @@
 			0.0, 0.0, 0.0, 0.0
 		]
 	},
-	"outColor" : [ -1.0, -1.0, -1.0, -1.0 ],
-	"shader_binding_table" : {
+	"@shader-binding-table" : {
 		"miss_records" : [],
 		"hit_group_records" : [],
 		"callable_records" : [
-			{ "shader" : "first.rcall.spv", "input" : "" },
-			{ "shader" : "second.rcall.spv", "input" : "second-in.json" }
+			{ "shader" : "called/first.rcall.spv", "input" : "" },
+			{ "shader" : "called/second.rcall.spv", "input" : "" }
 		]
 	}
 }

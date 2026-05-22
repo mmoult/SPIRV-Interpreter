@@ -281,13 +281,15 @@ int main(int argc, char* argv[]) {
     // Perform actions which don't require positional arguments (such as help and version):
     if (help.enabled) {
         std::vector<std::string> help_intro {
-            "spirv-run - Interpret SPIR-V shaders",
+            "spirv-run - Interpret SPIR-V shaders and kernels",
             "",
             "Usage: spirv-run [options] SPV",
             "where 'SPV' is a path to a spv file, which must have an OpEntry instruction.",
             "",
+            // NOLINTBEGIN(bugprone-suspicious-missing-comma)
             "Options may be given in any order or not at all. For all options which accept FILE as an argument, "
             "\"-\" may be given to use stdin or stdout instead. The list of options is given below:",
+            // NOLINTEND(bugprone-suspicious-missing-comma)
         };
         parser.printHelp(24, help_intro);
         return ReturnCode::INFO;
@@ -406,7 +408,7 @@ int main(int argc, char* argv[]) {
         format2->setTemplate(!generate.enabled);
 
         std::stringstream ss;
-        auto prog_ins = (!rt_template.enabled) ? program.getInputs(location.enabled) : dummy.getRecordInputs();
+        auto prog_ins = rt_template.enabled ? dummy.getRecordInputs() : program.getInputs(location.enabled);
         format2->printFile(ss, prog_ins);
 
         if (itemplate == "-") {

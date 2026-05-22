@@ -150,6 +150,7 @@ void Program::launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack
         instance = cand.instance;
         barycentrics = cand.barycentrics;
     }
+
     // the instruction which called launchSubstage is responsible for cleaning up the data too.
     DataView& data = *rt_stage.data->clone();
     launched_from.setRtData(data);
@@ -186,46 +187,44 @@ void Program::parse(std::string file_path, uint8_t* buffer, int length) noexcept
     data.setBound(std::max(bound, data.getBound()));
 }
 
-unsigned Program::init(ValueMap& provided, DataView& global, RayTraceSubstage* stage, bool single_invoc) {
+unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* stage, bool single_invoc) {
     unsigned entry = 0;
-    std::vector<unsigned>& ins = (stage == nullptr) ? this->ins : stage->ins;
-    std::vector<unsigned>& outs = (stage == nullptr) ? this->outs : stage->outs;
-    std::vector<unsigned>& specs = (stage == nullptr) ? this->specs : stage->specs;
 
     unsigned local_idx_loc = 0;
     unsigned local_id_loc = 0;
     unsigned global_id_loc = 0;
 
     auto process_visible_io = [&](const Instruction& inst, unsigned location) {
-        if (location != 0) {
-            // Some builtins need to be removed from the interface, in which case they continue,
-            // others just need to report results, in which they can be saved and break.
-            if (stage == nullptr) {
-                switch (inst.getVarBuiltIn(global)) {
-                case spv::BuiltIn::BuiltInLocalInvocationIndex:
-                case spv::BuiltIn::BuiltInInvocationId:
-                    localInvocIdx = inst.getResult();
-                    local_idx_loc = location;
-                    return;
-                case spv::BuiltIn::BuiltInLocalInvocationId:
-                    localInvocId = inst.getResult();
-                    local_id_loc = location;
-                    return;
-                case spv::BuiltIn::BuiltInGlobalInvocationId:
-                    globalInvocId = inst.getResult();
-                    global_id_loc = location;
-                    return;
-                case spv::BuiltIn::BuiltInWorkgroupSize:
-                    workGroupSize = inst.getResult();
-                    break;
-                default:
-                    break;
-                }
-            } else if (stage->handleStaticInst(inst))
-                return;
+        if (stage != nullptr && stage->handleStaticInst(inst))
+            return;
+
+        // Some builtins need to be removed from the interface, in which case they return.
+        // Others just need to save locations locally and be registered, in which case they break.
+        switch (inst.getVarBuiltIn(data)) {
+        case spv::BuiltIn::BuiltInLocalInvocationIndex:
+        case spv::BuiltIn::BuiltInInvocationId:
+            localInvocIdx = inst.getResult();
+            local_idx_loc = location;
+            return;
+        case spv::BuiltIn::BuiltInLocalInvocationId:
+            localInvocId = inst.getResult();
+            local_id_loc = location;
+            return;
+        case spv::BuiltIn::BuiltInGlobalInvocationId:
+            globalInvocId = inst.getResult();
+            global_id_loc = location;
+            return;
+        case spv::BuiltIn::BuiltInWorkgroupSize:
+            workGroupSize = inst.getResult();
+            break;
+        default:
+            break;
         }
 
-        inst.ioGen(global, ins, outs, specs, provided, insts[entry]);
+        std::vector<unsigned>& ins = (stage == nullptr) ? this->ins : stage->ins;
+        std::vector<unsigned>& outs = (stage == nullptr) ? this->outs : stage->outs;
+        std::vector<unsigned>& specs = (stage == nullptr) ? this->specs : stage->specs;
+        inst.registerInterface(data, ins, outs, specs, provided, insts[entry]);
     };
 
     Instruction::DecoQueue decorations(insts.getInstructions());
@@ -256,9 +255,12 @@ unsigned Program::init(ValueMap& provided, DataView& global, RayTraceSubstage* s
             if (inst.queueDecoration(data.getBound(), location, decorations))
                 continue;
 
-            inst.makeResult(global, location, &decorations);
+            if (!inst.makeResult(data, location, &decorations))
+                continue;
 
-            if (static_sec) {
+            if (static_sec && inst.canInterface()) {
+                // Note: we don't need to worry about variable declarations in non-static contexts since they will be
+                // executed dynamically (which will then populate the value).
                 if (inst.getOpcode() == spv::OpVariable)
                     static_vars.push_back(location);
                 else
@@ -272,21 +274,18 @@ unsigned Program::init(ValueMap& provided, DataView& global, RayTraceSubstage* s
     // Post processing. Had to delay init of static variables in case their pointer was forward declared
     for (unsigned location : static_vars) {
         Instruction& inst = insts[location];
+        assert(inst.getOpcode() == spv::OpVariable);
 
-        // Note: we don't need to worry about variable declarations in non-static contexts since they
-        // will be executed dynamically (which will then populate the value).
-        if (inst.getOpcode() == spv::OpVariable) {
-            Variable* var_v = global[inst.getResult()].getVariable();
-            if (var_v->isThreaded())
-                threadVars.push_back(location);
-            else {
-                Type* var_type = global[inst.getResultType()].getType();
-                var_v->initValue(*var_type);
-                inst.selectName(*var_v);
-            }
-
-            process_visible_io(inst, location);
+        Variable* var_v = data[inst.getResult()].getVariable();
+        if (var_v->isThreaded())
+            threadVars.push_back(location);
+        else {
+            Type* var_type = data[inst.getResultType()].getType();
+            var_v->initValue(*var_type);
+            inst.selectName(*var_v);
         }
+
+        process_visible_io(inst, location);
     }
 
     if (single_invoc) {
@@ -360,13 +359,17 @@ void Program::initRaytrace(RayTraceSubstage& stage, spv::ExecutionModel expected
         bool stage_is_buffer = VarCompare::isBuffer(stage_in);
         unsigned stage_binding = stage_in.getBinding();
         unsigned stage_desc_set = stage_in.getDescriptorSet();
-        bool name_check = Variable::isUnset(stage_binding) && Variable::isUnset(stage_desc_set);
+        auto stage_builtin = stage_in.getBuiltIn();
+        bool name_check = (stage_builtin == spv::BuiltIn::BuiltInMax) &&
+                          Variable::isUnset(stage_binding) && Variable::isUnset(stage_desc_set);
 
         for (unsigned m_in : this->ins) {
             Variable& main_in = *global[m_in].getVariable();
             bool match = false;
             if (name_check)
                 match = (main_in.getName() == stage_in.getName());
+            else if (stage_builtin != spv::BuiltIn::BuiltInMax)
+                match = (main_in.getBuiltIn() == stage_builtin);
             else {
                 bool main_is_buffer = VarCompare::isBuffer(main_in);
                 unsigned main_binding = main_in.getBinding();
@@ -428,7 +431,7 @@ void Program::checkInputs(ValueMap& provided, bool unused) noexcept(false) {
     // First, create a list of variables needed as inputs
     std::vector<Variable*> inputs;
     for (const auto in : ins)
-        // var already checked not null in ioGen
+        // var already checked not null in registerInterface
         inputs.push_back(global[in].getVariable());
 
     // Spec constants are not mandatory in the input file!
@@ -512,7 +515,7 @@ std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcep
     const auto& global = data.getGlobal();
     for (const auto out : outs) {
         auto var = global[out].getVariable();
-        // var already checked not null in ioGen
+        // var already checked not null in registerInterface
         outputs.push_back(var);
     }
     unsigned total_tests = outputs.size();

@@ -91,7 +91,7 @@ public:
         return insts.size();
     }
 
-    unsigned init(ValueMap& provided, DataView& global, RayTraceSubstage* stage, bool single_invoc);
+    unsigned init(ValueMap& provided, DataView& data, RayTraceSubstage* stage, bool single_invoc);
 
     void init(ValueMap& provided, bool single_invoc) noexcept(false) {
         entry = init(provided, data.getGlobal(), nullptr, single_invoc);

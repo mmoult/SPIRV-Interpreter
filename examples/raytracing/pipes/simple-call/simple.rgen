@@ -10,6 +10,9 @@ layout(location = 0) callableDataEXT vec4 outColor;
 layout(binding = 1, set = 0, rgba8) uniform writeonly image2D image;
 
 void main() {
+	outColor = vec4(-1);
+	// Dynamically select which callable shader to run via the first arg to execute callable.
+	// glslang infers that 0 -> the only callable data, which is "outColor"
 	executeCallableEXT(gl_LaunchIDEXT.z, 0);
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

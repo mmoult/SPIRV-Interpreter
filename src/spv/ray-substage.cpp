@@ -90,6 +90,51 @@ void RayTraceSubstage::setUpInputs(DataView& dat, AccelStruct* as, Value& payloa
     }
 }
 
+bool RayTraceSubstage::handleStaticInst(const Instruction& inst) {
+    const Variable* var_p = (*data)[inst.getResult()].getVariable();
+    assert(var_p != nullptr);
+    const Variable& var = *var_p;
+    unsigned loc = inst.getResult();
+
+    switch (var.getBuiltIn()) {
+    case spv::BuiltIn::BuiltInWorldRayOriginKHR:
+        worldRayOrigin.push_back(loc);
+        return true;
+    case spv::BuiltIn::BuiltInWorldRayDirectionKHR:
+        worldRayDirection.push_back(loc);
+        return true;
+    case spv::BuiltIn::BuiltInRayTmaxKHR:
+        rayTMax.push_back(loc);
+        return true;
+    case spv::BuiltIn::BuiltInRayTminKHR:
+        rayTMin.push_back(loc);
+        return true;
+    case spv::BuiltIn::BuiltInInstanceCustomIndexKHR:
+        instanceCustomIndex.push_back(loc);
+        return true;
+    case spv::BuiltIn::BuiltInRayGeometryIndexKHR:
+        geomIndex.push_back(loc);
+        return true;
+    default:
+        break;
+    }
+
+    // Check the storage class and type to find payload and accel struct
+    if (var.getVal().getType().getBase() == DataType::ACCEL_STRUCT) {
+        accelStruct = loc;
+        return true;
+    }
+    spv::StorageClass storage = var.getStorageClass();
+    if (storage == spv::StorageClassIncomingRayPayloadKHR || storage == spv::StorageClassIncomingCallableDataNV) {
+        payload = loc;
+        return true;
+    } else if (storage == spv::StorageClassHitAttributeKHR) {
+        hitAttribute = loc;
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] Value* RayTraceSubstage::setUpHitAttribute(
     RtStageKind stage,
     DataView& dat,

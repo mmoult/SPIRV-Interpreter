@@ -12,7 +12,7 @@ void main() {
     outColor = vec4(
         float(gl_LaunchIDEXT.x) / gl_LaunchSizeEXT.x,
         float(gl_LaunchIDEXT.y) / gl_LaunchSizeEXT.y,
-        0.0,
+        float(gl_LaunchIDEXT.z) / gl_LaunchSizeEXT.z,
         0.0
     );
 }
