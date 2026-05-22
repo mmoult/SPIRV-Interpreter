@@ -5,6 +5,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 import os
 import platform
+import subprocess
 
 
 def recursive_test(interp_path, launch_dir, verbose):
@@ -30,11 +31,18 @@ def recursive_test(interp_path, launch_dir, verbose):
             seen = f.read()
         return seen == stdout
 
+    def print_case(status, root, program, to_print, num=None):
+        if to_print:
+            print(status, os.path.relpath(os.path.join(root, program), launch_dir), end=' ')
+            if len(configs) > 1:
+                print("#", num, sep='', end='')
+            print()
+
     # Read through passlist.txt:
     # Each line is the path of a test to run
     fails = 0
     total = 0
-    import subprocess
+
     # All but "in" are types of output files. There must be a run for each distinct number. Multiple types can use the
     # same run if they share the same number. Input is expected, but optional.
     file_types = ["in", "out", "print"]
@@ -82,22 +90,23 @@ def recursive_test(interp_path, launch_dir, verbose):
                         case 2:  # print
                             output = True
                             out_file = file
+
+                status = "?"
+                to_print = verbose
                 if output:
                     total += 1
                     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
 
-                    status = "-"
-                    to_print = verbose
                     if res.returncode != 0 or not check_file(root, out_file, res.stdout):
                         status = "X"
                         fails += 1
-                        to_print = True
-                    if to_print:
-                        print(status, os.path.relpath(os.path.join(root, program), launch_dir), end=' ')
-                        if len(configs) > 1:
-                            print("#", num, sep='', end='')
-                        print()
-                    continue
+                        to_print = True  # print errors, regardless of whether verbose is on
+                    else:
+                        status = "-"
+
+                print_case(status, root, program, to_print, num if len(configs) > 1 else None)
+            if len(configs) == 0:
+                print_case("?", root, program, verbose)
 
     # Print results
     if total == 0:
