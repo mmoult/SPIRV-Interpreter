@@ -42,7 +42,7 @@ jobs:
         submodules: 'true'
 
     - name: Setup Cpp (C++ / C)
-      uses: aminya/setup-cpp@v0.46.2
+      uses: aminya/setup-cpp@v1.8.0
       with:
         compiler: ${{ matrix.compiler }}
         cmake: true
