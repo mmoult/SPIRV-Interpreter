@@ -198,7 +198,8 @@ int main(int argc, char* argv[]) {
     parser.addOption(
         &in_arg,
         "in",
-        "Specify a file to fetch input from. Alternatively, input may be specified in key-value pairs with --set.",
+        "Specify a file to fetch input from. May be given more than once. Alternatively, input may be specified in "
+        "key-value pairs with --set.",
         "i"
     );
     ArgParse::UintOption indent_arg("SIZE", 2);
@@ -343,8 +344,10 @@ int main(int argc, char* argv[]) {
     // Of course, even if there are specialization constants, they should have some default value which will be used if
     // the user doesn't provide something to override it.
     ValueMap inputs;
-    if (in_arg.isPresent())
-        REQUIRE(load_file(inputs, in_arg.getValue(), format));
+    if (in_arg.isPresent()) {
+        for (std::string input : in_arg.getValues())
+            REQUIRE(load_file(inputs, input, format));
+    }
 
     // Handle cmd info second since it could theoretically override what has been presented in the file
     if (set_arg.isPresent()) {

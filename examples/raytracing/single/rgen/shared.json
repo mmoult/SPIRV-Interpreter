@@ -1,19 +1,11 @@
 {
-	"out_buf" : {
+    "out_buf" : {
 		"hitT" : "NaN",
 		"ids" : [ 0, 0 ],
 		"hitKind" : 0
 	},
-	"ray" : {
-		"flags" : 0, // None
-		"cullMask" : 255, // 0xFF
-		"origin" : [ 3.8, 0.2, 0.1 ],
-		"direction" : [ -1, 0.2, -0.45 ],
-		"tMin" : 0.0,
-		"tMax" : 10.0
-	},
 
-	"as" : {
+    "as" : {
 		"tlas" : [ 0, 0 ],
 		"box_nodes" : [
 			{

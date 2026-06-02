@@ -754,6 +754,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         case Extension::GLSL_STD_450:
             return makeResultGlsl(data, location, result_at);
         case Extension::NONSEMANTIC_SHADER_DEBUG_INFO:
+        case Extension::NONSEMANTIC_CLSPV_REFLECTION:
             break;  // do nothing presently. Debug info only which could be printed.
         case Extension::NONSEMANTIC_DEBUG_PRINTF: {
             return makeResultPrintf(data, location, result_at);

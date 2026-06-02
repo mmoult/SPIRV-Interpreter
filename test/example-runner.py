@@ -43,9 +43,11 @@ def recursive_test(interp_path, launch_dir, verbose):
     fails = 0
     total = 0
 
-    # All but "in" are types of output files. There must be a run for each distinct number. Multiple types can use the
-    # same run if they share the same number. Input is expected, but optional.
-    file_types = ["in", "out", "print"]
+    # Construct a set of numbered tests, where certain file prefixes denote special meanings. Files are correlated
+    # together if they share the same number, for example in0 and out0 are for a single run.
+    file_types = ["in", "out", "print", "options"]
+    # Mandatory: out and/or print
+    # Optional: in, options
     for (root, dirs, files) in os.walk(os.path.abspath(launch_dir), topdown=True):
         program = None
         multiple_programs = False
@@ -93,6 +95,30 @@ def recursive_test(interp_path, launch_dir, verbose):
                         case 2:  # print
                             output = True
                             out_file = file
+                        case 3:  # options
+                            with open(os.path.join(root, file), 'r') as f:
+                                options = f.read()
+                            # Split, but keep strings together
+                            idx = 0
+                            word = []
+                            while idx < len(options):
+                                c = options[idx]
+                                if c == "'":
+                                    # jump ahead to the match
+                                    end = options.find("'", idx + 1)
+                                    if end == -1:
+                                        print("Unterminated string in options file!")
+                                        return 1
+                                    word.append(options[idx + 1:end])
+                                    idx = end
+                                elif c.isspace():
+                                    cmd.append(''.join(word))
+                                    word = []
+                                else:
+                                    word.append(c)
+                                idx += 1
+                            if len(word) > 0:
+                                cmd.append(''.join(word))
 
                 status = "?"
                 to_print = verbose

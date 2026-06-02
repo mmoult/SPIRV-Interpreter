@@ -1,0 +1,12 @@
+--in shared.json
+--format json
+--set '
+	"ray" : {
+		"flags" : 0, // None
+		"cullMask" : 255, // 0xFF
+		"origin" : [ -1, -0.4, -0.5 ],
+		"direction" : [ -1, 0.2, -0.4 ],
+		"tMin" : 0.0,
+		"tMax" : 1.0
+	}
+'

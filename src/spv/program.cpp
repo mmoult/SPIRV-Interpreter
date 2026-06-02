@@ -198,8 +198,6 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
         if (stage != nullptr && stage->handleStaticInst(inst))
             return;
 
-        // Some builtins need to be removed from the interface, in which case they return.
-        // Others just need to save locations locally and be registered, in which case they break.
         switch (inst.getVarBuiltIn(data)) {
         case spv::BuiltIn::BuiltInLocalInvocationIndex:
         case spv::BuiltIn::BuiltInInvocationId:
@@ -216,7 +214,7 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
             return;
         case spv::BuiltIn::BuiltInWorkgroupSize:
             workGroupSize = inst.getResult();
-            break;
+            return;
         default:
             break;
         }

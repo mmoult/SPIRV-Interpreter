@@ -15,13 +15,16 @@ Instruction::Extension Instruction::extensionFromString(const std::string& ext_n
         "SPV_KHR_ray_tracing",
         "SPV_KHR_ray_query",
         "NonSemantic.Shader.DebugInfo.100",
-        "NonSemantic.DebugPrintf"
+        "NonSemantic.DebugPrintf",
+        "NonSemantic.ClspvReflection.",
     };
 
     for (unsigned i = 0; i < supported_ext.size(); ++i) {
         if (ext_name == supported_ext[i])
             return static_cast<Instruction::Extension>(i);
     }
+    if (ext_name.find("NonSemantic.ClspvReflection.", 0) == 0)
+        return Instruction::Extension::NONSEMANTIC_CLSPV_REFLECTION;
     return Instruction::Extension::INVALID;
 }
 

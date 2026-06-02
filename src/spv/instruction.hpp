@@ -33,6 +33,7 @@ class Instruction {
         SPV_KHR_RAY_QUERY,
         NONSEMANTIC_SHADER_DEBUG_INFO,
         NONSEMANTIC_DEBUG_PRINTF,
+        NONSEMANTIC_CLSPV_REFLECTION,
         INVALID,
     };
 
