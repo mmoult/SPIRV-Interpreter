@@ -47,8 +47,13 @@ void Primitive::copyFrom(const Value& new_val) noexcept(false) {
         case UINT:
             data.u = other.data.u;
             break;
+        case INT:
+            // TODO verify that it is not negative or too large
+            if (other.data.i < 0)
+                throw std::runtime_error("Cannot convert negative int to uint!");
+            data.u = static_cast<uint64_t>(other.data.i);
+            break;
         default:
-            // No int -> uint since if it was int, it is probably negative
             // No float -> uint since if it was float, probably had decimal component
             throw std::runtime_error("Cannot convert to uint!");
         }

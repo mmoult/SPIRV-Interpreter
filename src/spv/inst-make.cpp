@@ -1399,10 +1399,30 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint64_t>(a->data.f));
     case spv::OpConvertFToS:  // 110
         TYPICAL_E_UNARY_OP(FLOAT, static_cast<int64_t>(a->data.f));
-    case spv::OpConvertSToF:  // 111
-        TYPICAL_E_UNARY_OP(INT, static_cast<double>(a->data.i));
-    case spv::OpConvertUToF:  // 112
-        TYPICAL_E_UNARY_OP(UINT, static_cast<double>(a->data.u));
+    case spv::OpConvertSToF: { // 111
+        // Force interpret the integer as signed, regardless of its source type. This matches the allowance in the spec
+        // that the input can be either signedness but has two variants: UToF and SToF.
+        UnOp sfx = [](const Primitive* a) { return static_cast<double>(a->data.i); };
+        element_int_unary_op(
+            checkRef(src_at, data_len),
+            OpDst {checkRef(dst_type_at, data_len), result_at},
+            data,
+            sfx,
+            sfx
+        );
+        break;
+    }
+    case spv::OpConvertUToF: { // 112
+        UnOp ufx = [](const Primitive* a) { return static_cast<double>(a->data.u); };
+        element_int_unary_op(
+            checkRef(src_at, data_len),
+            OpDst {checkRef(dst_type_at, data_len), result_at},
+            data,
+            ufx,
+            ufx
+        );
+        break;
+    }
     case spv::OpUConvert:  // 113
                            // Convert from Int or Uint -> Uint
     case spv::OpSConvert:  // 114

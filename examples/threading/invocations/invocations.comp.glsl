@@ -15,9 +15,9 @@ struct Fields
     uint f;
     uint g;
     uint h;
-    uint i;
-    uint j;
-    uint k;
+    float i;
+    float j;
+    float k;
 };
 
 layout(set = 0, binding = 0, std430) buffer Initial
@@ -63,25 +63,25 @@ void main()
     uint _135 = offset.indices.y + gl_GlobalInvocationID.y + _5.y;
     if ((int(_130) < int(offset.fields.h)) ? (int(_135) < int(offset.fields.g)) : false)
     {
-        float _145 = fma(float(_130) + 0.5, uintBitsToFloat(offset.fields.i), -0.5);
-        float _148 = fma(float(_135) + 0.5, uintBitsToFloat(offset.fields.j), -0.5);
+        float _145 = fma(float(_130) + 0.5, offset.fields.i, -0.5);
+        float _148 = fma(float(_135) + 0.5, offset.fields.j, -0.5);
         uint _150 = uint(floor(_145));
         uint _152 = uint(floor(_148));
-        uint _159 = uint(max(int(_150), int(0u)));
+        uint _159 = max(_150, 0u);
         bool _160 = int(_159) < int(offset.fields.d);
         uint _161 = offset.fields.d + 4294967295u;
-        float _162 = _160 ? ((int(_150) < int(0u)) ? 0.0 : (_145 - float(_150))) : 0.0;
+        float _162 = _160 ? ((_150 < 0) ? 0.0 : (_145 - float(_150))) : 0.0;
         uint _163 = _160 ? _159 : _161;
-        uint _166 = uint(max(int(_152), int(0u)));
+        uint _166 = uint(max(_152, 0u));
         bool _167 = int(_166) < int(offset.fields.c);
         uint _168 = offset.fields.c + 4294967295u;
-        float _169 = _167 ? ((int(_152) < int(0u)) ? 0.0 : (_148 - float(_152))) : 0.0;
+        float _169 = _167 ? ((_152 < 0u) ? 0.0 : (_148 - float(_152))) : 0.0;
         uint _170 = _167 ? _166 : _168;
         float _175 = 1.0 - _162;
         float _176 = 1.0 - _169;
         uint _177 = _163 << 3u;
         uint _178 = _170 * offset.fields.a;
-        uint _180 = (_178 + _177) + offset.fields.b;
+        uint _180 = _178 + _177 + offset.fields.b;
         u8vec4 _204;
         _204.x = initial.data[_180];
         _204.y = initial.data[_180 + 1u];
@@ -139,7 +139,7 @@ void main()
         float _333 = _162 * _176;
         float _338 = _175 * _169;
         float _342 = _162 * _169;
-        float _345 = uintBitsToFloat(offset.fields.k);
+        float _345 = offset.fields.k;
         vec2 _348 = vec2(_345) * fma(
             vec2(_342),
             pack(u16vec4(_325.x, _325.y, _326.x, _326.y)),
