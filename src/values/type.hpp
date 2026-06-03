@@ -338,6 +338,9 @@ public:
     inline DataType getBase() const {
         return base;
     }
+    bool isArray() const {
+        return base == DataType::ARRAY || base == DataType::COOP_MATRIX;
+    }
 
     [[nodiscard]] Value* asValue() const override;
 };

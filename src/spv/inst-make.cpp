@@ -282,9 +282,14 @@ Value* composite_extract(Value* composite, unsigned index_start, const std::vect
     return ptr.dereference(*composite);
 }
 
+const Type& element_type(const Type& type) {
+    if (type.isArray())
+        return type.getElement();
+    return type;
+}
 DataType type_base(const Type& type) {
     auto base = type.getBase();
-    if (base == DataType::ARRAY || base == DataType::COOP_MATRIX)
+    if (type.isArray())
         base = type.getElement().getBase();
     return base;
 }
@@ -328,8 +333,8 @@ void element_bin_op(
 
     Value* res = data[dst.type].getType()->construct();
 
-    if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
-        assert(type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX);
+    if (type1.isArray()) {
+        assert(type2.isArray());
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         assert((op1.getSize() == op2.getSize()) && "Cannot do binary operation on arrays of different size!");
@@ -342,7 +347,7 @@ void element_bin_op(
             arr[i]->copyFrom(result);
         }
     } else {
-        assert(type2.getBase() != DataType::ARRAY);
+        assert(!type2.isArray());
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         auto result = op(op1, op2);
@@ -396,7 +401,7 @@ void element_shift_op(
     assert((tb == DataType::UINT || tb == DataType::INT) && "Cannot perform shift operation on non-integral element!");
     Value* res = dst_type.construct();
 
-    if (tbase.getBase() == DataType::ARRAY || tbase.getBase() == DataType::COOP_MATRIX) {
+    if (tbase.isArray()) {
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         assert((op1.getSize() == op2.getSize()) && "Cannot do shift operation on arrays of different size!");
@@ -456,8 +461,8 @@ void element_extended_arith_op(
     Struct& res = static_cast<Struct&>(*res_v);
     assert(res.getSize() == 2);
 
-    if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
-        assert(type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX);
+    if (type1.isArray()) {
+        assert(type2.isArray());
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         unsigned asize = op1.getSize();
@@ -474,7 +479,7 @@ void element_extended_arith_op(
                static_cast<Primitive*>(res_hi[i]));
         }
     } else {
-        assert(type2.getBase() != DataType::ARRAY && type2.getBase() != DataType::COOP_MATRIX);
+        assert(!type2.isArray());
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         op(op1, op2, static_cast<Primitive*>(res[0]), static_cast<Primitive*>(res[1]));
@@ -493,7 +498,7 @@ void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataVie
     Value* res = type.construct();
 
     // Operate on a single primitive scalar or array of primitives
-    if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
+    if (type.isArray()) {
         const Array& operand = *static_cast<const Array*>(src1);
         Array& arr = static_cast<Array&>(*res);
         if (arr.getType().getBase() == DataType::COOP_MATRIX)
@@ -527,20 +532,16 @@ void element_int_unary_op(unsigned unary, const OpDst& dst, DataView& data, UnOp
 void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std::function<float(float)>& op) {
     const Value* src1 = data[unary].getValue();
     const Type& type = *data[dst.type].getType();
-    DataType btype = type.getBase();
-    unsigned prec;
-    if (btype == DataType::ARRAY || btype == DataType::COOP_MATRIX) {
-        const auto& el_type = type.getElement();
-        btype = el_type.getBase();
-        prec = el_type.getPrecision();
-    } else
-        prec = type.getPrecision();
+
+    const Type& el_type = element_type(type);
+    DataType btype = el_type.getBase();
+    unsigned prec = el_type.getPrecision();
     assert(btype == DataType::FLOAT && "Cannot do unary operation on non-float element!");
     assert(prec == 16 || prec == 32);
 
     Value* res = type.construct();
     // Operate on a single primitive scalar or array of primitives
-    if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
+    if (type.isArray()) {
         const Array& operand = *static_cast<const Array*>(src1);
         Array& arr = static_cast<Array&>(*res);
         if (arr.getType().getBase() == DataType::COOP_MATRIX)
@@ -585,11 +586,8 @@ void element_tern_op(
     );
     Value* res = data[dst.type].getType()->construct();
 
-    if (type1.getBase() == DataType::ARRAY || type1.getBase() == DataType::COOP_MATRIX) {
-        assert(
-            (type2.getBase() == DataType::ARRAY || type2.getBase() == DataType::COOP_MATRIX) &&
-            (type3.getBase() == DataType::ARRAY || type3.getBase() == DataType::COOP_MATRIX)
-        );
+    if (type1.isArray()) {
+        assert(type2.isArray() && type3.isArray());
         const Array& op1 = *static_cast<const Array*>(src1);
         const Array& op2 = *static_cast<const Array*>(src2);
         const Array& op3 = *static_cast<const Array*>(src3);
@@ -609,10 +607,7 @@ void element_tern_op(
             arr[i]->copyFrom(result);
         }
     } else {
-        assert(
-            (type2.getBase() != DataType::ARRAY && type2.getBase() != DataType::COOP_MATRIX) ||
-            (type3.getBase() != DataType::ARRAY && type3.getBase() != DataType::COOP_MATRIX)
-        );
+        assert(!type2.isArray() && !type3.isArray());
         const Primitive* op1 = static_cast<const Primitive*>(src1);
         const Primitive* op2 = static_cast<const Primitive*>(src2);
         const Primitive* op3 = static_cast<const Primitive*>(src3);
@@ -1399,7 +1394,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         TYPICAL_E_UNARY_OP(FLOAT, static_cast<uint64_t>(a->data.f));
     case spv::OpConvertFToS:  // 110
         TYPICAL_E_UNARY_OP(FLOAT, static_cast<int64_t>(a->data.f));
-    case spv::OpConvertSToF: { // 111
+    case spv::OpConvertSToF: {  // 111
         // Force interpret the integer as signed, regardless of its source type. This matches the allowance in the spec
         // that the input can be either signedness but has two variants: UToF and SToF.
         UnOp sfx = [](const Primitive* a) { return static_cast<double>(a->data.i); };
@@ -1412,7 +1407,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         );
         break;
     }
-    case spv::OpConvertUToF: { // 112
+    case spv::OpConvertUToF: {  // 112
         UnOp ufx = [](const Primitive* a) { return static_cast<double>(a->data.u); };
         element_int_unary_op(
             checkRef(src_at, data_len),
@@ -1943,7 +1938,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpShiftRightArithmetic: {  // 195
         const auto* val = getValue(src_at, data);
         const auto type = val->getType();
-        auto prec = type.getPrecision();
+        auto prec = element_type(type).getPrecision();
         uint64_t bitmask = (prec == 64) ? ~0ULL : (1ULL << prec) - 1;
         E_SHIFT_OP([bitmask](const Primitive* a, const Primitive* b) {
             auto base = a->data.u;
@@ -2064,12 +2059,10 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpBitReverse: {  // 204
         const Value& operand = *getValue(src_at, data);
-        const Type* type = &operand.getType();
-        if (type->getBase() == DataType::ARRAY)
-            type = &type->getElement();
-        auto base = type->getBase();
+        const Type& type = element_type(operand.getType());
+        auto base = type.getBase();
         assert((base == DataType::UINT || base == DataType::INT) && "Cannot reverse bits of non-integral-typed value!");
-        unsigned width = type->getPrecision();
+        unsigned width = type.getPrecision();
         assert(width <= 32);  // TODO: Handle higher precisions
 
         UnOp op = [width, type](const Primitive* a) {
@@ -2079,7 +2072,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             for (unsigned i = 0; i < width; ++i)
                 res |= ((a->data.u >> i) & 1) << (max - i);
             Primitive ret(res);
-            ret.cast(*type);
+            ret.cast(type);
             return ret;
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};

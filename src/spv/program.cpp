@@ -358,8 +358,8 @@ void Program::initRaytrace(RayTraceSubstage& stage, spv::ExecutionModel expected
         unsigned stage_binding = stage_in.getBinding();
         unsigned stage_desc_set = stage_in.getDescriptorSet();
         auto stage_builtin = stage_in.getBuiltIn();
-        bool name_check = (stage_builtin == spv::BuiltIn::BuiltInMax) &&
-                          Variable::isUnset(stage_binding) && Variable::isUnset(stage_desc_set);
+        bool name_check = (stage_builtin == spv::BuiltIn::BuiltInMax) && Variable::isUnset(stage_binding) &&
+                          Variable::isUnset(stage_desc_set);
 
         for (unsigned m_in : this->ins) {
             Variable& main_in = *global[m_in].getVariable();
