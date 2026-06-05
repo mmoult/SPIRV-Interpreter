@@ -1,30 +1,47 @@
-'32': <uint>
+# Test for single invocation running (see options2.txt)
 
-'33': <uint>
-
-'34': <uint>
+# Control the workgroup size
+'32': 1
+'33': 2
+'34': 3
+# And control the specific invocation to execute
+gl_GlobalInvocationID: [ 0, 1, 0 ]
 
 ending:
-  values:
-  - <uint>
-  - <...>
+  values: [
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0
+  ]
 
 initial:
-  data:
-  - <uint>
-  - <...>
+  data: [
+    0, 1, 2, 3,
+    4, 5, 6, 7,
+    8, 9, 10, 11,
+    12, 13, 14, 15,
+    16, 17, 18, 19,
+    20, 21, 22, 23,
+    24, 25, 26, 27,
+    28, 29, 30, 31,
+    32, 33, 34, 35,
+    36, 37, 38, 39
+  ]
 
 offset:
-  indices: [ <uint>, <uint>, <uint> ]
+  indices: [ 0, 1, 2 ]
   fields:
-    a: <uint>
-    b: <uint>
-    c: <uint>
-    d: <uint>
-    e: <uint>
-    f: <uint>
-    g: <uint>
-    h: <uint>
-    i: <float>
-    j: <float>
-    k: <float>
+    a: 1
+    b: 0
+    c: 67890
+    d: 12345
+    e: 1
+    f: 2
+    g: 10
+    h: 11
+    i: 1.62
+    j: 2.97
+    k: 3.12

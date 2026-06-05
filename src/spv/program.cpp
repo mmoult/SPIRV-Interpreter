@@ -195,28 +195,32 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
     unsigned global_id_loc = 0;
 
     auto process_visible_io = [&](const Instruction& inst, unsigned location) {
-        if (stage != nullptr && stage->handleStaticInst(inst))
-            return;
+        // Location == 0 indicates that we are running this again for the same instruction. Must register to interface
+        // without any of the checks or processing.
+        if (location != 0) {
+            if (stage != nullptr && stage->handleStaticInst(inst))
+                return;
 
-        switch (inst.getVarBuiltIn(data)) {
-        case spv::BuiltIn::BuiltInLocalInvocationIndex:
-        case spv::BuiltIn::BuiltInInvocationId:
-            localInvocIdx = inst.getResult();
-            local_idx_loc = location;
-            return;
-        case spv::BuiltIn::BuiltInLocalInvocationId:
-            localInvocId = inst.getResult();
-            local_id_loc = location;
-            return;
-        case spv::BuiltIn::BuiltInGlobalInvocationId:
-            globalInvocId = inst.getResult();
-            global_id_loc = location;
-            return;
-        case spv::BuiltIn::BuiltInWorkgroupSize:
-            workGroupSize = inst.getResult();
-            return;
-        default:
-            break;
+            switch (inst.getVarBuiltIn(data)) {
+            case spv::BuiltIn::BuiltInLocalInvocationIndex:
+            case spv::BuiltIn::BuiltInInvocationId:
+                localInvocIdx = inst.getResult();
+                local_idx_loc = location;
+                return;
+            case spv::BuiltIn::BuiltInLocalInvocationId:
+                localInvocId = inst.getResult();
+                local_id_loc = location;
+                return;
+            case spv::BuiltIn::BuiltInGlobalInvocationId:
+                globalInvocId = inst.getResult();
+                global_id_loc = location;
+                return;
+            case spv::BuiltIn::BuiltInWorkgroupSize:
+                workGroupSize = inst.getResult();
+                return;
+            default:
+                break;
+            }
         }
 
         std::vector<unsigned>& ins = (stage == nullptr) ? this->ins : stage->ins;
