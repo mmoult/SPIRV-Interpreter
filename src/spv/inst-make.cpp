@@ -2058,25 +2058,29 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         break;
     }
     case spv::OpBitReverse: {  // 204
-        const Value& operand = *getValue(src_at, data);
-        const Type& type = element_type(operand.getType());
-        auto base = type.getBase();
+        auto src_at_idx = checkRef(src_at, data_len);
+        const Value& operand = *data[src_at_idx].getValue();
+        const Type& el_type = element_type(operand.getType());
+        auto base = el_type.getBase();
         assert((base == DataType::UINT || base == DataType::INT) && "Cannot reverse bits of non-integral-typed value!");
-        unsigned width = type.getPrecision();
-        assert(width <= 32);  // TODO: Handle higher precisions
+        auto dst_type_idx = checkRef(dst_type_at, data_len);
+        const Type& dst_type = element_type(*data[dst_type_idx].getType());
+        unsigned src_width = el_type.getPrecision();
+        // It may be a little unintuitive, but the spec says that the width used is of the "Result Type".
+        unsigned max = dst_type.getPrecision() - 1;
 
-        UnOp op = [width, type](const Primitive* a) {
-            // In a bit reverse, we can handle either i or u as u
-            uint32_t res = 0;
-            unsigned max = width - 1;
-            for (unsigned i = 0; i < width; ++i)
-                res |= ((a->data.u >> i) & 1) << (max - i);
-            Primitive ret(res);
-            ret.cast(type);
+        UnOp op = [src_width, max, dst_type](const Primitive* a) {
+            uint64_t raw = a->getRaw();
+            uint64_t res = 0;
+            for (unsigned i = 0; i < src_width; ++i)
+                res |= ((raw >> i) & 1) << (max - i);
+            Primitive tmp(res);
+            Primitive ret(dst_type);
+            ret.copyReinterp(tmp);
             return ret;
         };
-        OpDst dst {checkRef(dst_type_at, data_len), result_at};
-        element_unary_op(base, checkRef(src_at, data_len), dst, data, op);
+        OpDst dst {dst_type_idx, result_at};
+        element_unary_op(base, src_at_idx, dst, data, op);
         break;
     }
     case spv::OpLabel:  // 248

@@ -31,9 +31,6 @@ struct Primitive final : public Value {
 
     using enum DataType;
 
-    // Gets the raw bits of the primitive by the type. In other words, go from emulation bits to compressed exact bits.
-    uint64_t getRaw() const;
-
 public:
     // Construct a primitive with the emulated value. If the value needs to be quantized or masked, that should be done
     // prior to the constructor call.
@@ -91,6 +88,9 @@ public:
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override;
+
+    // Gets the raw bits of the primitive by the type. In other words, go from emulation bits to compressed exact bits.
+    uint64_t getRaw() const;
 
     void copyReinterp(const Value& other) noexcept(false) override;
 
