@@ -25,6 +25,8 @@ class Instruction {
     spv::Op opcode;
     bool hasResult;
     bool hasResultType;
+protected:
+    // Fields protected for the sake of testing
     std::vector<Token> operands;
 
     enum class Extension : unsigned {
@@ -36,6 +38,7 @@ class Instruction {
         NONSEMANTIC_CLSPV_REFLECTION,
         INVALID,
     };
+private:
 
     /// @brief Find if a given extension is supported by the interpreter
     /// @param ext_name name of the extension
@@ -67,8 +70,8 @@ class Instruction {
 
     Value* getFromPointer(unsigned index, DataView& data) const noexcept(false);
 
-    bool makeResultGlsl(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
-    bool makeResultPrintf(DataView& data, unsigned location, unsigned result_at) const noexcept(false);
+    bool makeResultGlsl(DataView& data, unsigned result_at) const noexcept(false);
+    bool makeResultPrintf(DataView& data) const noexcept(false);
 
     [[nodiscard]] Value*
     handleImage(DataView& data, const Value& img, const Value* coords, unsigned img_qualifier, bool proj = false) const;

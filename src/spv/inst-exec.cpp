@@ -80,7 +80,6 @@ Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expecte
             if (trigger != expected)
                 throw std::runtime_error("Corrupted raytrace stack! Launching frame found of incorrect type!");
             return frame_stack[launch_at];
-            break;
         }
     }
     return nullptr;

@@ -48,6 +48,7 @@ bool Program::ProgramLoader::getWord(uint32_t& res) {
 }
 
 bool Program::ProgramLoader::skip(int delta) {
+    assert(delta >= 1);
     delta *= 4;
     if (idx + delta >= length)
         return false;
@@ -584,6 +585,7 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
         const Aggregate& sizeAgg = static_cast<const Aggregate&>(workSizeVar.getVal());
         // Update the entry point
         EntryPoint& ep = entry_inst.getEntryPoint(global);
+        assert(sizeAgg.getSize() == 3);
         ep.sizeX = static_cast<const Primitive*>(sizeAgg[0])->data.u;
         ep.sizeY = static_cast<const Primitive*>(sizeAgg[1])->data.u;
         ep.sizeZ = static_cast<const Primitive*>(sizeAgg[2])->data.u;

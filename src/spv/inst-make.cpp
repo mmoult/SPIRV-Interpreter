@@ -747,12 +747,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         Extension ext = static_cast<Extension>(prim.data.u);
         switch (ext) {
         case Extension::GLSL_STD_450:
-            return makeResultGlsl(data, location, result_at);
+            return makeResultGlsl(data, result_at);
         case Extension::NONSEMANTIC_SHADER_DEBUG_INFO:
         case Extension::NONSEMANTIC_CLSPV_REFLECTION:
             break;  // do nothing presently. Debug info only which could be printed.
         case Extension::NONSEMANTIC_DEBUG_PRINTF: {
-            return makeResultPrintf(data, location, result_at);
+            return makeResultPrintf(data);
         }
         default:
             assert(false);
@@ -2367,7 +2367,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     return true;
 }
 
-bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned result_at) const noexcept(false) {
+bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexcept(false) {
     unsigned data_len = data.getBound();
     // https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.pdf
     // extension opcode at operand[3]
@@ -2564,7 +2564,6 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         // Note, the logic of this case is very similar to element_unary_op, but it necessarily differs in the output
         // construction, and thus, must be independent.
         const Type& type = src1->getType();
-        std::vector<Primitive> prims;
         assert(element_base(*src1) == DataType::FLOAT && "Cannot do ModfStruct operation on non-float input!");
 
         Value* res = data[checkRef(dst_type_at, data_len)].getType()->construct();
@@ -2583,7 +2582,6 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
         if (type.getBase() == DataType::ARRAY) {
             const Array& operand = *static_cast<const Array*>(src1);
             unsigned asize = operand.getSize();
-            prims.reserve(asize * 2);
 
             auto& fracts = static_cast<Aggregate&>(*agg[0]);
             auto& wholes = static_cast<Aggregate&>(*agg[1]);
@@ -3099,7 +3097,7 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned location, unsigned res
 #undef E_SHIFT_OP
 #undef E_TERN_OP
 
-bool Instruction::makeResultPrintf(DataView& data, unsigned location, unsigned result_at) const noexcept(false) {
+bool Instruction::makeResultPrintf(DataView& data) const noexcept(false) {
     // extension opcode at operand[3]
     unsigned ext_opcode = std::get<unsigned>(operands[3].raw);
     if (ext_opcode != 1)

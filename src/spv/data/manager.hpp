@@ -70,7 +70,7 @@ class DataManager {
     std::vector<DataView*> views;
 
 public:
-    DataManager(unsigned max = 0) : max(max), global(nullptr) {
+    DataManager(unsigned max = 1) : max(max), global(nullptr) {
         global.setSource(this);
     };
     DataManager(const DataManager& other) = delete;

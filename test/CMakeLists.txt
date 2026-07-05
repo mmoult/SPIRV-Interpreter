@@ -13,6 +13,7 @@ target_sources(tests
       format/json-test.cpp
       format/parse-test.cpp
       format/yaml-test.cpp
+      spv/instruction-test.cpp
       util/compare-test.cpp
       util/string-test.cpp
       util/trie-test.cpp

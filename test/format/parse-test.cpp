@@ -9,10 +9,10 @@
 #include <sstream>
 
 #include <catch2/catch_test_macros.hpp>
-#include "../../src/values/value.hpp"
 #include "../../src/format/parse.hpp"
 #include "../../src/values/aggregate.hpp"
 #include "../../src/values/primitive.hpp"
+#include "../../src/values/value.hpp"
 
 class TestFormat : public ValueFormat {
 private:
@@ -87,7 +87,7 @@ void check_int(TestFormat& format, int val) {
     REQUIRE(got == val);
     REQUIRE(type == DataType::INT);
 }
-void check_uint(TestFormat& format, int val) {
+void check_uint(TestFormat& format, unsigned val) {
     std::stringstream tos;
     tos << val;
     std::string str = tos.str();
@@ -107,7 +107,7 @@ TEST_CASE("parseNumber", "[parse]") {
     check_float(format, 0.12346);
     check_float(format, -35.482);
     check_uint(format, 0);
-    check_uint(format, std::numeric_limits<int32_t>::max());
+    check_uint(format, std::numeric_limits<uint32_t>::max());
     check_uint(format, std::numeric_limits<uint32_t>::min());
     check_int(format, -1);
     check_int(format, std::numeric_limits<int32_t>::min());

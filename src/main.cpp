@@ -88,21 +88,24 @@ ReturnCode parse_spv(Program& program, std::string program_path) {
     // get its size:
     ifs.seekg(0, ifs.end);
     int length = ifs.tellg();
+    if (length < 0) {
+        std::cerr << "Failed file read for \"" << program_path << "\"!" << std::endl;
+        return ReturnCode::BAD_FILE;
+    }
     ifs.seekg(0, ifs.beg);
     // allocate memory:
-    char* buffer = new char[length];
+    std::vector<char> buffer(length);
     // read data as a block:
-    ifs.read(buffer, length);
+    ifs.read(buffer.data(), length);
     ifs.close();
 
     // The signedness of char is implementation defined. Use uint8_t to remove ambiguity
     try {
-        program.parse(program_path, std::bit_cast<uint8_t*>(buffer), length);
+        program.parse(program_path, std::bit_cast<uint8_t*>(buffer.data()), length);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::BAD_PARSE;
     }
-    delete[] buffer;  // delete source now that it has been inserted into the program
 
     return ReturnCode::OK;
 }

@@ -1,7 +1,7 @@
 # Usage Help
 
 Use `-h` or `--help` on the `spirv-run` executable to see the definitive list of command line arguments and flags.
-However, some of the more complex options have extra information here.
+This file expands upon some of the more complex options by giving extra information.
 
 ## Input
 
@@ -11,11 +11,11 @@ The interpreter can automatically generate template files which can be filled in
 as inputs. In the simplest case, you can do:
 
 ```
-spirv-run -t in.yaml spv_file
+spirv-run -t in.yaml shader.spv
 ```
 
-to generate a template file, `in.yaml`, for the given SPIR-V file, `spv_file`. Each variable which can be given as input
-for the SPIR-V file will have its name appear in the template file assigned to some stub value.
+to generate a template file, `in.yaml`, for the given SPIR-V file, `shader.spv`. Each variable which can be given as
+input for the SPIR-V file will have its name appear in the template file assigned to some stub value.
 
 A stub value matches the expected type of the value to which it is assigned. Array variables have stub array values,
 recursively composed of stub values for each element. Similarly, object variables have stub object values, recursively
@@ -27,11 +27,11 @@ composed of stub values for each of its fields. Stub primitives match the form:
 
 There are five main stub primitives, corresponding to each of the five primitive types:
 
-- floating point number, a.k.a. `float` -> `<float>`
-- signed integer, a.k.a. `int` -> `<int>`
-- unsigned integer, a.k.a. `uint` -> `<uint>`
-- Boolean value, a.k.a. `bool` -> `<bool>`
-- string character sequence, a.k.a. `string` -> `<string>`
+- `<float>`  -- floating point number, such as `3.14`, `-0.81`, or `42.0`
+- `<int>`    -- signed integer, such as `-916` or `7`
+- `<uint>`   -- unsigned integer, such as `3` or `582`
+- `bool`     -- Boolean value, corresponding to either `true` or `false`
+- `<string>` -- string character sequence using `"double quotes"`
 
 Additionally, there is a special sixth stub primitive, `<...>`, which is used in arrays to indicate that the previous
 value may be repeated 0 or more times. This is used to handle "runtime arrays" in SPIR-V, where the size of an array is
@@ -56,7 +56,7 @@ with the actual file paths and desired template outputs).
 set to default specialization constant values (if any specialization constants) and an empty shader binding table (for
 raytracing only). Replace stubs with actual values.
 3. Generate *another* template file, using the filled template generated in step 2 as an input. For example, do
-`spirv-run -i first.json -t in.json spv_file`. It is recommended to match the file formats between the initial template
+`spirv-run -i first.json -t in.json shader.spv`. It is recommended to match the file formats between the initial template
 and the desired final template.
 4. Fill in the new template file, especially any new or changed values. If a variable appears with the same stub for its
 value in the final and original template, it is safe to copy the value from the initial template directly into the final
@@ -69,9 +69,8 @@ This section is in development. Come back later.
 
 ## Program Control
 
-This section is in development. Come back later.
-
 ### Timeout
+
 SPIR-V programs may contain infinite loops, especially for unintended inputs. When invoking the interpreter, it may be
 undesirable for the execution to extend beyond an anticipated runtime. This is often the case when running testing
 scripts- an infinite loop would prevent the execution from being calculated into the final result.
@@ -83,4 +82,3 @@ and so on.
 A dynamic instruction execution is a single instance on a single thread. Therefore, if the same instruction is repeated
 several times in a program, it will be counted multiple times for the dynamic instruction count. If multiple threads run
 an instruction, the instruction will be counted for each thread.
-
