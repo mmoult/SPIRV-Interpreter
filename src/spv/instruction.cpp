@@ -8,7 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 
-Instruction::Extension Instruction::extensionFromString(const std::string& ext_name) const {
+Extension Instruction::extensionFromString(const std::string& ext_name) const {
     // Contains only implemented extensions
     static const std::vector<std::string> supported_ext {
         "GLSL.std.450",
@@ -21,11 +21,11 @@ Instruction::Extension Instruction::extensionFromString(const std::string& ext_n
 
     for (unsigned i = 0; i < supported_ext.size(); ++i) {
         if (ext_name == supported_ext[i])
-            return static_cast<Instruction::Extension>(i);
+            return static_cast<Extension>(i);
     }
     if (ext_name.find("NonSemantic.ClspvReflection.", 0) == 0)
-        return Instruction::Extension::NONSEMANTIC_CLSPV_REFLECTION;
-    return Instruction::Extension::INVALID;
+        return Extension::NONSEMANTIC_CLSPV_REFLECTION;
+    return Extension::INVALID;
 }
 
 unsigned Instruction::checkRef(unsigned idx, unsigned len) const noexcept(false) {

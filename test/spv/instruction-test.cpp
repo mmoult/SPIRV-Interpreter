@@ -26,8 +26,6 @@ struct DummyInstruction : public Instruction {
             operands.emplace_back(0);
         operands[idx] = token;
     }
-
-    using Instruction::Extension;
 };
 
 template<typename T>
@@ -132,7 +130,7 @@ TEST_CASE("GLSLstd450PackHalf2x16", "[instruction]") {
 
     inst.setOperand(0, make_ref(data, u32));
     inst.setOperand(1, Token(Token::Type::REF, result_id));
-    inst.setOperand(2, make_ref(data, new Primitive(static_cast<uint64_t>(DummyInstruction::Extension::GLSL_STD_450))));
+    inst.setOperand(2, make_ref(data, new Primitive(static_cast<uint64_t>(Extension::GLSL_STD_450))));
     inst.setOperand(3, Token(Token::Type::CONST, GLSLstd450PackHalf2x16)); // ext opcode
 
     auto check_pack = [&](double lo, double hi, uint32_t expected) {

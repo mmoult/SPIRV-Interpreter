@@ -9,12 +9,8 @@
 #include <cassert>
 #include <vector>
 
-#include "../util/spirv.hpp"
-#include "../values/aggregate.hpp"
-#include "../values/primitive.hpp"
 #include "../values/raytrace/accel-struct.hpp"
 #include "../values/raytrace/node.hpp"
-#include "../values/raytrace/trace.hpp"
 #include "../values/value.hpp"
 #include "data/data.hpp"
 #include "data/manager.hpp"

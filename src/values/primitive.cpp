@@ -6,7 +6,9 @@
 #include "primitive.hpp"
 
 #include <bit>  // bit_cast, countl_zero
+#include <stdexcept>
 
+#include "../util/compare.hpp"
 #include "../util/fpconvert.hpp"
 
 void Primitive::copyFrom(const Value& new_val) noexcept(false) {
