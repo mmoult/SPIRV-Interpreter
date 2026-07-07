@@ -5,10 +5,13 @@
  */
 #include "program.hpp"
 
+#include <cassert>
 #include <iostream>
 #include <set>
+#include <tuple>
 #include <stdexcept>
 
+#include "var-compare.hpp"
 #include "../front/debug.hpp"
 
 bool Program::ProgramLoader::determineEndian() {

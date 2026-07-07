@@ -21,6 +21,16 @@
 #include "frame.hpp"
 #include "token.hpp"
 
+enum class Extension : unsigned {
+    GLSL_STD_450 = 0,
+    SPV_KHR_RAY_TRACING,
+    SPV_KHR_RAY_QUERY,
+    NONSEMANTIC_SHADER_DEBUG_INFO,
+    NONSEMANTIC_DEBUG_PRINTF,
+    NONSEMANTIC_CLSPV_REFLECTION,
+    INVALID,
+};
+
 class Instruction {
     spv::Op opcode;
     bool hasResult;
@@ -28,16 +38,6 @@ class Instruction {
 protected:
     // Fields protected for the sake of testing
     std::vector<Token> operands;
-
-    enum class Extension : unsigned {
-        GLSL_STD_450 = 0,
-        SPV_KHR_RAY_TRACING,
-        SPV_KHR_RAY_QUERY,
-        NONSEMANTIC_SHADER_DEBUG_INFO,
-        NONSEMANTIC_DEBUG_PRINTF,
-        NONSEMANTIC_CLSPV_REFLECTION,
-        INVALID,
-    };
 private:
 
     /// @brief Find if a given extension is supported by the interpreter

@@ -16,7 +16,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <variant>
+#include <variant> // for std::get
 #include <vector>
 
 #include "../../external/GLSL.std.450.h"
@@ -40,7 +40,6 @@
 #include "../values/value.hpp"
 #include "data/data.hpp"
 #include "data/manager.hpp"
-#include "frame.hpp"
 #include "token.hpp"
 
 Value* construct_from_vec(const std::vector<Primitive>& vec, const Type* res_type) {

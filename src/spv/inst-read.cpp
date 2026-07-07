@@ -5,7 +5,7 @@
  */
 #include "instruction.hpp"
 
-#include <bit>
+#include <bit> // for std::bit_cast
 #include <cassert>
 #include <cstdint>
 #include <sstream>
@@ -13,7 +13,6 @@
 #include <string>
 #include <vector>
 
-#include "frame.hpp"
 #include "token.hpp"
 
 bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {

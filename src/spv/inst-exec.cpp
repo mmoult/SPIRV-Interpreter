@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "../front/console.hpp"
+#include "../util/fpconvert.hpp"
 #include "../util/ternary.hpp"
 #include "../values/aggregate.hpp"
 #include "../values/coop-matrix.hpp"

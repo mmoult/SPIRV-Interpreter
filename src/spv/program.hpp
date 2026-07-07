@@ -6,29 +6,19 @@
 #ifndef SPV_PROGRAM_HPP
 #define SPV_PROGRAM_HPP
 
-#include <algorithm>
-#include <cassert>
 #include <cstdint>
 #include <vector>
 
 #include "../util/spirv.hpp"
-#include "glm/ext.hpp"
 
 #include "../format/parse.hpp"
-#include "../values/aggregate.hpp"
-#include "../values/primitive.hpp"
-#include "../values/raytrace/accel-struct.hpp"
 #include "../values/raytrace/shader-binding-table.hpp"
-#include "../values/raytrace/trace.hpp"
-#include "../values/type.hpp"
-#include "../values/value.hpp"
-#include "data/data.hpp"
+#include "../values/value.hpp" // ValueMap
 #include "data/manager.hpp"
 #include "frame.hpp"
 #include "inst-list.hpp"
 #include "instruction.hpp"
 #include "ray-substage.hpp"
-#include "var-compare.hpp"
 
 class Program {
     InstList insts;

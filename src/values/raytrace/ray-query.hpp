@@ -16,7 +16,6 @@
 #include "../aggregate.hpp"
 #include "../primitive.hpp"
 #include "../raytrace/accel-struct.hpp"
-#include "../string.hpp"
 #include "../type.hpp"
 #include "../value.hpp"
 

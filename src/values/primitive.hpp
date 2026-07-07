@@ -9,10 +9,7 @@
 #include <cassert>
 #include <cmath>  // for nanf
 #include <cstdint>  // for uint32_t and int32_t
-#include <stdexcept>
 
-#include "../util/compare.hpp"
-#include "../util/fpconvert.hpp"
 #include "type.hpp"
 #include "value.hpp"
 
