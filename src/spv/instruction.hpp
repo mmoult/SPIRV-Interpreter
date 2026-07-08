@@ -39,7 +39,6 @@ protected:
     // Fields protected for the sake of testing
     std::vector<Token> operands;
 private:
-
     /// @brief Find if a given extension is supported by the interpreter
     /// @param ext_name name of the extension
     /// @return whether the extension is supported

@@ -13,7 +13,7 @@
 
 #include "../format/parse.hpp"
 #include "../values/raytrace/shader-binding-table.hpp"
-#include "../values/value.hpp" // ValueMap
+#include "../values/value.hpp"  // ValueMap
 #include "data/manager.hpp"
 #include "frame.hpp"
 #include "inst-list.hpp"

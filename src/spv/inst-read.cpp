@@ -5,7 +5,7 @@
  */
 #include "instruction.hpp"
 
-#include <bit> // for std::bit_cast
+#include <bit>  // for std::bit_cast
 #include <cassert>
 #include <cstdint>
 #include <sstream>
@@ -384,6 +384,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         optional.push_back(Type::UINT);
         repeating = Repeat::WHOLE;
         break;
+    case spv::OpImageGather:  // 96
     case spv::OpImageWrite:  // 99
         to_load.push_back(Type::REF);
         [[fallthrough]];

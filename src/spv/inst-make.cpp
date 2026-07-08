@@ -16,7 +16,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <variant> // for std::get
+#include <variant>  // for std::get
 #include <vector>
 
 #include "../../external/GLSL.std.450.h"
@@ -1363,6 +1363,37 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
 
         Value* to_ret = handleImage(data, *image_v, getValue(src_at + 1, data), 4);
         data[result_at].redefine(to_ret);
+        break;
+    }
+    case spv::OpImageGather: {  // 96
+        Value* sampler_v = getValue(src_at, data);
+        Image& image = static_cast<SampledImage&>(*sampler_v).getImage();
+        Value* coords = getValue(src_at + 1, data);
+        Value& component = *getValue(src_at + 2, data);
+
+        unsigned comp;
+        assert(component.getType().getBase() == DataType::UINT || component.getType().getBase() == DataType::INT);
+        assert(static_cast<const Primitive&>(component).data.u < 4);
+        comp = static_cast<const Primitive&>(component).data.u;
+
+        Type* res_type = getType(dst_type_at, data);
+        Array& to_ret = *static_cast<Array*>(res_type->construct());
+        // Starts with the bottom right hand corner and rotates counter-clockwise to match the SPIR-V spec
+        std::array<std::array<unsigned, 2>, 4> coord_indices = {{
+            {0, 1},
+            {1, 1},
+            {1, 0},
+            {0, 0},
+        }};
+        auto [x, y, z, q] = Image::extractCoords(coords, image.getDimensionality(), false);
+        for (unsigned i = 0; i < coord_indices.size(); ++i) {
+            const auto [xx, yy] = coord_indices[i];
+            Array* read_res = image.read(x + xx, y + yy, z, q);
+            Primitive* read_prim = static_cast<Primitive*>((*read_res)[comp]);
+            to_ret[i]->copyFrom(*read_prim);
+            delete read_res;
+        }
+        data[result_at].redefine(&to_ret);
         break;
     }
     case spv::OpImage: {  // 100
@@ -3085,6 +3116,28 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_int_unary_op(checkRef(src_at, data_len), dst, data, op, op);
+        break;
+    }
+    case GLSLstd450NMax: {  // 80
+        BinOp fx = [](const Primitive* a, const Primitive* b) {
+            // y if x < y, else x
+            // -0 is less than +0
+            // if one operand is NaN, return the other
+            // if both are NaN, return NaN
+            if (std::isnan(a->data.f))
+                return *b;
+            if (std::isnan(b->data.f))
+                return *a;
+            bool a_neg = std::signbit(a->data.f);
+            bool b_neg = std::signbit(b->data.f);
+            if (a_neg && !b_neg)
+                return *b;
+            if (b_neg && !a_neg)
+                return *a;
+            return Primitive(std::max(a->data.f, b->data.f), 64);
+        };
+        OpDst dst {checkRef(dst_type_at, data_len), result_at};
+        element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
         break;
     }
     }

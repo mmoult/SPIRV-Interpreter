@@ -8,11 +8,11 @@
 #include <cassert>
 #include <iostream>
 #include <set>
-#include <tuple>
 #include <stdexcept>
+#include <tuple>
 
-#include "var-compare.hpp"
 #include "../front/debug.hpp"
+#include "var-compare.hpp"
 
 bool Program::ProgramLoader::determineEndian() {
     // The first four bytes are the SPIR-V magic number

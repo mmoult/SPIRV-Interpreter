@@ -7,7 +7,7 @@
 #define VALUES_RAYTRACE_ACCELSTRUCT_HPP
 
 #include <cmath>
-#include <limits> // std::numeric_limits
+#include <limits>  // std::numeric_limits
 #include <string>
 #include <vector>
 
