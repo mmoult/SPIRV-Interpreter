@@ -3,6 +3,9 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
+"""
+Recursively test examples with the SPIR-V interpreter
+"""
 import os
 import platform
 import subprocess
@@ -54,8 +57,7 @@ def recursive_test(interp_path, launch_dir, verbose):
         configs = dict()
         error = False
         for file in files:
-            for i in range(len(file_types)):
-                prefix = file_types[i]
+            for i, prefix in enumerate(file_types):
                 if file.startswith(prefix):
                     try:
                         num = extract_num(file, prefix)
@@ -96,7 +98,7 @@ def recursive_test(interp_path, launch_dir, verbose):
                             output = True
                             out_file = file
                         case 3:  # options
-                            with open(os.path.join(root, file), 'r') as f:
+                            with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
                                 options = f.read()
                             # Split, but keep strings together
                             idx = 0
@@ -124,7 +126,7 @@ def recursive_test(interp_path, launch_dir, verbose):
                 to_print = verbose
                 if output:
                     total += 1
-                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
+                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root, check=False)
 
                     if res.returncode != 0 or not check_file(root, out_file, res.stdout):
                         status = "X"
@@ -152,7 +154,7 @@ def recursive_test(interp_path, launch_dir, verbose):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(prog="example-runner", description="Recursively test with the interpreter")
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("search_dir", nargs="?",
                         help="Directory to search for tests. By default, the \"examples\" directory is used.")
     parser.add_argument("-v", "--verbose", action="store_true",
@@ -167,10 +169,8 @@ if __name__ == "__main__":
     interp_path = os.path.abspath(os.path.join(root_path, "build", "src", executable_name))
 
     # Recursively search through the examples directory or the path passed in
-    if args.search_dir is not None:
-        launch_dir = os.path.join(os.getcwd(), args.search_dir)
-    else:
-        launch_dir = os.path.join(root_path, "examples")
+    launch_dir = os.path.join(os.getcwd(), args.search_dir) if args.search_dir is not None else \
+                 os.path.join(root_path, "examples")
 
     import sys
     sys.exit(recursive_test(interp_path, launch_dir, args.verbose))

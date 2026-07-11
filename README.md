@@ -56,7 +56,7 @@ options (especially the more complex ones) have more information described in [U
 ## Testing
 The project has two complementary approaches to testing:
 
-1) Integration tests on SPIR-V shaders in `examples`, commonly launched through `test/example-runner.py`.
+1) Integration tests on SPIR-V shaders in `examples`, commonly launched through `test/example_runner.py`.
 2) Unit tests via [Catch2](https://github.com/catchorg/Catch2) in the `test` directory
 
 > [!NOTE]
@@ -72,7 +72,7 @@ Contributions via merge requests are welcome! Contributions should:
   can be done easily with
   [git-clang-format](https://github.com/llvm/llvm-project/blob/main/clang/tools/clang-format/git-clang-format).
 - Be well-documented and have test cases (in `examples` and/or `test` directories).
-- Not break other code. Run `test/example-runner.py` and `build/test/tests` as proof.
+- Not break other code. Run `test/example_runner.py` and `build/test/tests` as proof.
 
 ## License
 The interpreter's novel source is licensed with the MPL v2.0. Full license terms are in [LICENSE.md](LICENSE.md).

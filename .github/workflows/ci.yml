@@ -76,4 +76,4 @@ jobs:
 
     - name: Tests Integration
       working-directory: ${{ github.workspace }}/test
-      run: ./example-runner.py
+      run: ./example_runner.py
