@@ -114,10 +114,7 @@ public:
     /// @param size the size of the type. Not all primitives have a usable size (bool and void don't)
     /// @return the created type
     static inline Type primitive(DataType primitive, unsigned size = 32) {
-        assert(
-            primitive == DataType::UINT || primitive == DataType::INT || primitive == DataType::FLOAT ||
-            primitive == DataType::BOOL
-        );
+        assert(isPrimitive(primitive));
         assert(size == 32 || (primitive != DataType::BOOL));
         return Type(primitive, size, nullptr);
     }
@@ -238,7 +235,7 @@ public:
     }
 
     inline unsigned getPrecision() const {
-        assert(base == DataType::FLOAT || base == DataType::UINT || base == DataType::INT || base == DataType::BOOL);
+        assert(isPrimitive());
         return subSize;
     }
 
@@ -301,6 +298,21 @@ public:
     inline unsigned getNumRows() const {
         assert(this->base == DataType::COOP_MATRIX);
         return rows;
+    }
+
+    inline bool isPrimitive() const {
+        return Type::isPrimitive(base);
+    }
+    static bool isPrimitive(DataType base) {
+        switch (base) {
+        case DataType::FLOAT:
+        case DataType::UINT:
+        case DataType::INT:
+        case DataType::BOOL:
+            return true;
+        default:
+            return false;
+        }
     }
 
     bool operator==(const Type& rhs) const;

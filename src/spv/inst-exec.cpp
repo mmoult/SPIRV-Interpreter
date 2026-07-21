@@ -592,7 +592,7 @@ bool Instruction::execute(
                         for (unsigned i = agg.getSize(); i-- > 0;)
                             frontier.push(agg[i]);
                         continue;
-                    } else if (!Primitive::isPrimitive(base)) {
+                    } else if (!Type::isPrimitive(base)) {
                         std::stringstream err;
                         err << "Cannot fill data of unsupported payload type: " << curr->getType().getBase();
                         throw std::runtime_error(err.str());

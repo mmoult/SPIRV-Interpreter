@@ -15,7 +15,7 @@ void Primitive::copyFrom(const Value& new_val) noexcept(false) {
     // Verify that the other is a primitive type
     // (Don't use the super check since we don't require the same base)
     const auto from_base = new_val.getType().getBase();
-    if (!isPrimitive(from_base))
+    if (!Type::isPrimitive(from_base))
         throw std::runtime_error("Cannot copy from non-primitive to a primitive type!");
     const Primitive& other = static_cast<const Primitive&>(new_val);
 
@@ -130,7 +130,7 @@ uint64_t Primitive::getRaw() const {
 
 void Primitive::copyReinterp(const Value& other) noexcept(false) {
     // We can reinterpret from any other primitive
-    if (!isPrimitive(other.getType().getBase()))
+    if (!other.getType().isPrimitive())
         throw std::runtime_error("Cannot copy reinterp from other non-primitive value!");
     const auto to_base = type.getBase();
     const auto to_prec = type.getPrecision();

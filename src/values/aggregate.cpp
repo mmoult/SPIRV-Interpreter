@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #include "aggregate.hpp"
+#include "primitive.hpp"
 
 #include <sstream>
 
@@ -87,4 +88,78 @@ void Array::copyFrom(const Value& new_val) noexcept(false) {
         }
     }
     Aggregate::copyFrom(new_val);
+}
+
+void Array::copyReinterp(const Value& other) noexcept(false) {
+    unsigned size = getSize();
+    unsigned o_size;
+    const Type* o_el_type;
+    std::vector<const Value*> others;
+    if (other.getType().getBase() == DataType::ARRAY) {
+        const auto& array_o = static_cast<const Array&>(other);
+        o_size = array_o.getSize();
+        o_el_type = &array_o.getTypeAt(0);
+
+        for (const Value* element : array_o)
+            others.push_back(element);
+    } else {
+        o_size = 1;
+        o_el_type = &other.getType();
+        others.push_back(&other);
+    }
+
+    if (size == o_size) {
+        // The simple case: the array sizes match, so we reinterpret across
+        for (unsigned i = 0; i < size; ++i)
+            elements[i]->copyReinterp(*others[i]);
+        return;
+    }
+
+    const Type& t_el_type = this->getTypeAt(0);
+    if (!o_el_type->isPrimitive())
+        throw std::runtime_error("Unsupported reinterpret from array of non-primitives to array of nonequal size!");
+    if (!t_el_type.isPrimitive())
+        throw std::runtime_error("Unsupported reinterpret to array of non-primitives from array of nonequal size!");
+    // Total bits must match
+    unsigned t_bitsize = t_el_type.getPrecision();
+    unsigned o_bitsize = o_el_type->getPrecision();
+    if (o_bitsize * o_size != t_bitsize * size)
+        throw std::runtime_error("Unsupported reinterpret from array of primitives with a non-matching bit total!");
+
+    // "any single component of S (mapping to multiple components of L) maps its lower-ordered bits to the
+    // lower-numbered components of L."
+    uint64_t raw = 0;
+    constexpr auto CAPACITY = sizeof(raw) * 8;
+    const unsigned THIS_MASK = ((t_bitsize == CAPACITY) ? 0 : (1 << t_bitsize)) - 1;
+    unsigned other_index = 0;
+    int bit_at = 0;
+    for (auto* element : elements) {
+        while (bit_at < t_bitsize) {
+            assert(other_index <= o_size);
+            const auto* from = static_cast<const Primitive*>(others[other_index]);
+            uint64_t fetch = from->getRaw();
+            if (bit_at >= 0) {
+                raw |= (fetch << bit_at);
+                if (static_cast<unsigned>(bit_at + o_bitsize) > CAPACITY)
+                    // The raw at other_index didn't place all of its bits. Skip increment
+                    break;
+            } else
+                raw |= (fetch >> -bit_at);
+
+            ++other_index;
+            bit_at += o_bitsize;
+        }
+        Primitive prim(raw & THIS_MASK, t_bitsize);
+        bit_at -= t_bitsize;
+        // Must use a conditional to avoid undefined behavior C spec 6.5.7:
+        // "If the value of the right operand is negative or is greater than or equal to the width of the promoted
+        // left operand, the behavior is undefined."
+        if (t_bitsize != CAPACITY)
+            raw >>= t_bitsize;
+        else
+            raw = 0;
+
+        static_assert(CAPACITY >= (sizeof(prim.data.all) * 8));  // This algorithm only works if capacity is big enough
+        element->copyReinterp(prim);
+    }
 }

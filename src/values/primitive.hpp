@@ -55,7 +55,7 @@ public:
 
     // Create a blank primitive for the given type
     Primitive(const Type& t, bool undef = true) : Value(t) {
-        assert(isPrimitive(t.getBase()));
+        assert(t.isPrimitive());
 
         if (undef) {
             // Initialize to dummy values (instead of 0 to indicate visibility and help user catch errors)
@@ -70,18 +70,6 @@ public:
         } else
             // Otherwise, set to "null" value, as described by OpConstantNull.
             data.all = 0;
-    }
-
-    static bool isPrimitive(DataType base) {
-        switch (base) {
-        case FLOAT:
-        case UINT:
-        case INT:
-        case BOOL:
-            return true;
-        default:
-            return false;
-        }
     }
 
     void copyFrom(const Value& new_val) noexcept(false) override;

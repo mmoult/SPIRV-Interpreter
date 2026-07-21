@@ -3195,7 +3195,7 @@ bool Instruction::makeResultPrintf(DataView& data) const noexcept(false) {
                     std::string now = format_string.substr(last, j - last + 1);
                     const char* cnow = now.c_str();
                     if (c != 's') {
-                        if (!Primitive::isPrimitive(base))
+                        if (!Type::isPrimitive(base))
                             throw std::runtime_error("Could not cast value in printf call to required type!");
                         Primitive& prim = static_cast<Primitive&>(*val);
 
