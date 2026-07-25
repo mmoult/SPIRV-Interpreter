@@ -98,8 +98,7 @@ public:
     void incPC() noexcept(false);
 
     void setPC(unsigned pc) noexcept(false) {
-        if (argCount < args.size())
-            throw std::runtime_error("Unused function argument(s)!");
+        assert(argCount == args.size() || pc == this->pc);
         this->pc = pc;
     }
 

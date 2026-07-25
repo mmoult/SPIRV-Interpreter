@@ -23,6 +23,7 @@
 
 enum class Extension : unsigned {
     GLSL_STD_450 = 0,
+    OPENCL_STD,
     SPV_KHR_RAY_TRACING,
     SPV_KHR_RAY_QUERY,
     NONSEMANTIC_SHADER_DEBUG_INFO,

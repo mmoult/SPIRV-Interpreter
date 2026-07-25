@@ -942,13 +942,14 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpTypePointer: {  // 32
         Type* pt_to = getType(2, data);
-        assert(operands[1].type == Token::Type::CONST);  // storage class we don't need
+        assert(operands[1].type == Token::Type::CONST);
+        auto storage = std::get<unsigned>(operands[1].raw);
         // Could be the implementation of a forward reference
         Type* already_result = data[result_at].getType();
         if (already_result == nullptr)
-            data[result_at].redefine(new Type(Type::pointer(*pt_to)));
+            data[result_at].redefine(new Type(Type::pointer(*pt_to, storage)));
         else
-            already_result->unforward(*pt_to);
+            already_result->unforward(*pt_to, storage);
         break;
     }
     case spv::OpTypeFunction: {  // 33
@@ -1022,7 +1023,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         if (opcode == spv::OpConstant) {
             data[result_at].redefine(prim);
         } else {
-            Variable* var = new Variable(prim, spv::StorageClass::StorageClassPushConstant, true);
+            Variable* var = new Variable(spv::StorageClass::StorageClassPushConstant, true);
+            var->setVal(prim);
             applyVarDeco(queue, *var, result_at);
             selectName(*var);
             data[result_at].redefine(var);
@@ -1073,7 +1075,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         if (opcode != spv::OpSpecConstantComposite) {
             data[result_at].redefine(&arr);
         } else {
-            Variable* var = new Variable(&arr, spv::StorageClass::StorageClassPushConstant, true);
+            Variable* var = new Variable(spv::StorageClass::StorageClassPushConstant, true);
+            var->setVal(&arr);
             applyVarDeco(queue, *var, result_at);
             selectName(*var);
             data[result_at].redefine(var);
@@ -1089,7 +1092,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         assert(hasResultType);
         // Note: booleans cannot have non-standard precision
         Primitive* default_val = new Primitive(opcode == spv::OpSpecConstantTrue);
-        Variable* var = new Variable(default_val, spv::StorageClass::StorageClassPushConstant, true);
+        Variable* var = new Variable(spv::StorageClass::StorageClassPushConstant, true);
+        var->setVal(default_val);
         applyVarDeco(queue, *var, result_at);
         selectName(*var);
         data[result_at].redefine(var);
@@ -1198,19 +1202,27 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             data[result_at].redefine(fx);
         break;
     }
-    case spv::OpVariable: {  // 59
-        assert(hasResultType);
-        checkRef(dst_type_at, data.getBound());
-        assert(operands[2].type == Token::Type::CONST);
-        unsigned storage = std::get<unsigned>(operands[2].raw);
-        // Note: We cannot necessarily initalize val now, because of some forward declarations of type.
-        // Program is responsible for construction of vars within a static context and execute will handle dynamic.
-        Variable* var = new Variable(nullptr, static_cast<spv::StorageClass>(storage), false);
+    case spv::OpFunctionParameter: { // 55
+        // Used only for adding entry point parameters to the interface
+        const Type& type = *getType(dst_type_at, data);
+        Variable* var = new Variable(static_cast<spv::StorageClass>(type.getStorage()), false);
+        var->initValue(type);
         applyVarDeco(queue, *var, result_at);
         data[result_at].redefine(var);
         break;
     }
-    case spv::OpAccessChain: {  // 65
+    case spv::OpVariable: {  // 59
+        assert(operands[2].type == Token::Type::CONST);
+        auto storage = static_cast<spv::StorageClass>(std::get<unsigned>(operands[2].raw));
+        // Note: We cannot necessarily initalize val now, because of some forward declarations of type.
+        // Program is responsible for construction of vars within a static context and execute will handle dynamic.
+        Variable* var = new Variable(storage, false);
+        applyVarDeco(queue, *var, result_at);
+        data[result_at].redefine(var);
+        break;
+    }
+    case spv::OpAccessChain: // 65
+    case spv::OpInBoundsPtrAccessChain: { // 70
         std::vector<unsigned> indices;
         assert(operands[2].type == Token::Type::REF);
         unsigned head = std::get<unsigned>(operands[2].raw);
@@ -1463,9 +1475,15 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpBitcast: {  // 124
         Type* res_type = getType(dst_type_at, data);
-        Value* to_ret = res_type->construct();
         const Value* from = getValue(src_at, data);
-        to_ret->copyReinterp(*from);
+        Value* to_ret;
+        if (res_type->getBase() == DataType::POINTER && from->getType().getBase() == DataType::POINTER) {
+            // Pointer to pointer casts are direct
+            to_ret = static_cast<const Pointer*>(from)->clone();
+        } else {
+            to_ret = res_type->construct();
+            to_ret->copyReinterp(*from);
+        }
         data[result_at].redefine(to_ret);
         break;
     }
@@ -3118,23 +3136,29 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
         element_int_unary_op(checkRef(src_at, data_len), dst, data, op, op);
         break;
     }
+    case GLSLstd450NMin:  // 79
     case GLSLstd450NMax: {  // 80
-        BinOp fx = [](const Primitive* a, const Primitive* b) {
-            // y if x < y, else x
-            // -0 is less than +0
-            // if one operand is NaN, return the other
-            // if both are NaN, return NaN
+        bool min = (ext_opcode == GLSLstd450NMin);
+        BinOp fx = [min](const Primitive* a, const Primitive* b) {
+            // Edge cases:
+            //   -0 is less than +0
+            //   if one operand is NaN, return the other
+            //   if both are NaN, return NaN
             if (std::isnan(a->data.f))
                 return *b;
             if (std::isnan(b->data.f))
                 return *a;
             bool a_neg = std::signbit(a->data.f);
             bool b_neg = std::signbit(b->data.f);
+            const Primitive* one = min? a : b;
+            const Primitive* two = min? b : a;
             if (a_neg && !b_neg)
-                return *b;
+                return *one;
             if (b_neg && !a_neg)
+                return *two;
+            if (a->data.f < b->data.f)
                 return *a;
-            return Primitive(std::max(a->data.f, b->data.f), 64);
+            return *b;
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);

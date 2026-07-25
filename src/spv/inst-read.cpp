@@ -352,6 +352,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         memory_operands();
         break;
     case spv::OpAccessChain:  // 65
+    case spv::OpInBoundsPtrAccessChain: // 70
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         optional.push_back(Type::REF);

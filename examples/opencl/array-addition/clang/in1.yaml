@@ -1,0 +1,7 @@
+__spirv_BuiltInGlobalInvocationId: [ 2, 0, 0 ]
+
+a: [ 0, 3, 6, 9 ]
+
+b: [ 1, 4, 7, 10 ]
+
+c: [ 2, 5, 8, 11 ]

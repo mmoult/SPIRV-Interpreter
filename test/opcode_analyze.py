@@ -206,7 +206,7 @@ def display_table(result, is_total, order_desc, sort):
     """
     def display_set(name, set_dict):
         # Construct a list of entries, which we can sort and display
-        max_name = len(name) + 1
+        max_name = len(name) + 3
         max_count = 0
         max_file = 0
         entries = []
@@ -234,11 +234,11 @@ def display_table(result, is_total, order_desc, sort):
         max_count = max(len(str(max_count)), len("count"))
         if is_total:
             max_file = max(len(str(max_file)), len("file"))
-            print(f"{name + '=':<{max_name}} {"count":>{max_count}}, {"file":>{max_file}}")
+            print(f"{'# ' + name + '=':<{max_name}} {"count":>{max_count}}, {"file":>{max_file}}")
             for op, count, file in entries:
-                print(f"{op:<{max_name}} {count:>{max_count}}, {file:>{max_file}}")
+                print(f"{op:<{max_name}} {count:>{max_count}}  {file:>{max_file}}")
         else:
-            print(f"{name + '=':<{max_name}} {"count":>{max_count}}")
+            print(f"{'# ' + name + '=':<{max_name}} {"count":>{max_count}}")
             for op, count in entries:
                 print(f"{op:<{max_name}} {count:>{max_count}}")
 

@@ -169,11 +169,11 @@ public:
         return t;
     }
 
-    static inline Type pointer(const Type& point_to) {
-        return Type(DataType::POINTER, 0, &point_to);
+    static inline Type pointer(const Type& point_to, uint32_t storage) {
+        return Type(DataType::POINTER, storage, &point_to);
     }
     static inline Type forwardPointer() {
-        return Type(DataType::POINTER, 0, nullptr);
+        return Type(DataType::POINTER, -1, nullptr);
     }
 
     static inline Type string() {
@@ -264,9 +264,14 @@ public:
         assert(base == DataType::POINTER);
         return *subElement;
     }
-    inline void unforward(const Type& point_to) {
+    inline void unforward(const Type& point_to, unsigned storage) {
         assert(base == DataType::POINTER);
         this->subElement = &point_to;
+        this->subSize = storage;
+    }
+    inline uint32_t getStorage() const {
+        assert(base == DataType::POINTER);
+        return this->subSize;
     }
 
     inline void nameMember(unsigned i, const std::string& name) noexcept(false) {

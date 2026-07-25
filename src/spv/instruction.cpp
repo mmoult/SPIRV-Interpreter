@@ -12,6 +12,7 @@ Extension Instruction::extensionFromString(const std::string& ext_name) const {
     // Contains only implemented extensions
     static const std::vector<std::string> supported_ext {
         "GLSL.std.450",
+        "OpenCL.std",
         "SPV_KHR_ray_tracing",
         "SPV_KHR_ray_query",
         "NonSemantic.Shader.DebugInfo.100",
@@ -75,6 +76,7 @@ Value* Instruction::getFromPointer(unsigned index, DataView& data) const noexcep
 
 bool Instruction::canInterface() const {
     switch (opcode) {
+    case spv::OpFunctionParameter:
     case spv::OpSpecConstantTrue:
     case spv::OpSpecConstantFalse:
     case spv::OpSpecConstant:

@@ -40,8 +40,8 @@ public:
     /// @brief Construct a new variable directly (instead of through makeVariable)
     /// @param value saved (not copied) as the variable's value. Must be on the heap! If null, you must initValue later!
     /// @param storage_class the category which defines this variable's storage/use
-    Variable(Value* value, spv::StorageClass storage_class, bool spec_const)
-        : val(value), storage(storage_class), specConst(spec_const) {}
+    Variable(spv::StorageClass storage_class, bool spec_const)
+        : val(nullptr), storage(storage_class), specConst(spec_const) {}
 
     Variable(const Variable& other, bool copy_val = true)
         : storage(other.storage)
@@ -80,6 +80,11 @@ public:
 
     bool isThreaded() const {
         return storage == spv::StorageClassPrivate || storage == spv::StorageClassFunction;
+    }
+
+    // Giving away ownership to the value, which takes control of the memory
+    void setVal(Value* val) {
+        this->val = val;
     }
 
     const Value& getVal() const {

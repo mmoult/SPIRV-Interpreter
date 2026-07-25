@@ -5,13 +5,14 @@ An interpreter for SPIR-V shaders/kernels, which aims to support the full
 program for given inputs.
 
 ## Features
-- Support for vertex, fragment, compute, hull, and raytracing shaders
+- Support for vertex, fragment, hull, and raytracing graphical shaders
+- Support for compute shaders and kernels
 - Specify inputs and print outputs in YAML or JSON
 - Textures may be read from and written to .png files
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 82 test examples, and counting
+- 84 test examples, and counting
 
 ## Limitations
 

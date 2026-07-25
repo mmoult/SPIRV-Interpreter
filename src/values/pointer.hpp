@@ -23,7 +23,7 @@ class Pointer final : public Value {
 
 public:
     Pointer(unsigned head, std::vector<unsigned>& indices, Type point_to)
-        : Value(Type::pointer(point_to)), head(head), indices(indices) {}
+        : Value(Type::pointer(point_to, -1)), head(head), indices(indices) {}
 
     void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
@@ -36,6 +36,11 @@ public:
     void copyReinterp(const Value& other) noexcept(false) override {
         if (!tryCopyFrom(other))
             throw std::runtime_error("Could not copy reinterp to pointer!");
+    }
+
+    [[nodiscard]] Pointer* clone() const {
+        decltype(indices) indices = this->indices;
+        return new Pointer(this->head, indices, this->type);
     }
 
     unsigned getHead() const {

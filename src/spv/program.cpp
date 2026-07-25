@@ -244,7 +244,7 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
 
         if (static_sec) {
             // silently ignore all but the first entry found
-            // (I think it is legal to have multiple- maybe add a way to distinguish desired?)
+            // TODO: add a way to select desired by name or type
             if (opcode == spv::OpEntryPoint && !entry_found) {
                 entry_found = true;
                 entry = location;
@@ -274,8 +274,22 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
             }
         }
     }
+
+    // TODO: refine logic for entry points. Some modules may have multiple. It is also legal for multiple entry point
+    // "decorations" to point to the same use function, but entry points must have unique names.
+    // TODO: store stage type in the entry point rather than using an instruction lookup.
     if (!entry_found)
         throw std::runtime_error("Program is missing entry function!");
+    // Once the entry point is selected, we can determine if there is extra io in that function's parameters
+    const EntryPoint& ep = insts[entry].getEntryPoint(data);
+    for (unsigned i = ep.getLocation() + 1; i < insts.size(); ++i) {
+        const Instruction& inst = insts[i];
+        if (inst.getOpcode() != spv::OpFunctionParameter)
+            break;
+        bool made = inst.makeResult(data, i, &decorations);
+        assert(made);
+        process_visible_io(inst, 0);
+    }
 
     // Post processing. Had to delay init of static variables in case their pointer was forward declared
     for (unsigned location : static_vars) {
@@ -604,8 +618,18 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
     invoc_globals.reserve(num_invocations);
     std::set<unsigned> active_threads;
     std::set<unsigned> live_threads;
-    // afaik, the entry point never takes any arguments
+
+    // kernel entry point may take arguments, these have been set up on the program interface. Transfer values to the
+    // function appropriately
     std::vector<Data*> entry_args;
+    unsigned location = ep.getLocation();
+    for (unsigned i = location + 1; location < insts.size(); ++i) {
+        const Instruction& inst = insts[i];
+        if (inst.getOpcode() != spv::OpFunctionParameter)
+            break;
+        Data& arg = global[inst.getResult()];
+        entry_args.push_back(&arg);
+    }
 
     Variable* local_invoc_idx = nullptr;
     Variable* local_invoc_id = nullptr;
@@ -694,7 +718,7 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
             }
         }
 
-        Frame* new_frame = new Frame(ep.getLocation(), entry_args, 0, *invoc_global);
+        Frame* new_frame = new Frame(location, entry_args, 0, *invoc_global);
         frame_stacks[i].push_back(new_frame);
         unsigned pre_pc = new_frame->getPC();
 
