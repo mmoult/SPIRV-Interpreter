@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "../util/spirv.hpp"
+#include "../values/image.hpp"
 #include "../values/pointer.hpp"
 #include "../values/type.hpp"
 #include "../values/value.hpp"
@@ -72,6 +73,17 @@ private:
 
     bool makeResultGlsl(DataView& data, unsigned result_at) const noexcept(false);
     bool makeResultPrintf(DataView& data) const noexcept(false);
+
+    std::array<float, 4>
+    calcImageLocation(
+        DataView& data,
+        const Image* image,
+        const Value* coords,
+        unsigned img_qualifier,
+        std::vector<std::pair<uint32_t, unsigned>>& defer_pairs,
+        float lod = 0.0f,
+        bool proj = false
+    ) const;
 
     [[nodiscard]] Value*
     handleImage(DataView& data, const Value& img, const Value* coords, unsigned img_qualifier, bool proj = false) const;

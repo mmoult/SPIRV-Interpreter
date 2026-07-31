@@ -1,28 +1,28 @@
 {
 	"Constants" : { "FFTThreshold" : 0.1 },
 	"SourceTextureRGB" : {
-		"ref" : "stripes.png",
+		"ref" : "../stripes.png",
 		"dim" : [ 14, 10 ],
 		"mipmaps" : 1,
 		"comps" : 0,
 		"data" : []
 	},
 	"TargetTextureR" : {
-		"ref" : "empty.png",
+		"ref" : "../empty.png",
 		"dim" : [ 16, 16 ],
 		"mipmaps" : 1,
 		"comps" : 0,
 		"data" : []
 	},
 	"TargetTextureG" : {
-		"ref" : "empty.png",
+		"ref" : "../empty.png",
 		"dim" : [ 16, 16 ],
 		"mipmaps" : 1,
 		"comps" : 0,
 		"data" : []
 	},
 	"TargetTextureB" : {
-		"ref" : "empty.png",
+		"ref" : "../empty.png",
 		"dim" : [ 16, 16 ],
 		"mipmaps" : 1,
 		"comps" : 0,

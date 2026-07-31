@@ -123,24 +123,15 @@ void Instruction::selectName(Variable& var) const {
     }
 }
 
-Value* Instruction::handleImage(
+std::array<float, 4> Instruction::calcImageLocation(
     DataView& data,
-    const Value& img,
+    const Image* image,
     const Value* coords,
     unsigned img_qualifier,
+    std::vector<std::pair<uint32_t, unsigned>>& defer_pairs,
+    float lod,
     bool proj
 ) const {
-    Type* res_type = getType(0, data);
-    Value* to_ret = res_type->construct();
-    float lod = 0.0;
-    const Image* image;
-    if (img.getType().getBase() == DataType::SAMPLED_IMG) {
-        const auto& sampler = static_cast<const SampledImage&>(img);
-        image = &sampler.getImage();
-        lod = sampler.getImplicitLod();
-    } else {
-        image = static_cast<const Image*>(&img);
-    }
     auto [x, y, z, q] = Image::extractCoords(coords, image->getDimensionality(), proj);
     if (proj) {
         if (q == 0.0)
@@ -164,16 +155,24 @@ Value* Instruction::handleImage(
             if ((descriptors & i) == 0)
                 continue;
             descriptors &= ~i;
-#define CASE(SHIFT) case 1 << spv::SHIFT
             switch (i) {
-                CASE(ImageOperandsBiasShift) : {
+                case spv::ImageOperandsBiasMask: {
                     const Value* bias = getNext();
                     // bias must be a float per the spec
                     assert(bias->getType().getBase() == DataType::FLOAT);
                     lod += static_cast<const Primitive*>(bias)->data.f;
                     break;
                 }
-                CASE(ImageOperandsConstOffsetShift) : CASE(ImageOperandsOffsetShift) : {
+                case spv::ImageOperandsLodMask: {
+                    const Value* lodv = getNext();
+                    const auto& lodp = static_cast<const Primitive&>(*lodv);
+                    Primitive prim(0.0);
+                    prim.copyFrom(lodp);
+                    lod = prim.data.f;
+                    break;
+                }
+                case spv::ImageOperandsConstOffsetMask:
+                case spv::ImageOperandsOffsetMask: {
                     const Value* shifts = getNext();
                     // Per the spec, these must be of integer type and match the number of coordinates
                     auto shift_type = shifts->getType().getBase();
@@ -202,28 +201,56 @@ Value* Instruction::handleImage(
                     }
                     break;
                 }
-                CASE(ImageOperandsLodShift) : {
-                    const Value* lodv = getNext();
-                    const auto& lodp = static_cast<const Primitive&>(*lodv);
-                    Primitive prim(0.0);
-                    prim.copyFrom(lodp);
-                    lod = prim.data.f;
+                case spv::ImageOperandsConstOffsetsMask: {
+                    getNext();
+                    // "Only valid with OpImageGather or OpImageDrefGather."
+                    // Intentionally defer to later processing, since this requires a quad output.
+                    defer_pairs.push_back(std::make_pair(i, next));
                     break;
                 }
-                CASE(ImageOperandsMinLodShift) : {
+                case spv::ImageOperandsMinLodMask: {
                     const Value* min_lodv = getNext();
                     assert(min_lodv->getType().getBase() == DataType::FLOAT);
                     // spec explicitly requires it to be a floating point scalar
                     lod = std::max(lod, static_cast<float>(static_cast<const Primitive&>(*min_lodv).data.f));
+                    break;
                 }
-            default:
-                throw std::runtime_error("Cannot handle unsupported image qualifier operand!");
+                default: {
+                    std::stringstream err;
+                    err << "Cannot handle unsupported image qualifier operand! ";
+                    err << i;
+                    throw std::runtime_error(err.str());
+                }
             }
-#undef CASE
         }
         if (++next < operands.size())
             throw std::runtime_error("Unused image qualifier operands!");
     }
+
+    return {x, y, z, lod};
+}
+
+Value* Instruction::handleImage(
+    DataView& data,
+    const Value& img,
+    const Value* coords,
+    unsigned img_qualifier,
+    bool proj
+) const {
+    Type* res_type = getType(0, data);
+    Value* to_ret = res_type->construct();
+    float lod_init = 0.0;
+    const Image* image;
+    if (img.getType().getBase() == DataType::SAMPLED_IMG) {
+        const auto& sampler = static_cast<const SampledImage&>(img);
+        image = &sampler.getImage();
+        lod_init = sampler.getImplicitLod();
+    } else {
+        image = static_cast<const Image*>(&img);
+    }
+    std::vector<std::pair<uint32_t, unsigned>> defer_pairs;
+    auto [x, y, z, lod] = calcImageLocation(data, image, coords, img_qualifier, defer_pairs, lod_init, proj);
+    assert(defer_pairs.empty());
 
     const Array& arr = *image->read(x, y, z, lod);
     if (arr.getSize() == 1)
@@ -1379,28 +1406,62 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     }
     case spv::OpImageGather: {  // 96
         Value* sampler_v = getValue(src_at, data);
-        Image& image = static_cast<SampledImage&>(*sampler_v).getImage();
+        const auto& sampler = static_cast<SampledImage&>(*sampler_v);
+        const Image& image = sampler.getImage();
         Value* coords = getValue(src_at + 1, data);
         Value& component = *getValue(src_at + 2, data);
 
+        std::vector<std::pair<uint32_t, unsigned>> defer_pairs;
+        auto [x, y, z, lod] = Instruction::calcImageLocation(
+            data, &image, coords, src_at + 3, defer_pairs, sampler.getImplicitLod()
+        );
+        // TODO: f* should be ignored, but C++ doesn't have placeholder (_) until C++26.
+        auto [ux, fx] = Image::decompose(x);
+        auto [uy, fy] = Image::decompose(y);
+        auto [uz, fz] = Image::decompose(z);
+
         unsigned comp;
         assert(component.getType().getBase() == DataType::UINT || component.getType().getBase() == DataType::INT);
-        assert(static_cast<const Primitive&>(component).data.u < 4);
         comp = static_cast<const Primitive&>(component).data.u;
+        assert(comp < 4);
 
-        Type* res_type = getType(dst_type_at, data);
-        Array& to_ret = *static_cast<Array*>(res_type->construct());
-        // Starts with the bottom right hand corner and rotates counter-clockwise to match the SPIR-V spec
-        std::array<std::array<unsigned, 2>, 4> coord_indices = {{
+        // Ordered described at docs.vulkan.org/spec/latest/chapters/textures.html#textures-gather
+        std::array<std::array<int, 2>, 4> coord_indices = {{
             {0, 1},
             {1, 1},
             {1, 0},
             {0, 0},
         }};
-        auto [x, y, z, q] = Image::extractCoords(coords, image.getDimensionality(), false);
+        Type* res_type = getType(dst_type_at, data);
+        Array& to_ret = *static_cast<Array*>(res_type->construct());
+
         for (unsigned i = 0; i < coord_indices.size(); ++i) {
-            const auto [xx, yy] = coord_indices[i];
-            Array* read_res = image.read(x + xx, y + yy, z, q);
+            int xx, yy;
+            bool default_pair = true;
+            for (auto [mask, index] : defer_pairs) {
+                if (mask == spv::ImageOperandsConstOffsetsMask) {
+                    default_pair = false;
+
+                    const Value* const_offs_v = getValue(index, data);
+                    assert(const_offs_v->getType().getBase() == DataType::ARRAY);
+                    const auto& const_offs = static_cast<const Array&>(*const_offs_v);
+                    assert(const_offs.getSize() == 4);
+                    const Value* xy_pair_v = const_offs[i];
+                    assert(xy_pair_v->getType().getBase() == DataType::ARRAY);
+                    const auto& xy_pair = static_cast<const Array&>(*xy_pair_v);
+                    assert(xy_pair.getSize() == 2);
+                    xx = static_cast<const Primitive&>(*xy_pair[0]).data.i;
+                    yy = static_cast<const Primitive&>(*xy_pair[1]).data.i;
+                } else
+                    assert(false); // Unknown mask!
+            }
+            if (default_pair) {
+                const auto [ix, iy] = coord_indices[i];
+                xx = ix;
+                yy = iy;
+            }
+
+            Array* read_res = image.read(ux + xx, uy + yy, uz, lod);
             Primitive* read_prim = static_cast<Primitive*>((*read_res)[comp]);
             to_ret[i]->copyFrom(*read_prim);
             delete read_res;

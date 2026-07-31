@@ -121,6 +121,7 @@ void Image::Component::assertCompatible(const Component& other) {
 }
 
 std::tuple<unsigned, float> Image::decompose(float val) {
+    // TODO this needs to be refactored since pixel centers are at 0.5. Also, bounds conditions defined by the sampler.
     float base;
     float dec = std::modf(val, &base);
     // We will be subtracting the decimal component from 1.0 later, and if the subtraction doesn't even register,

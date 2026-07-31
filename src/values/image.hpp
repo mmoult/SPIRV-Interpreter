@@ -131,16 +131,6 @@ class Image final : public Value {
     /// This value is vendor-specific, ie, not defined by the spec. All zeros is common in practice.
     [[nodiscard]] Array* outOfBoundsAccess() const;
 
-    /// @brief Decomposes the float value into an unsigned int base and a float ratio
-    ///
-    /// The unsigned int base is an unsigned int with the int part of val.
-    /// The ratio is how close the original value is to the next int of larger magnitude
-    ///
-    /// For example:
-    /// - decompose(1.0)  = {1, 0.0}
-    /// - decompose(3.4)  = {3, 0.4}
-    static std::tuple<unsigned, float> decompose(float val);
-
 public:
     Image(Type t) : Value(t), xx(0), yy(0), zz(0), comps(t.getComps(), false) {};
 
@@ -183,8 +173,19 @@ public:
 
     static std::tuple<float, float, float, float> extractCoords(const Value* coords_v, unsigned dim, bool proj);
 
+    /// @brief Gets the (interpolated) pixel value at the specified coordinates.
     [[nodiscard]] Array* read(float x, float y, float z, float lod) const;
 
     bool write(int x, int y, int z, const Array& texel);
+
+    /// @brief Decomposes the float value into an unsigned int base and a float ratio
+    ///
+    /// The unsigned int base is an unsigned int with the int part of val.
+    /// The ratio is how close the original value is to the next int of larger magnitude
+    ///
+    /// For example:
+    /// - decompose(1.0)  = {1, 0.0}
+    /// - decompose(3.4)  = {3, 0.4}
+    static std::tuple<unsigned, float> decompose(float val);
 };
 #endif

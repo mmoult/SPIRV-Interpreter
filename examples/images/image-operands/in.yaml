@@ -1,0 +1,13 @@
+offset:
+  u_offset: [ -1, -2 ]
+
+u_sampler:
+  sampler: { lod: 0 }
+  image:
+    ref: "../smiley.png"
+    dim: [ 32, 32 ]
+    mipmaps: 1
+    comps: 0
+    data: []
+
+v_texCoord: [ 7.3, 20.6 ]
