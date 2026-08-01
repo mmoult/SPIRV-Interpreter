@@ -154,12 +154,12 @@ protected:
     /// @brief Parse and return a single key-value pair
     /// @param vars variables to save to- a map of names to values
     /// @param handle a handler to parse the value from
-    virtual std::tuple<std::string, Value*> parseVariable(LineHandler& handle) = 0;
+    virtual std::tuple<std::string, Value*> parseVariableImpl(LineHandler& handle) = 0;
 
     /// @brief Parse all key-value pairs given in the file. Save each into the map of values
     /// @param vars variables to save to- a map of names to values
     /// @param handler a handler to parse the value from
-    virtual void parseFile(ValueMap& vars, LineHandler& handler) = 0;
+    virtual void parseFileImpl(ValueMap& vars, LineHandler& handler) = 0;
 
     /// @brief Throw error if any characters before the parse end (signalled by an invalid character) are non-space.
     /// Called after the completion of parseVariable for single-string inputs. May be reused by other methods.
@@ -181,7 +181,7 @@ public:
     /// @param vars the map of pre-existing variables. Also the map new values are saved to
     inline void parseFile(ValueMap& vars, std::istream& file) noexcept(false) {
         LineHandler handle(nullptr, &file);
-        parseFile(vars, handle);
+        parseFileImpl(vars, handle);
     }
 
     /// @brief Parse value from string val and add to value map with the given key name

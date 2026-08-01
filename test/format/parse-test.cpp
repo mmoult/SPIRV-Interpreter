@@ -36,12 +36,12 @@ protected:
     /// @brief Parse and return a single key-value pair
     /// @param vars variables to save to- a map of names to values
     /// @param handle a handler to parse the value from
-    std::tuple<std::string, Value*> parseVariable(LineHandler& /* handle */) override {
+    std::tuple<std::string, Value*> parseVariableImpl(LineHandler& /* handle */) override {
         unused();
         return {};
     }
 
-    void parseFile(ValueMap& /* vars */, LineHandler& /* handler */) override {
+    void parseFileImpl(ValueMap& /* vars */, LineHandler& /* handler */) override {
         unused();
     }
 

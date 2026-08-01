@@ -27,7 +27,7 @@ TEST_CASE("output", "[yaml]") {
 
 void input_test(Yaml& yaml, std::map<std::string, const Value*>& compare, std::string result) {
     std::map<std::string, const Value*> read;
-    static_cast<ValueFormat*>(&yaml)->parseVariable(read, result);
+    yaml.parseVariable(read, result);
     REQUIRE(read.size() == compare.size());
     for (const auto& [key, val] : compare) {
         REQUIRE(read.contains(key));

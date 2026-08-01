@@ -45,7 +45,7 @@ std::optional<char> Yaml::skipWhitespace(LineHandler& handler, bool break_at_new
 }
 
 [[nodiscard]] std::tuple<std::string, Value*>
-Yaml::parseVariable(LineHandler& handler, unsigned min_indent, bool end_check) {
+Yaml::parseVariableIndented(LineHandler& handler, unsigned min_indent, bool end_check) {
     std::string key = parseString(handler);
     auto cc = skipWhitespace(handler, true);
     if (cc.value_or(0) != ':') {
@@ -88,7 +88,7 @@ Yaml::parseAgg(LineHandler& handler, unsigned indent, bool list, std::string see
             std::string key;
             Value* val = nullptr;
             if (seen_name.empty()) {
-                auto pair = parseVariable(handler, indent);
+                auto pair = parseVariableIndented(handler, indent);
                 key = std::get<0>(pair);
                 val = std::get<1>(pair);
             } else {
@@ -148,7 +148,7 @@ Yaml::parseAgg(LineHandler& handler, unsigned indent, bool list, std::string see
             // see a concluding ]
             celement = static_cast<const Value*>(element);
         } else {
-            auto [key, val] = parseVariable(handler, 0, false);
+            auto [key, val] = parseVariableIndented(handler, 0, false);
             names.push_back(key);
             celement = static_cast<const Value*>(val);
         }
@@ -562,7 +562,7 @@ unsigned Yaml::countIndent(LineHandler& handler, bool break_at_newline) const {
     throw std::runtime_error("Missing value!");
 }
 
-void Yaml::parseFile(ValueMap& vars, LineHandler& handler) {
+void Yaml::parseFileImpl(ValueMap& vars, LineHandler& handler) {
     while (true) {
         unsigned i = countIndent(handler);
         if (i > 0) {
@@ -574,7 +574,7 @@ void Yaml::parseFile(ValueMap& vars, LineHandler& handler) {
         if (!cc.has_value())
             break;
 
-        auto [key, val] = parseVariable(handler, 0);
+        auto [key, val] = parseVariableIndented(handler, 0);
         addToMap(vars, key, val);
     }
     // Empty file is permissible.

@@ -44,7 +44,7 @@
                 handler.skip();
             } else
                 first = false;
-            auto [key, value] = parseVariable(handler);
+            auto [key, value] = parseVariableImpl(handler);
             names.push_back(key);
             values.push_back(static_cast<const Value*>(value));
         }
@@ -379,7 +379,7 @@ void Json::verifyBlank(LineHandler& handler) noexcept(false) {
     throw std::runtime_error(err.str());
 }
 
-void Json::parseFile(ValueMap& vars, LineHandler& handler) {
+void Json::parseFileImpl(ValueMap& vars, LineHandler& handler) {
     auto cc0 = skipWhitespace(handler);
     if (cc0.value_or(0) != '{')
         throw std::runtime_error("JSON file must begin with '{'!");
@@ -408,14 +408,14 @@ void Json::parseFile(ValueMap& vars, LineHandler& handler) {
         }
 
         // If we didn't see an end, we must see a named value
-        auto [key, val] = parseVariable(handler);
+        auto [key, val] = parseVariableImpl(handler);
         addToMap(vars, key, val);
     }
     handler.skip();
     verifyBlank(handler);
 }
 
-[[nodiscard]] std::tuple<std::string, Value*> Json::parseVariable(LineHandler& handler) noexcept(false) {
+[[nodiscard]] std::tuple<std::string, Value*> Json::parseVariableImpl(LineHandler& handler) noexcept(false) {
     auto cc0 = skipWhitespace(handler);
     if (cc0.value_or(0) != '"')
         throw std::runtime_error("Named value in JSON input must begin with '\"'!");

@@ -321,7 +321,7 @@ Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcep
 void ValueFormat::parseVariable(ValueMap& vars, const std::string& keyval) noexcept(false) {
     const std::string* pstr = &keyval;  // need an r-value pointer even though the value should not change
     ValueFormat::LineHandler handle(pstr, nullptr);
-    auto [key, value] = parseVariable(handle);
+    auto [key, value] = parseVariableImpl(handle);
     addToMap(vars, key, value);
     verifyBlank(handle);  // Verify there is only whitespace or comments after
 }

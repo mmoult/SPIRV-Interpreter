@@ -23,7 +23,7 @@ private:
     std::optional<char> skipWhitespace(LineHandler& handler, bool break_at_newline) const;
 
     [[nodiscard]] std::tuple<std::string, Value*>
-    parseVariable(LineHandler& handler, unsigned min_indent, bool end_check = true);
+    parseVariableIndented(LineHandler& handler, unsigned min_indent, bool end_check = true);
 
     [[nodiscard]] std::tuple<Value*, bool>
     parseAgg(LineHandler& handler, unsigned indent, bool list, std::string seen_name = "");
@@ -67,16 +67,16 @@ protected:
         return SpecialFloatResult::F_NONE;
     }
 
-    [[nodiscard]] inline std::tuple<std::string, Value*> parseVariable(LineHandler& handler) override {
+    [[nodiscard]] inline std::tuple<std::string, Value*> parseVariableImpl(LineHandler& handler) override {
         unsigned indent = countIndent(handler);
-        return parseVariable(handler, indent);
+        return parseVariableIndented(handler, indent);
     }
 
     inline void verifyBlank(LineHandler& handler) noexcept(false) override {
         verifyBlank(handler, false);
     }
 
-    void parseFile(ValueMap& vars, LineHandler& handler) override;
+    void parseFileImpl(ValueMap& vars, LineHandler& handler) override;
 
 public:
     void printFile(std::stringstream& out, const ValueMap& vars) override;

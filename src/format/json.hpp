@@ -42,9 +42,9 @@ protected:
 
     void verifyBlank(LineHandler& handler) noexcept(false) override;
 
-    void parseFile(ValueMap& vars, LineHandler& handler) override;
+    void parseFileImpl(ValueMap& vars, LineHandler& handler) override;
 
-    [[nodiscard]] std::tuple<std::string, Value*> parseVariable(LineHandler& handler) noexcept(false) override;
+    [[nodiscard]] std::tuple<std::string, Value*> parseVariableImpl(LineHandler& handler) noexcept(false) override;
 
 public:
     void printFile(std::stringstream& out, const ValueMap& vars) override;
