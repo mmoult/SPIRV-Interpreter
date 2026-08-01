@@ -17,23 +17,28 @@ namespace ArgParse {
 
 struct Option {
     virtual ~Option() = default;
-    virtual unsigned getNumArgs() = 0;
+    /// @brief Record that this option appeared on the command line.
+    /// Called by the parser once the option has been resolved.
+    virtual void markPresent() {}
+    virtual unsigned getNumArgs() const = 0;
     virtual bool handle(const std::string& arg) = 0;
-    virtual std::string getArgNames() = 0;
+    virtual std::string getArgNames() const = 0;
 };
 
 struct Flag final : public Option {
     bool enabled = false;
 
-    inline unsigned getNumArgs() override {
+    inline void markPresent() override {
         enabled = true;
+    }
+    inline unsigned getNumArgs() const override {
         return 0;
     }
     inline bool handle(const std::string& /* arg */) override {
         assert(false);
         return false;  // flags may not use arguments!
     }
-    inline std::string getArgNames() override {
+    inline std::string getArgNames() const override {
         return "";
     }
 };
@@ -52,7 +57,7 @@ public:
     UnaryOption(const std::string& arg_name, const T& def_value) : argName(arg_name) {
         values.push_back(def_value);
     }
-    inline const T& getValue() {
+    inline const T& getValue() const {
         assert(!values.empty());
         return values.back();
     }
@@ -64,7 +69,7 @@ public:
         isSet = true;
     }
 
-    inline unsigned getNumArgs() override {
+    inline unsigned getNumArgs() const override {
         return 1;
     }
     inline bool handle(const std::string& arg) override {
@@ -75,7 +80,7 @@ public:
         return false;
     }
 
-    inline std::string getArgNames() override {
+    inline std::string getArgNames() const override {
         return argName;
     }
 

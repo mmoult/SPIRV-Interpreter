@@ -34,7 +34,8 @@ bool Parser::handleOption(
     char* argv[],
     int argc
 ) {
-    unsigned args = opt.getNumArgs();
+    opt.markPresent();
+    const unsigned args = opt.getNumArgs();
     if (args == 0) {
         if (!initial.empty()) {
             std::cerr << "Cannot pass argument \"" << initial << "\" to option \"" << option;
