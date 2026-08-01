@@ -67,17 +67,6 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     return os;
 }
 
-union ImageFields {
-    struct {
-        unsigned dim : 3;
-        unsigned comps : 13;
-        unsigned unused : 16;
-    };
-    uint32_t packed;
-
-    ImageFields(uint32_t val = 0) : packed(val) {}
-};
-
 // necessary forward reference
 class Value;
 
@@ -91,16 +80,22 @@ class Type final : public Valuable {
     std::vector<std::string> nameList;
 
     std::string name;
-    union {
-        bool bufferBlock;  // for struct
-        unsigned rows;  // for cooperative matrix
-    };
+    /// Overloaded by base, since no type is both a struct and a cooperative matrix:
+    ///  - STRUCT: nonzero if and only if decorated with BufferBlock
+    ///  - COOP_MATRIX: the number of rows in the matrix
+    unsigned rowsOrBufferBlock = 0;
+
+    /// For IMAGE, subSize packs the dimensionality in the low bits and the component order above it.
+    static constexpr unsigned DIM_BITS = 3;
+    static constexpr unsigned COMPS_BITS = 13;
+    static constexpr uint32_t DIM_MAX = (1u << DIM_BITS) - 1;
+    static constexpr uint32_t COMPS_MAX = (1u << COMPS_BITS) - 1;
 
     inline Type(DataType base, uint32_t sub_size, const Type* sub_element)
-        : base(base), subSize(sub_size), subElement(sub_element), rows(0) {}
+        : base(base), subSize(sub_size), subElement(sub_element) {}
 
     inline Type(DataType base, const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list)
-        : base(base), subSize(0), subElement(nullptr), subList(sub_list), nameList(name_list), rows(0) {}
+        : base(base), subSize(0), subElement(nullptr), subList(sub_list), nameList(name_list) {}
 
 public:
     inline Type() noexcept(true) : base(DataType::VOID), subSize(0), subElement(nullptr) {}
@@ -137,7 +132,7 @@ public:
     static inline Type coopMatrix(unsigned /* scope */, unsigned rows, unsigned cols, const Type& element) {
         // The scope is a useful hint for compilation by indicating where the data should be stored. Not needed here.
         Type ret(DataType::COOP_MATRIX, rows * cols, &element);
-        ret.rows = rows;
+        ret.rowsOrBufferBlock = rows;
         return ret;
     }
 
@@ -198,12 +193,10 @@ public:
     ///              - comps = 2341 means that all components active in ARGB order
     /// @return the created image type
     static inline Type image(const Type* texel_type, unsigned dim, unsigned comps) {
-        assert(dim <= 3);  // max of 2 bits
-        assert(comps <= 4321);  // max of 13 bits
-        ImageFields fields;
-        fields.dim = dim;
-        fields.comps = comps;
-        return Type(DataType::IMAGE, fields.packed, texel_type);
+        assert(dim <= 3);  // a 3D image is the largest; DIM_BITS has room to spare
+        assert(comps <= 4321);  // the largest meaningful component order, and within COMPS_BITS
+        static_assert(3 <= DIM_MAX && 4321 <= COMPS_MAX, "subSize cannot hold the image fields");
+        return Type(DataType::IMAGE, (dim & DIM_MAX) | ((comps & COMPS_MAX) << DIM_BITS), texel_type);
     }
 
     static inline Type sampledImage(const Type* image) {
@@ -241,14 +234,12 @@ public:
 
     inline unsigned getDim() const {
         assert(base == DataType::IMAGE);
-        ImageFields fields(subSize);
-        return fields.dim;
+        return subSize & DIM_MAX;
     }
 
     inline unsigned getComps() const {
         assert(base == DataType::IMAGE);
-        ImageFields fields(subSize);
-        return fields.comps;
+        return (subSize >> DIM_BITS) & COMPS_MAX;
     }
 
     inline const std::vector<const Type*>& getFields() const {
@@ -290,19 +281,19 @@ public:
 
     inline void setBufferBlock() {
         assert(this->base == DataType::STRUCT);
-        this->bufferBlock = true;
+        this->rowsOrBufferBlock = 1;
     }
     inline bool isBufferBlock() const {
-        return this->base == DataType::STRUCT && this->bufferBlock;
+        return this->base == DataType::STRUCT && this->rowsOrBufferBlock != 0;
     }
 
     inline void setNumRows(unsigned rows) {
         assert(this->base == DataType::COOP_MATRIX);
-        this->rows = rows;
+        this->rowsOrBufferBlock = rows;
     }
     inline unsigned getNumRows() const {
         assert(this->base == DataType::COOP_MATRIX);
-        return rows;
+        return rowsOrBufferBlock;
     }
 
     inline bool isPrimitive() const {

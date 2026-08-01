@@ -42,7 +42,7 @@ Value* Type::construct(bool undef) const {
         if (base == DataType::ARRAY)
             agg = static_cast<Aggregate*>(new Array(*subElement, subSize));
         else if (base == DataType::COOP_MATRIX)
-            agg = static_cast<Aggregate*>(new CoopMatrix(*subElement, rows, subSize / rows));
+            agg = static_cast<Aggregate*>(new CoopMatrix(*subElement, rowsOrBufferBlock, subSize / rowsOrBufferBlock));
         else {
             assert(base == DataType::STRUCT);
             agg = static_cast<Aggregate*>(new Struct(*this));
