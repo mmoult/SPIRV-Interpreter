@@ -70,6 +70,8 @@ class Frame {
         // - callable_data for callable substages
         Value* result = nullptr;
         Value* hitAttribute = nullptr;
+        // For CALLABLE only: false while entering the substage, true once returning from it.
+        bool callableReturning = false;
         // the data which is a duplicate of the substage's
         DataView* data = nullptr;
     } rt;
@@ -139,11 +141,11 @@ public:
         if (this->rt.trigger == RtStageKind::NONE)
             return false;
         assert(this->rt.trigger == RtStageKind::CALLABLE);
-        return rt.hitAttribute == nullptr;
+        return rt.callableReturning;
     }
     void prepareReturn() {
         assert(this->rt.trigger == RtStageKind::CALLABLE);
-        rt.hitAttribute = nullptr;
+        rt.callableReturning = true;
     }
 
     // Stages may invoke callable shaders without using an explicit acceleration struct, however, if the stage called

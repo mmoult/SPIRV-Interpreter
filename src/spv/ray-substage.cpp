@@ -147,11 +147,11 @@ bool RayTraceSubstage::handleStaticInst(const Instruction& inst) {
 ) const {
     if (hitAttribute != 0) {
         Variable* var = dat[hitAttribute].getVariable();
+        assert(var != nullptr);
         Value& hit_attrib_val = var->getVal();
         if (hit_attribute == nullptr) {
             if (stage == RtStageKind::INTERSECTION) {
                 // For intersection case, create the hit attribute
-                assert(var != nullptr);
                 return hit_attrib_val.getType().construct();
             } else {
                 // Try to create a hit attribute from the barycentrics
@@ -171,7 +171,6 @@ bool RayTraceSubstage::handleStaticInst(const Instruction& inst) {
             }
         } else {
             try {
-                assert(var != nullptr);
                 hit_attrib_val.copyFrom(*hit_attribute);
             } catch (const std::runtime_error& _) {
                 throw std::runtime_error("Cannot invoke raytracing substage with incorrect hit attribute type!");

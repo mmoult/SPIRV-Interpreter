@@ -5,7 +5,6 @@
  */
 #include "frame.hpp"
 
-#include "../values/primitive.hpp"
 
 Frame::~Frame() {
     if (view != nullptr) {
@@ -39,6 +38,7 @@ void Frame::triggerRaytrace(RtStageKind stage, unsigned index, Value* payload, V
     this->rt.as = &as;
     this->rt.result = payload;
     this->rt.hitAttribute = hit_attrib;
+    this->rt.callableReturning = false;
     if (this->rt.data != nullptr) {
         delete this->rt.data;
         this->rt.data = nullptr;
@@ -51,9 +51,9 @@ void Frame::triggerCallable(unsigned index, Value* callable, AccelStruct* as) {
     this->rt.as = as;
     this->rt.result = callable;
 
-    // hit attribute is never used by callable, so we reuse it to track whether this frame is entry or exit
-    Primitive dummy(0u);
-    this->rt.hitAttribute = static_cast<Value*>(&dummy);
+    // Callable substages have no hit attribute.
+    this->rt.hitAttribute = nullptr;
+    this->rt.callableReturning = false;
 
     if (this->rt.data != nullptr) {
         delete this->rt.data;
@@ -63,6 +63,7 @@ void Frame::triggerCallable(unsigned index, Value* callable, AccelStruct* as) {
 
 void Frame::disableRaytrace() {
     this->rt.trigger = RtStageKind::NONE;
+    this->rt.callableReturning = false;
     this->rt.index = 0;
     this->rt.as = nullptr;
     this->rt.result = nullptr;
