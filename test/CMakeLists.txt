@@ -23,4 +23,3 @@ target_sources(tests
 
 target_link_libraries(tests PRIVATE Catch2::Catch2WithMain spv-interp)
 target_compile_options(tests PRIVATE ${SPV_WARNINGS})
-install(TARGETS tests)

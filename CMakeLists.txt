@@ -59,17 +59,19 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   endif()
 endif()
 
-# Only do these if this is the main project, and not if it is included through add_subdirectory
-if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-  add_subdirectory(src)
-  # SYSTEM marks the include directories as system headers, so third-party code does not report warnings against
-  # our warning flags. Without it, Catch2's headers alone account for dozens of -Wnon-virtual-dtor reports.
-  add_subdirectory(external/glm SYSTEM)
+# The library is defined unconditionally, so the project can be consumed with add_subdirectory(). Everything else,
+# including the command line tool, the tests, and the install rules, exists only for a standalone build.
+add_subdirectory(src)
 
-  # Assume most consumers don't want to build and run unit tests: default off
-  option(BUILD_TESTING "Build unit tests" OFF)
-  if(BUILD_TESTING)
-    add_subdirectory(test)
-    add_subdirectory(external/Catch2 SYSTEM)
-  endif()
+# A consumer may have its own glm. SYSTEM marks the include directories as system headers, so third-party code does not
+# report against our warning flags; without it, Catch2's headers alone account for dozens of -Wnon-virtual-dtor reports.
+if(NOT TARGET glm::glm)
+  add_subdirectory(external/glm SYSTEM)
+endif()
+
+# Assume most consumers don't want to build and run unit tests: default off
+option(BUILD_TESTING "Build unit tests" OFF)
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  add_subdirectory(test)
+  add_subdirectory(external/Catch2 SYSTEM)
 endif()
