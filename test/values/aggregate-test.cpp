@@ -115,3 +115,37 @@ TEST_CASE("Array::copyReinterp round-trips", "[aggregate]") {
     delete narrow;
     delete back;
 }
+
+// Type::construct(undef) forwards to Aggregate::dummyFill, which used to drop the flag and always fill with dummy
+// values. OpConstantNull passes undef=false and requires zeros.
+TEST_CASE("Type::construct(false) zero-fills aggregates", "[aggregate]") {
+    Type el = Type::primitive(DataType::UINT, 32);
+    Type arr_type = Type::array(4, el);
+
+    SECTION("null-initialized array is all zeros") {
+        auto* arr = static_cast<Array*>(arr_type.construct(false));
+        REQUIRE(arr->getSize() == 4);
+        CHECK(rawOf(*arr) == std::vector<uint64_t> {0, 0, 0, 0});
+        delete arr;
+    }
+
+    SECTION("undef-initialized array is not all zeros") {
+        // The dummy value is deliberately eye-catching, so it must differ from the null fill.
+        auto* arr = static_cast<Array*>(arr_type.construct(true));
+        REQUIRE(arr->getSize() == 4);
+        CHECK(rawOf(*arr) != std::vector<uint64_t> {0, 0, 0, 0});
+        delete arr;
+    }
+
+    SECTION("null-initialized nested array is all zeros") {
+        Type inner = Type::array(2, el);
+        Type outer = Type::array(2, inner);
+        auto* arr = static_cast<Array*>(outer.construct(false));
+        REQUIRE(arr->getSize() == 2);
+        for (unsigned i = 0; i < 2; ++i) {
+            const auto& sub = static_cast<const Array&>(*(*arr)[i]);
+            CHECK(rawOf(sub) == std::vector<uint64_t> {0, 0});
+        }
+        delete arr;
+    }
+}

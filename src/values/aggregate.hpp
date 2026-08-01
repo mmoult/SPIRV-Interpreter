@@ -51,6 +51,7 @@ public:
 
     void addElements(std::vector<const Value*>& es) noexcept(false);
 
+    /// @param undef true to fill with attention-grabbing dummy values, false to fill with zeros.
     void dummyFill(bool undef = true, unsigned size = 0) noexcept(false) {
         if (size == 0)
             size = getSize();
@@ -58,7 +59,7 @@ public:
             assert(type.getBase() == DataType::COOP_MATRIX);
 
         for (unsigned i = 0; i < size; ++i) {
-            Value* val = getTypeAt(i).construct();
+            Value* val = getTypeAt(i).construct(undef);
             elements.push_back(val);
         }
     }
