@@ -119,3 +119,34 @@ TEST_CASE("output", "[json]") {
 
 #undef SETUP
 }
+
+// printKey escapes control characters. This test checks that it does so without looping forever on consecutive escapes.
+TEST_CASE("printKey escapes control characters", "[json]") {
+    std::map<std::string, const Value*> vars;
+    std::stringstream out;
+    Json format;
+    Primitive num(2);
+
+    auto keyed = [&](const std::string& key) {
+        vars.clear();
+        out.str("");
+        vars[key] = &num;
+        format.printFile(out, vars);
+        return out.str();
+    };
+
+    CHECK(keyed("a\tb") == "{\n\t\"a\\tb\" : 2\n}\n");
+    CHECK(keyed("a\nb") == "{\n\t\"a\\nb\" : 2\n}\n");
+    CHECK(keyed("a\rb") == "{\n\t\"a\\rb\" : 2\n}\n");
+    CHECK(keyed("a\bb") == "{\n\t\"a\\bb\" : 2\n}\n");
+    CHECK(keyed("a\fb") == "{\n\t\"a\\fb\" : 2\n}\n");
+
+    // Consecutive and leading/trailing escapes, plus the quote and backslash cases.
+    CHECK(keyed("\t\t") == "{\n\t\"\\t\\t\" : 2\n}\n");
+    CHECK(keyed("\ta\t") == "{\n\t\"\\ta\\t\" : 2\n}\n");
+    CHECK(keyed("a\"b") == "{\n\t\"a\\\"b\" : 2\n}\n");
+    CHECK(keyed("a\\b") == "{\n\t\"a\\\\b\" : 2\n}\n");
+
+    // A key that needs no escaping at all must be unchanged.
+    CHECK(keyed("plain") == "{\n\t\"plain\" : 2\n}\n");
+}

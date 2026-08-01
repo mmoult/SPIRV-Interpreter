@@ -193,15 +193,17 @@ void Json::printKey(std::stringstream& out, const std::string& key) const {
     std::array special {'\b', '\f', '\n', '\r', '\t'};
     std::array match {"\\b", "\\f", "\\n", "\\r", "\\t"};
     for (unsigned i = 0; i < key.length(); ++i) {
-    next_char:
-        char c = key[i];
+        const char c = key[i];
+        bool escaped = false;
         for (unsigned j = 0; j < special.size(); ++j) {
-            char spec = special[j];
-            if (c == spec) {
+            if (c == special[j]) {
                 out << match[j];
-                goto next_char;
+                escaped = true;
+                break;
             }
         }
+        if (escaped)
+            continue;
         if (c == '"' || c == '\\')
             out << '\\';
         out << c;
