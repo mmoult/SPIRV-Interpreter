@@ -71,7 +71,7 @@ public:
         return specConst;
     }
 
-    void setName(std::string new_name) {
+    void setName(const std::string& new_name) {
         name = new_name;
     }
     const std::string& getName() const {

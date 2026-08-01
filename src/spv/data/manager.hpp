@@ -89,7 +89,7 @@ public:
         return global;
     }
 
-    inline unsigned getBound() {
+    inline unsigned getBound() const {
         return max;
     }
     inline void setBound(unsigned max) {

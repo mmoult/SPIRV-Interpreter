@@ -30,7 +30,7 @@ struct Token {
     }
     explicit Token(int inum) : type(Type::INT), raw(inum) {}
     explicit Token(float fnum) : type(Type::FLOAT), raw(fnum) {}
-    explicit Token(std::string str) : type(Type::STRING), raw(str) {}
+    explicit Token(std::string str) : type(Type::STRING), raw(std::move(str)) {}
 
     void print() const {
         switch (type) {

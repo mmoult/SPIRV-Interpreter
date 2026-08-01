@@ -74,7 +74,7 @@ void Console::print(std::string msg, const std::string& header) {
         std::cout << std::endl;
 }
 
-void Console::warn(std::string msg) {
+void Console::warn(const std::string& msg) {
     if (suppress_warnings)
         return;
 

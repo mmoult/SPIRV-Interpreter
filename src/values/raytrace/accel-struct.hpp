@@ -161,7 +161,7 @@ public:
     /// @brief Check whether some hit distance is within the ray's interval.
     /// @param t_hit distance from the ray to the intersection.
     /// @return whether the hit is within the ray's interval.
-    bool isIntersectionValid(const float t_hit) {
+    bool isIntersectionValid(float t_hit) const {
         return (t_hit >= trace.rayTMin) && (t_hit <= trace.rayTMax);
     }
 

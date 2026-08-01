@@ -56,7 +56,7 @@ bool ValueFormat::LineHandler::queueLine() {
     return true;
 }
 
-bool ValueFormat::LineHandler::matchId(std::string match) {
+bool ValueFormat::LineHandler::matchId(const std::string& match) {
     auto c = peek();
     if (!c.has_value())
         return false;
@@ -121,7 +121,7 @@ std::optional<char> ValueFormat::LineHandler::peek() {
     }
 }
 
-void ValueFormat::addToMap(ValueMap& vars, std::string key, Value* val) const {
+void ValueFormat::addToMap(ValueMap& vars, const std::string& key, Value* val) const {
     // If the map already has the key, we have a problem
     if (vars.contains(key)) {
         std::stringstream err;

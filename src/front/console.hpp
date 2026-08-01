@@ -23,6 +23,6 @@ public:
 
     void print(std::string msg, const std::string& header = "");
 
-    static void warn(std::string msg);
+    static void warn(const std::string& msg);
 };
 #endif

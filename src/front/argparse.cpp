@@ -12,7 +12,7 @@
 
 namespace ArgParse {
 
-std::optional<unsigned> UintOption::isValid(std::string str) {
+std::optional<unsigned> UintOption::isValid(const std::string& str) {
     try {
         int parsed = std::stoi(str, nullptr);
         if (parsed <= 0) {

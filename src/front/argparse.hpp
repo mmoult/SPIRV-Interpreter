@@ -50,7 +50,7 @@ class UnaryOption : public Option {
     bool isSet = false;
 
 protected:
-    virtual std::optional<T> isValid(std::string str) = 0;
+    virtual std::optional<T> isValid(const std::string& str) = 0;
 
 public:
     UnaryOption(const std::string& arg_name) : argName(arg_name) {}
@@ -96,7 +96,7 @@ public:
 
 class StringOption final : public UnaryOption<std::string> {
 protected:
-    inline std::optional<std::string> isValid(std::string str) override {
+    inline std::optional<std::string> isValid(const std::string& str) override {
         return {str};
     }
 
@@ -107,7 +107,7 @@ public:
 
 class UintOption final : public UnaryOption<unsigned> {
 protected:
-    std::optional<unsigned> isValid(std::string str) override;
+    std::optional<unsigned> isValid(const std::string& str) override;
 
 public:
     explicit UintOption(const std::string& arg_name) : UnaryOption(arg_name) {}

@@ -51,7 +51,8 @@ public:
         }
     }
 
-    std::optional<unsigned> parseDescriptor(std::string name, const char** from, const char* end) {
+    // Does not touch any member, hence static.
+    static std::optional<unsigned> parseDescriptor(const std::string& name, const char** from, const char* end) {
         unsigned length = name.length();
         if (*from + length > end || strncmp(*from, name.c_str(), length) != 0)
             return {};
@@ -75,7 +76,7 @@ public:
         return {val};
     }
 
-    bool isMatch(const Variable& var) {
+    bool isMatch(const Variable& var) const {
         if (byName) {
             std::string compare = mangleName(var.getName());
             return (compare == name);

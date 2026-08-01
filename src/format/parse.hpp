@@ -78,7 +78,7 @@ protected:
         /// @param match the string to match current location against
         /// @param len the length of string match
         /// @return whether the match was successful
-        bool matchId(std::string match);
+        bool matchId(const std::string& match);
 
         /// @brief Return info for modified variables
         /// Specifically, return the current line and index. The iterator (if any) is modified in place and the iterator
@@ -122,7 +122,7 @@ protected:
     /// @param vars variables to add this key-value pair to
     /// @param key the name of the value
     /// @param val the value associated with the given key
-    void addToMap(ValueMap& vars, std::string key, Value* val) const;
+    void addToMap(ValueMap& vars, const std::string& key, Value* val) const;
 
     /// @brief Build an array whose element type is the union of the given elements' types.
     /// @param elements CONSUMED. Each is deep-copied into the result, then deleted and the list cleared, on both the
