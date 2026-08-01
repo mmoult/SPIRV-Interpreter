@@ -305,7 +305,8 @@ Value* composite_extract(Value* composite, unsigned index_start, const std::vect
         assert(operands[i].type == Token::Type::UINT);
         indices.push_back(std::get<unsigned>(operands[i].raw));
     }
-    Pointer ptr(0, indices, Type::forwardPointer());
+    // Use the pointer recursive indexing aka dereferencing capability instead of redefining here.
+    Pointer ptr(0, indices);
     return ptr.dereference(*composite);
 }
 

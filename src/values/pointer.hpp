@@ -22,8 +22,16 @@ class Pointer final : public Value {
     std::vector<unsigned> indices;
 
 public:
-    Pointer(unsigned head, std::vector<unsigned>& indices, Type point_to)
+    /// @param point_to the pointee type. Type::pointer stores its ADDRESS without taking ownership (see the note on
+    ///                 Type::subElement), so this must be a Type which outlives the Pointer - typically one owned by
+    ///                 the module's Data. Taking it by value here would store the address of the parameter itself,
+    ///                 which dies as soon as the constructor returns.
+    Pointer(unsigned head, const std::vector<unsigned>& indices, const Type& point_to)
         : Value(Type::pointer(point_to, -1)), head(head), indices(indices) {}
+
+    /// @brief Construct a scratch pointer with no meaningful pointee type.
+    Pointer(unsigned head, const std::vector<unsigned>& indices)
+        : Value(Type::forwardPointer()), head(head), indices(indices) {}
 
     void copyFrom(const Value& new_val) noexcept(false) override {
         Value::copyFrom(new_val);
@@ -38,9 +46,12 @@ public:
             throw std::runtime_error("Could not copy reinterp to pointer!");
     }
 
+    // The defaulted copy shares the pointee Type that this Pointer's type already borrows
+    Pointer(const Pointer& other) = default;
+    Pointer& operator=(const Pointer&) = delete;
+
     [[nodiscard]] Pointer* clone() const {
-        decltype(indices) indices = this->indices;
-        return new Pointer(this->head, indices, this->type);
+        return new Pointer(*this);
     }
 
     unsigned getHead() const {
