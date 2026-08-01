@@ -322,7 +322,7 @@ public:
     /// @param created a list of created types to be deleted after the call
     /// @return the general type common to all elements
     /// @throws if no such union type can be found
-    static Type unionOf(std::vector<const Value*> elements, std::vector<const Type*> created) noexcept(false);
+    static Type unionOf(const std::vector<const Value*>& elements, std::vector<const Type*>& created) noexcept(false);
 
     /// @brief Returns the type which is general to this and other
     /// Must follow the same conversion rules as void Value::copyFrom(const Value& new_val)
@@ -330,7 +330,7 @@ public:
     /// @param created a list of created types to be deleted after the call
     /// @return the general type common between this and other
     /// @throws if no such union type can be found
-    Type unionOf(const Type& other, std::vector<const Type*> created) const noexcept(false);
+    Type unionOf(const Type& other, std::vector<const Type*>& created) const noexcept(false);
 
     void replaceSubElement(const Type* sub_element) {
         assert(sub_element != nullptr);

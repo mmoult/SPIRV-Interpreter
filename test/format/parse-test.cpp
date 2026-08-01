@@ -120,14 +120,13 @@ TEST_CASE("construction", "[parse]") {
         std::vector<const Value*> elements;
         elements.reserve(3);
         // Do a difficult order: uint, int, float
-        // There will be a different union result after each index
-        Primitive ui(2u);
-        Primitive si(-5);
-        Primitive fl(1.5f);
-        elements.push_back(&ui);
-        elements.push_back(&si);
-        elements.push_back(&fl);
+        // There will be a different union result after each index.
+        // These must be heap-allocated: constructArrayFrom consumes its elements (see its declaration).
+        elements.push_back(new Primitive(2u));
+        elements.push_back(new Primitive(-5));
+        elements.push_back(new Primitive(1.5f));
         Value* val = format.constructArrayFrom(elements);
+        CHECK(elements.empty());  // consumed
         REQUIRE(val->getType().getBase() == DataType::ARRAY);
         REQUIRE(val->getType().getElement().getBase() == DataType::FLOAT);
         Array& arr = static_cast<Array&>(*val);

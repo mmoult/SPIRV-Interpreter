@@ -124,8 +124,16 @@ protected:
     /// @param val the value associated with the given key
     void addToMap(ValueMap& vars, std::string key, Value* val) const;
 
+    /// @brief Build an array whose element type is the union of the given elements' types.
+    /// @param elements CONSUMED. Each is deep-copied into the result, then deleted and the list cleared, on both the
+    ///                 success and the failure path. They must all be heap-allocated, and the caller must not free or
+    ///                 reuse them afterwards.
+    /// @return the constructed array, owned by the caller
     [[nodiscard]] Value* constructArrayFrom(std::vector<const Value*>& elements);
 
+    /// @brief Build a struct from the given field names and values.
+    /// @param elements CONSUMED, exactly as for constructArrayFrom.
+    /// @return the constructed struct, owned by the caller
     [[nodiscard]] Value* constructStructFrom(std::vector<std::string>& names, std::vector<const Value*>& elements);
 
     /// @brief Parse a number from the given index in the provided line

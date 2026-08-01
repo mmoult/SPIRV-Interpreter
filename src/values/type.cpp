@@ -73,7 +73,7 @@ Value* Type::construct(bool undef) const {
     }
 }
 
-Type Type::unionOf(std::vector<const Value*> elements, std::vector<const Type*> created) {
+Type Type::unionOf(const std::vector<const Value*>& elements, std::vector<const Type*>& created) {
     if (elements.empty())
         throw std::invalid_argument("Cannot find union of types in empty vector!");
     Type t = elements[0]->getType();
@@ -126,7 +126,7 @@ bool Type::operator==(const Type& rhs) const {
     }
 }
 
-Type Type::unionOf(const Type& other, std::vector<const Type*> created) const noexcept(false) {
+Type Type::unionOf(const Type& other, std::vector<const Type*>& created) const noexcept(false) {
     // Union should not care about the ordering of types. ie, a.unionOf(b) == b.unionOf(a)
     // To accomplish this, we "order" the two types by base before running any comparisons
 

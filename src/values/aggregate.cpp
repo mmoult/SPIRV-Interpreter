@@ -35,9 +35,19 @@ void Aggregate::addElements(std::vector<const Value*>& es) noexcept(false) {
 }
 
 void Aggregate::inferType() {
-    if (type.getBase() == DataType::ARRAY) {
-        // Must be at least one array element to perform this action!
-        assert(!elements.empty());
+    // Depth first. A child's own type must already point at its own elements before we point at that child, otherwise
+    // this aggregate's type would still transitively reference whatever the child's type was originally built from,
+    // typically a caller's temporary, which is then not safe to free.
+    for (Value* element : elements) {
+        if (auto base = element->getType().getBase();
+            base == DataType::ARRAY || base == DataType::STRUCT || base == DataType::COOP_MATRIX)
+            static_cast<Aggregate*>(element)->inferType();
+    }
+
+    if (type.getBase() == DataType::ARRAY || type.getBase() == DataType::COOP_MATRIX) {
+        // A runtime array legitimately has no elements, and there is then nothing to infer from.
+        if (elements.empty())
+            return;
         type.replaceSubElement(&elements[0]->getType());
     } else {
         assert(type.getBase() == DataType::STRUCT);

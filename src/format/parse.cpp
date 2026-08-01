@@ -131,6 +131,15 @@ void ValueFormat::addToMap(ValueMap& vars, std::string key, Value* val) const {
     vars[key] = val;
 }
 
+/// @brief Release the caller-supplied elements and empty the list.
+/// constructArrayFrom and constructStructFrom consume their inputs: Aggregate::addElements deep-copies each one, so
+/// once the constructed aggregate's type no longer references them they must be freed or they leak.
+static void delete_elements(std::vector<const Value*>& elements) {
+    for (const Value* element : elements)
+        delete element;
+    elements.clear();
+}
+
 [[nodiscard]] Value* ValueFormat::constructArrayFrom(std::vector<const Value*>& elements) {
     if (elements.empty())
         return new Array(Statics::voidType, 0);
@@ -149,11 +158,14 @@ void ValueFormat::addToMap(ValueMap& vars, std::string key, Value* val) const {
 
         for (const Type* type : created)
             delete type;
+        // addElements deep-copied every input, and inferType has re-pointed the whole type tree at those copies, so
+        // the inputs are now unreferenced and ours to release. Not doing so leaked every scalar and every nested
+        // aggregate of every parsed input file.
+        delete_elements(elements);
         return arr;
     } catch (const std::exception& e) {
         delete arr;  // addElements and inferType can both throw after it was allocated
-        for (auto* element : elements)
-            delete element;
+        delete_elements(elements);
         for (const Type* type : created)
             delete type;
         throw std::runtime_error("Element parsed of incompatible type with other array elements!");
@@ -175,6 +187,10 @@ ValueFormat::constructStructFrom(std::vector<std::string>& names, std::vector<co
         ts.nameMember(i, names[i]);
     Struct* st = new Struct(ts);
     st->addElements(elements);
+    // ts (and so st's type) was built from the inputs' types, so the type tree has to be re-pointed at st's own deep
+    // copies before the inputs can be released.
+    st->inferType();
+    delete_elements(elements);
     return st;
 }
 
