@@ -171,8 +171,12 @@ public:
             this->vertices[i] = verts[i];
     }
 
-    inline void resolveReferences(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) override {
-    }
+    inline void resolveReferences(
+        const std::vector<Node*>& /* nodes */,
+        unsigned /* box */,
+        unsigned /* inst */,
+        unsigned /* tri */
+    ) override {}
 
     static const Type& getType();
 
@@ -210,8 +214,12 @@ public:
         maxBounds = glm::vec3(max_x, max_y, max_z);
     }
 
-    inline void resolveReferences(const std::vector<Node*>& nodes, unsigned box, unsigned inst, unsigned tri) override {
-    }
+    inline void resolveReferences(
+        const std::vector<Node*>& /* nodes */,
+        unsigned /* box */,
+        unsigned /* inst */,
+        unsigned /* tri */
+    ) override {}
 
     static const Type& getType();
 

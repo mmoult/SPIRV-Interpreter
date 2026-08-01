@@ -55,8 +55,8 @@ handle_type(const Token::Type& type, std::vector<Token>& operands, const std::ve
     }
 }
 
-void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vector<uint32_t>& words) noexcept(false
-) {
+void
+Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vector<uint32_t>& words) noexcept(false) {
     // Very first, fetch SPIR-V info for the opcode (and also validate it is real)
     bool has_result;
     bool has_type;
@@ -352,7 +352,7 @@ void Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::
         memory_operands();
         break;
     case spv::OpAccessChain:  // 65
-    case spv::OpInBoundsPtrAccessChain: // 70
+    case spv::OpInBoundsPtrAccessChain:  // 70
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         optional.push_back(Type::REF);

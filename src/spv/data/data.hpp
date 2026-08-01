@@ -185,7 +185,11 @@ public:
     explicit(false) Data(Value* val) : raw(val), type(DType::VALUE) {};
     explicit(false) Data(Type* type) : raw(type), type(DType::TYPE) {};
 
-    Data& operator=(Data& other) = delete;
+    // Data is a handle, not an owner. Thus, copying neither duplicates nor transfers the pointee. Release is always
+    // manual via clear(). Default the copy constructor for a shallow clone. Assignment is deleted (use redefine() if
+    // you wish to overwrite the value).
+    Data(const Data& other) = default;
+    Data& operator=(const Data& other) = delete;
 
     // Return nullptr if not a valid cast- assume the caller has more info for a better error
 #define GET_X(UPPER, CAPITAL) \

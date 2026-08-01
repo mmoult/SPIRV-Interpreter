@@ -74,8 +74,7 @@ private:
     bool makeResultGlsl(DataView& data, unsigned result_at) const noexcept(false);
     bool makeResultPrintf(DataView& data) const noexcept(false);
 
-    std::array<float, 4>
-    calcImageLocation(
+    std::array<float, 4> calcImageLocation(
         DataView& data,
         const Image* image,
         const Value* coords,
@@ -185,7 +184,6 @@ public:
     /// @brief Executes the instruction with the provided data, frame stack, and verbosity setting.
     /// @param data the data view at the current frame or the global if the frame stack is empty
     /// @param frame_stack holds variables, arguments, return addresses, and program counters
-    /// @param verbose whether to print a verbose trace of execution
     /// @param use_sbt whether the shader binding table should be used for raytracing interactions
     /// @return whether the instruction execution blocks the invocation (such as by a barrier)
     bool execute(
@@ -193,7 +191,6 @@ public:
         std::vector<std::vector<Frame*>>& frame_stacks,
         unsigned invocation,
         unsigned num_invocations,
-        bool verbose,
         bool use_sbt
     ) const;
 

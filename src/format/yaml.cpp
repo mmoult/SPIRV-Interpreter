@@ -249,10 +249,12 @@ void Yaml::printKey(std::stringstream& out, const std::string& name) const {
         char c = name[i];
         if (i == 0 && std::isdigit(c) && need < SINGLE)
             need = SINGLE;
-        else if ((c == ':' || c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == '&' || c == '*' ||
-                  c == '#' || c == '?' || c == '|' || c == '-' || c == '<' || c == '>' || c == '=' || c == '!' ||
-                  c == '%' || c == '@' || c == '\\') &&
-                 need < SINGLE)
+        else if (
+            (c == ':' || c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == '&' || c == '*' || c == '#' ||
+             c == '?' || c == '|' || c == '-' || c == '<' || c == '>' || c == '=' || c == '!' || c == '%' || c == '@' ||
+             c == '\\') &&
+            need < SINGLE
+        )
             need = SINGLE;
         else if ((c == '\n' || c == '\t' || c == '\'') && need < DOUBLE)
             need = DOUBLE;
@@ -342,7 +344,7 @@ void Yaml::printValue(std::stringstream& out, const Value& value, unsigned inden
     case DataType::STRUCT: {
         char open, close;
         bool is_struct = type_base == DataType::STRUCT;
-        const std::vector<std::string>* names;
+        const std::vector<std::string>* names = nullptr;
         unsigned inline_max;
         unsigned e_indents;
         if (is_struct) {

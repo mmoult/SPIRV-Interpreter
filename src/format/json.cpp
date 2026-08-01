@@ -263,7 +263,7 @@ void Json::printValue(std::stringstream& out, const Value& value, unsigned inden
         char close;
         bool is_struct = type_base == DataType::STRUCT;
         unsigned inline_max;
-        const std::vector<std::string>* names;
+        const std::vector<std::string>* names = nullptr;
         if (is_struct) {
             out << '{';
             close = '}';

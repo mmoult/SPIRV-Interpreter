@@ -125,7 +125,6 @@ bool Instruction::execute(
     std::vector<std::vector<Frame*>>& frame_stacks,
     unsigned invocation,
     unsigned num_invocations,
-    bool verbose,
     bool use_sbt
 ) const {
     bool inc_pc = true;
@@ -133,7 +132,7 @@ bool Instruction::execute(
     std::vector<Frame*>& frame_stack = frame_stacks[invocation];
     Frame& frame = *frame_stack.back();
 
-    unsigned result_at;
+    unsigned result_at = 0;
     if (hasResult) {
         unsigned idx = hasResultType ? 1 : 0;
         assert(operands[idx].type == Token::Type::REF);
@@ -188,7 +187,7 @@ bool Instruction::execute(
     case spv::OpMemoryBarrier:  // 225
     case spv::OpLoopMerge:  // 246
     case spv::OpSelectionMerge:  // 247
-        break;  // should print for verbose
+        break;
     case spv::OpFunctionParameter:  // 55
         inc_pc = false;  // get arg increments PC for us
         // Function parameters get a weak copy of the data passed in. If a pointer is passed (such as a Variable), then

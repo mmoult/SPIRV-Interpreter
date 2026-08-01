@@ -156,71 +156,71 @@ std::array<float, 4> Instruction::calcImageLocation(
                 continue;
             descriptors &= ~i;
             switch (i) {
-                case spv::ImageOperandsBiasMask: {
-                    const Value* bias = getNext();
-                    // bias must be a float per the spec
-                    assert(bias->getType().getBase() == DataType::FLOAT);
-                    lod += static_cast<const Primitive*>(bias)->data.f;
-                    break;
-                }
-                case spv::ImageOperandsLodMask: {
-                    const Value* lodv = getNext();
-                    const auto& lodp = static_cast<const Primitive&>(*lodv);
-                    Primitive prim(0.0);
-                    prim.copyFrom(lodp);
-                    lod = prim.data.f;
-                    break;
-                }
-                case spv::ImageOperandsConstOffsetMask:
-                case spv::ImageOperandsOffsetMask: {
-                    const Value* shifts = getNext();
-                    // Per the spec, these must be of integer type and match the number of coordinates
-                    auto shift_type = shifts->getType().getBase();
-                    if (shift_type == DataType::ARRAY) {
-                        assert(shifts->getType().getElement().getBase() == DataType::INT);
-                        const auto& sh = static_cast<const Array&>(*shifts);
-                        for (unsigned j = 0; j < sh.getSize(); ++j) {
-                            const auto& shp = static_cast<const Primitive&>(*(sh[j]));
-                            switch (j) {
-                            case 0:
-                                x += shp.data.i;
-                                break;
-                            case 1:
-                                y += shp.data.i;
-                                break;
-                            case 2:
-                                z += shp.data.i;
-                                break;
-                            default:
-                                throw std::runtime_error("Offset coordinate count exceeds components usable!");
-                            }
+            case spv::ImageOperandsBiasMask: {
+                const Value* bias = getNext();
+                // bias must be a float per the spec
+                assert(bias->getType().getBase() == DataType::FLOAT);
+                lod += static_cast<const Primitive*>(bias)->data.f;
+                break;
+            }
+            case spv::ImageOperandsLodMask: {
+                const Value* lodv = getNext();
+                const auto& lodp = static_cast<const Primitive&>(*lodv);
+                Primitive prim(0.0);
+                prim.copyFrom(lodp);
+                lod = prim.data.f;
+                break;
+            }
+            case spv::ImageOperandsConstOffsetMask:
+            case spv::ImageOperandsOffsetMask: {
+                const Value* shifts = getNext();
+                // Per the spec, these must be of integer type and match the number of coordinates
+                auto shift_type = shifts->getType().getBase();
+                if (shift_type == DataType::ARRAY) {
+                    assert(shifts->getType().getElement().getBase() == DataType::INT);
+                    const auto& sh = static_cast<const Array&>(*shifts);
+                    for (unsigned j = 0; j < sh.getSize(); ++j) {
+                        const auto& shp = static_cast<const Primitive&>(*(sh[j]));
+                        switch (j) {
+                        case 0:
+                            x += shp.data.i;
+                            break;
+                        case 1:
+                            y += shp.data.i;
+                            break;
+                        case 2:
+                            z += shp.data.i;
+                            break;
+                        default:
+                            throw std::runtime_error("Offset coordinate count exceeds components usable!");
                         }
-                    } else {
-                        assert(shift_type == DataType::INT);
-                        x += static_cast<const Primitive&>(*shifts).data.i;
                     }
-                    break;
+                } else {
+                    assert(shift_type == DataType::INT);
+                    x += static_cast<const Primitive&>(*shifts).data.i;
                 }
-                case spv::ImageOperandsConstOffsetsMask: {
-                    getNext();
-                    // "Only valid with OpImageGather or OpImageDrefGather."
-                    // Intentionally defer to later processing, since this requires a quad output.
-                    defer_pairs.push_back(std::make_pair(i, next));
-                    break;
-                }
-                case spv::ImageOperandsMinLodMask: {
-                    const Value* min_lodv = getNext();
-                    assert(min_lodv->getType().getBase() == DataType::FLOAT);
-                    // spec explicitly requires it to be a floating point scalar
-                    lod = std::max(lod, static_cast<float>(static_cast<const Primitive&>(*min_lodv).data.f));
-                    break;
-                }
-                default: {
-                    std::stringstream err;
-                    err << "Cannot handle unsupported image qualifier operand! ";
-                    err << i;
-                    throw std::runtime_error(err.str());
-                }
+                break;
+            }
+            case spv::ImageOperandsConstOffsetsMask: {
+                getNext();
+                // "Only valid with OpImageGather or OpImageDrefGather."
+                // Intentionally defer to later processing, since this requires a quad output.
+                defer_pairs.push_back(std::make_pair(i, next));
+                break;
+            }
+            case spv::ImageOperandsMinLodMask: {
+                const Value* min_lodv = getNext();
+                assert(min_lodv->getType().getBase() == DataType::FLOAT);
+                // spec explicitly requires it to be a floating point scalar
+                lod = std::max(lod, static_cast<float>(static_cast<const Primitive&>(*min_lodv).data.f));
+                break;
+            }
+            default: {
+                std::stringstream err;
+                err << "Cannot handle unsupported image qualifier operand! ";
+                err << i;
+                throw std::runtime_error(err.str());
+            }
             }
         }
         if (++next < operands.size())
@@ -1165,7 +1165,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             }
         }
         Function* fx;
-        EntryPoint* ep;
+        EntryPoint* ep = nullptr;
         if (entry) {
             ep = new EntryPoint(fx_type, location);
             fx = ep;
@@ -1202,6 +1202,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 default:
                     break;
                 }
+                break;
             }
             case spv::OpExecutionModeId: {
                 // examples:
@@ -1217,6 +1218,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                 default:
                     break;
                 }
+                break;
             }
             case spv::OpEntryPoint:
             default:
@@ -1229,7 +1231,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             data[result_at].redefine(fx);
         break;
     }
-    case spv::OpFunctionParameter: { // 55
+    case spv::OpFunctionParameter: {  // 55
         // Used only for adding entry point parameters to the interface
         const Type& type = *getType(dst_type_at, data);
         Variable* var = new Variable(static_cast<spv::StorageClass>(type.getStorage()), false);
@@ -1248,8 +1250,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(var);
         break;
     }
-    case spv::OpAccessChain: // 65
-    case spv::OpInBoundsPtrAccessChain: { // 70
+    case spv::OpAccessChain:  // 65
+    case spv::OpInBoundsPtrAccessChain: {  // 70
         std::vector<unsigned> indices;
         assert(operands[2].type == Token::Type::REF);
         unsigned head = std::get<unsigned>(operands[2].raw);
@@ -1412,9 +1414,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         Value& component = *getValue(src_at + 2, data);
 
         std::vector<std::pair<uint32_t, unsigned>> defer_pairs;
-        auto [x, y, z, lod] = Instruction::calcImageLocation(
-            data, &image, coords, src_at + 3, defer_pairs, sampler.getImplicitLod()
-        );
+        auto [x, y, z, lod] =
+            Instruction::calcImageLocation(data, &image, coords, src_at + 3, defer_pairs, sampler.getImplicitLod());
         // TODO: f* should be ignored, but C++ doesn't have placeholder (_) until C++26.
         auto [ux, fx] = Image::decompose(x);
         auto [uy, fy] = Image::decompose(y);
@@ -1436,12 +1437,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         Array& to_ret = *static_cast<Array*>(res_type->construct());
 
         for (unsigned i = 0; i < coord_indices.size(); ++i) {
-            int xx, yy;
-            bool default_pair = true;
+            // Start from the standard gather offsets; a ConstOffsets image operand, if present, replaces them.
+            const auto [ix, iy] = coord_indices[i];
+            int xx = ix;
+            int yy = iy;
             for (auto [mask, index] : defer_pairs) {
                 if (mask == spv::ImageOperandsConstOffsetsMask) {
-                    default_pair = false;
-
                     const Value* const_offs_v = getValue(index, data);
                     assert(const_offs_v->getType().getBase() == DataType::ARRAY);
                     const auto& const_offs = static_cast<const Array&>(*const_offs_v);
@@ -1453,12 +1454,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                     xx = static_cast<const Primitive&>(*xy_pair[0]).data.i;
                     yy = static_cast<const Primitive&>(*xy_pair[1]).data.i;
                 } else
-                    assert(false); // Unknown mask!
-            }
-            if (default_pair) {
-                const auto [ix, iy] = coord_indices[i];
-                xx = ix;
-                yy = iy;
+                    assert(false);  // Unknown mask!
             }
 
             Array* read_res = image.read(ux + xx, uy + yy, uz, lod);
@@ -3211,8 +3207,8 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
                 return *a;
             bool a_neg = std::signbit(a->data.f);
             bool b_neg = std::signbit(b->data.f);
-            const Primitive* one = min? a : b;
-            const Primitive* two = min? b : a;
+            const Primitive* one = min ? a : b;
+            const Primitive* two = min ? b : a;
             if (a_neg && !b_neg)
                 return *one;
             if (b_neg && !a_neg)

@@ -35,7 +35,7 @@ private:
     void printValue(std::stringstream& out, const Value& value, unsigned indents) const;
 
 protected:
-    inline SpecialFloatResult isSpecialFloat(LineHandler& handle) const override {
+    inline SpecialFloatResult isSpecialFloat(LineHandler& /* handle */) const override {
         // JSON parsing handles these cases by itself (within strings)
         return SpecialFloatResult::F_NONE;
     }

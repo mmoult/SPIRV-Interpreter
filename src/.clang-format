@@ -9,7 +9,6 @@ AlignEscapedNewlines: DontAlign
 AlignOperands: Align
 AlignAfterOpenBracket: BlockIndent
 AllowAllArgumentsOnNextLine: false
-AllowAllConstructorInitializersOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortFunctionsOnASingleLine: Empty
 BinPackArguments: false
@@ -21,7 +20,6 @@ BreakConstructorInitializers: BeforeComma
 BreakInheritanceList: BeforeComma
 BreakTemplateDeclarations: Yes
 ColumnLimit: 120
-ConstructorInitializerAllOnOneLineOrOnePerLine: true
 Cpp11BracedListStyle: true
 EmptyLineBeforeAccessModifier: Leave
 FixNamespaceComments: true
@@ -29,11 +27,11 @@ InsertTrailingCommas: Wrapped
 MaxEmptyLinesToKeep: 2
 PackConstructorInitializers: NextLine
 #QualifierOrder: [volatile, restrict, static, friend, inline, constexpr, type, const]
-ReflowComments: true
+ReflowComments: Always
 SpaceAfterTemplateKeyword: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeRangeBasedForLoopColon: true
-SpaceInEmptyBlock: false
+SpaceInEmptyBraces: Never
 SpacesBeforeTrailingComments: 2
 ...

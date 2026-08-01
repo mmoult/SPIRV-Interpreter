@@ -36,16 +36,16 @@ protected:
     /// @brief Parse and return a single key-value pair
     /// @param vars variables to save to- a map of names to values
     /// @param handle a handler to parse the value from
-    std::tuple<std::string, Value*> parseVariable(LineHandler& handle) override {
+    std::tuple<std::string, Value*> parseVariable(LineHandler& /* handle */) override {
         unused();
         return {};
     }
 
-    void parseFile(ValueMap& vars, LineHandler& handler) override {
+    void parseFile(ValueMap& /* vars */, LineHandler& /* handler */) override {
         unused();
     }
 
-    void verifyBlank(LineHandler& handle) override {
+    void verifyBlank(LineHandler& /* handle */) override {
         unused();
     }
 
@@ -54,7 +54,7 @@ public:
     using ValueFormat::LineHandler;
     using ValueFormat::constructArrayFrom;
 
-    void printFile(std::stringstream& out, const ValueMap& vars) override {
+    void printFile(std::stringstream& /* out */, const ValueMap& /* vars */) override {
         unused();
     }
 };

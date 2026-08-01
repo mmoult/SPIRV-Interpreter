@@ -104,7 +104,7 @@ class Type final : public Valuable {
 
 public:
     inline Type() noexcept(true) : base(DataType::VOID), subSize(0), subElement(nullptr) {}
-    Type(const Type& t) = default;
+    // Copy, move, and assignment are all implicit.
 
     // Factory methods to create type variants:
 
@@ -134,7 +134,7 @@ public:
     /// @param major the number of rows in the matrix
     /// @param minor the number of columns in the matrix
     /// @param element the type of each matrix element
-    static inline Type coopMatrix(unsigned scope, unsigned rows, unsigned cols, const Type& element) {
+    static inline Type coopMatrix(unsigned /* scope */, unsigned rows, unsigned cols, const Type& element) {
         // The scope is a useful hint for compilation by indicating where the data should be stored. Not needed here.
         Type ret(DataType::COOP_MATRIX, rows * cols, &element);
         ret.rows = rows;

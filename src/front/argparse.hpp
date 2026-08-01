@@ -30,7 +30,7 @@ struct Flag final : public Option {
         enabled = true;
         return 0;
     }
-    inline bool handle(const std::string& arg) override {
+    inline bool handle(const std::string& /* arg */) override {
         assert(false);
         return false;  // flags may not use arguments!
     }

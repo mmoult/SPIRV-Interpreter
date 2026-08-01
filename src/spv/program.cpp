@@ -591,8 +591,8 @@ std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcep
     return std::tuple(outputs.empty(), total_tests);
 }
 
-void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invoc, unsigned timeout) noexcept(false
-) {
+void
+Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invoc, unsigned timeout) noexcept(false) {
     Instruction& entry_inst = insts[entry];
     DataView& global = data.getGlobal();
 
@@ -726,7 +726,7 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
         for (unsigned threadVar : threadVars) {
             Instruction& inst = insts[threadVar];
             assert(inst.getOpcode() == spv::OpVariable);
-            bool blocked = inst.execute(new_frame->getData(), frame_stacks, i, num_invocations, verbose, use_sbt);
+            bool blocked = inst.execute(new_frame->getData(), frame_stacks, i, num_invocations, use_sbt);
             assert(!blocked);
             // Variable* var_v = global[inst.getResult()].getVariable();
         }
@@ -803,7 +803,7 @@ void Program::execute(bool verbose, ValueFormat& format, bool debug, bool single
 
         unsigned frame_depth = frame_stack.size();
         // If executing the instruction blocks the thread, remove it from the active list
-        if (insts[i_at].execute(cur_data, frame_stacks, next_invoc, num_invocations, verbose, use_sbt))
+        if (insts[i_at].execute(cur_data, frame_stacks, next_invoc, num_invocations, use_sbt))
             active_threads.erase(next_invoc);
 
         // print the result if verbose

@@ -100,7 +100,7 @@ void Debugger::print(unsigned which, const DataView& data) const {
     std::stringstream result_name;
     result_name << '%' << which;
 
-    const Value* val;
+    const Value* val = nullptr;
     bool deleteAfter = true;
 
     const String empty("null");

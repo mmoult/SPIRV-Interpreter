@@ -95,7 +95,7 @@ protected:
     std::string getTypeName() const override {
         return "array";
     }
-    const Type& getTypeAt(unsigned idx) const override {
+    const Type& getTypeAt(unsigned /* idx */) const override {
         return type.getElement();
     }
 
