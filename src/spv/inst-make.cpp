@@ -23,6 +23,7 @@
 #include "../front/console.hpp"
 #include "../spv/ray-flags.hpp"
 #include "../util/array-math.hpp"
+#include "../util/bits.hpp"
 #include "../util/fpconvert.hpp"
 #include "../values/aggregate.hpp"
 #include "../values/coop-matrix.hpp"
@@ -1017,8 +1018,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         case DataType::INT: {
             // Copy the sign bits
             assert(prec <= 64);
-            uint64_t bitmask = (prec == 64) ? ~0ULL : (1ULL << prec) - 1;
-            if (raw & (1ULL << (prec - 1)))
+            auto bitmask = Bits::ones<uint64_t>(prec);
+            if (raw & Bits::safeShl<uint64_t>(1, prec - 1))
                 raw |= ~bitmask;
             else
                 raw &= bitmask;
@@ -2037,20 +2038,22 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
     case spv::OpFUnordGreaterThanEqual:  // 191
         TYPICAL_E_BIN_OP(FLOAT, std::isnan(a->data.f) || std::isnan(b->data.f) || a->data.f >= b->data.f);
     case spv::OpShiftRightLogical: {  // 194
-        E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u >> b->data.u; });
+        E_SHIFT_OP([](const Primitive* a, const Primitive* b) {
+            return Bits::safeShr<uint64_t>(a->data.u, b->data.u);
+        });
         break;
     }
     case spv::OpShiftRightArithmetic: {  // 195
         const auto* val = getValue(src_at, data);
         const auto type = val->getType();
         auto prec = element_type(type).getPrecision();
-        uint64_t bitmask = (prec == 64) ? ~0ULL : (1ULL << prec) - 1;
+        auto bitmask = Bits::ones<uint64_t>(prec);
         E_SHIFT_OP([bitmask](const Primitive* a, const Primitive* b) {
             auto base = a->data.u;
             // Fill the shifted bits with the sign bit.
             // We emulate integer at 64-bit precision, so the sign bit is bit 63.
             bool sign = (base & (1ULL << 63)) > 0;
-            auto shifted = base >> b->data.u;
+            auto shifted = Bits::safeShr<uint64_t>(base, b->data.u);
             if (sign)
                 shifted |= ~bitmask;
             else
@@ -2061,7 +2064,9 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         break;
     }
     case spv::OpShiftLeftLogical: {  // 196
-        E_SHIFT_OP([](const Primitive* a, const Primitive* b) { return a->data.u << b->data.u; });
+        E_SHIFT_OP([](const Primitive* a, const Primitive* b) {
+            return Bits::safeShl<uint64_t>(a->data.u, b->data.u);
+        });
         break;
     }
     case spv::OpBitwiseOr:  // 197
@@ -2089,15 +2094,15 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         assert(base_base == DataType::INT || base_base == DataType::UINT);
         assert(insert_base == DataType::INT || insert_base == DataType::UINT);
 
-        uint32_t src_mask = ((1 << count_p.data.u) - 1);
-        uint32_t insertion_mask = ~(src_mask << offset);
+        const auto src_mask = Bits::ones<uint32_t>(count_p.data.u);
+        const auto insertion_mask = ~Bits::safeShl<uint32_t>(src_mask, offset);
 
         BinOp fx_s = [&](const Primitive* a, const Primitive* b) {
-            return int32_t((a->data.u & insertion_mask) | ((b->data.u & src_mask) << offset));
+            return int32_t((a->data.u & insertion_mask) | Bits::safeShl<uint32_t>(b->data.u & src_mask, offset));
         };
         BinOp fx_u = [&](const Primitive* a, const Primitive* b) {
             uint32_t base = (a->data.u & insertion_mask);
-            uint32_t insert = ((b->data.u & src_mask) << offset);
+            uint32_t insert = Bits::safeShl<uint32_t>(b->data.u & src_mask, offset);
             return insert | base;
         };
         bool is_result_signed = type_base(*getType(dst_type_at, data)) == DataType::INT;
@@ -2127,18 +2132,19 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         const auto& count_p = static_cast<const Primitive&>(*getValue(src_at + 2, data));
         if (auto base = count_p.getType().getBase(); base != DataType::INT && base != DataType::UINT)
             throw std::runtime_error("The type of bitfield extract count operand must be an integer!");
-        uint32_t mask = ((1 << count_p.data.u) - 1);
+        const auto mask = Bits::ones<uint32_t>(count_p.data.u);
 
-        uint32_t single, other;
+        uint32_t single = 0;
+        uint32_t other = 0;
         if (extend && mask != 0) {
-            single = (0x1 << (count_p.data.u - 1));
-            other = (0xFFFF'FFFF >> (32 - count_p.data.u)) << count_p.data.u;
+            const auto single = Bits::safeShl<uint32_t>(1, count_p.data.u - 1);
+            const auto other = Bits::safeShl<uint32_t>(Bits::safeShr<uint32_t>(0xFFFF'FFFF, 32 - count_p.data.u), count_p.data.u);
         }
 
         UnOp ufx = [&](const Primitive* a) {
             if (mask == 0)
                 return Primitive(static_cast<uint64_t>(0));
-            uint32_t val = (a->data.u >> offset_p.data.u) & mask;
+            uint32_t val = Bits::safeShr<uint64_t>(a->data.u, offset_p.data.u) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
             return Primitive(val);
@@ -2146,7 +2152,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         UnOp ifx = [&](const Primitive* a) {
             if (mask == 0)
                 return Primitive(static_cast<uint64_t>(0));
-            uint32_t val = (a->data.u >> offset_p.data.u) & mask;
+            uint32_t val = Bits::safeShr<uint64_t>(a->data.u, offset_p.data.u) & mask;
             if (extend && ((val & single) > 0))
                 val |= other;
             Primitive prim(-1);

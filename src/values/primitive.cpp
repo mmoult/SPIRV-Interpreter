@@ -8,6 +8,7 @@
 #include <bit>  // bit_cast, countl_zero
 #include <stdexcept>
 
+#include "../util/bits.hpp"
 #include "../util/compare.hpp"
 #include "../util/fpconvert.hpp"
 
@@ -22,7 +23,7 @@ void Primitive::copyFrom(const Value& new_val) noexcept(false) {
     auto prec = type.getPrecision();
     // It is UB to shift by the bit width or more.
     assert(prec <= 64);
-    uint64_t bitmask = (prec == 64) ? ~0ULL : (1ULL << prec) - 1;
+    uint64_t bitmask = Bits::ones<uint64_t>(prec);
 
     switch (type.getBase()) {  // cast to
     case FLOAT: {
@@ -117,7 +118,7 @@ uint64_t Primitive::getRaw() const {
     case UINT:
         return data.u;
     case INT: {
-        const uint64_t bitmask = (prec == 64) ? ~0ULL : (1ULL << prec) - 1;
+        const uint64_t bitmask = Bits::ones<uint64_t>(prec);
         return data.u & bitmask;
     }
     case BOOL:
@@ -158,7 +159,7 @@ void Primitive::copyReinterp(const Value& other) noexcept(false) {
         break;
     case INT: {
         data.all = from_other;
-        uint64_t bitmask = (to_prec == 64) ? ~0ULL : (1ULL << to_prec) - 1;
+        uint64_t bitmask = Bits::ones<uint64_t>(to_prec);
         // If the sign bit for the precision is set, copy across to all emulation bits
         if (data.all & (1ULL << (to_prec - 1)))
             data.all |= ~bitmask;
@@ -203,7 +204,7 @@ bool Primitive::uAdd(const Primitive* addend, Primitive* sum) const {
     uint64_t res = uint64_t(this->data.u) + uint64_t(addend->data.u);
     const unsigned need_prec = 64 - static_cast<unsigned>(std::countl_zero(res));
     unsigned res_prec = sum->getType().getPrecision();
-    const uint64_t dest_mask = (1ULL << res_prec) - 1;
+    const uint64_t dest_mask = Bits::ones<uint64_t>(res_prec);
     sum->data.u = res & dest_mask;
     return (need_prec > res_prec);
 }
@@ -215,17 +216,17 @@ bool Primitive::uSub(const Primitive* subtrahend, Primitive* difference) const {
     unsigned prec = type.getPrecision();
     assert(prec >= subtrahend->getType().getPrecision());
     if (prec < 64)
-        res |= 1 << prec;
+        res |= 1ULL << prec;
     res -= uint64_t(subtrahend->data.u);
     if (prec < 64) {
-        res &= ~(1 << prec);  // return the borrow bit to normal
+        res &= ~(1ULL << prec);  // return the borrow bit to normal
     } else {
         // We cannot create an artificial borrow bit for 64-bit sizes.
         // However, we can count on automatic rollover. overflow_result + 1 = expected
         if (subtrahend->data.u > this->data.u)
             res++;  // by definition, this cannot overflow
     }
-    const uint64_t dest_mask = (1ULL << difference->getType().getPrecision()) - 1;
+    const uint64_t dest_mask = Bits::ones<uint64_t>(difference->getType().getPrecision());
     difference->data.u = res & dest_mask;
     return this->data.u < subtrahend->data.u;
 }
@@ -245,8 +246,8 @@ void Primitive::uMul(const Primitive* multiplier, Primitive* product_lo, Primiti
 
     uint64_t res = uint64_t(this->data.u) * uint64_t(multiplier->data.u);
     unsigned prod_lo_prec = product_lo->getType().getPrecision();
-    const uint64_t dest_mask = (1ULL << prod_lo_prec) - 1;
+    const uint64_t dest_mask = Bits::ones<uint64_t>(prod_lo_prec);
     product_lo->data.u = res & dest_mask;
     if (product_hi != nullptr)
-        product_hi->data.u = res >> prod_lo_prec;
+        product_hi->data.u = Bits::safeShr<uint64_t>(res, prod_lo_prec);
 }
