@@ -9,7 +9,7 @@
 #include "../values/aggregate.hpp"
 #include "../values/primitive.hpp"
 
-void copy_into(Value* into, std::vector<Primitive>& src) {
+static void copy_into(Value* into, std::vector<Primitive>& src) {
     Array& into_arr = static_cast<Array&>(*into);
     for (unsigned i = 0; i < src.size(); ++i)
         into_arr[i]->copyFrom(src[i]);

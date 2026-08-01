@@ -232,7 +232,7 @@ void Json::printValue(std::stringstream& out, const Value& value, unsigned inden
             out << "\"NaN\"";
         else {
             auto digits = FpConvert::digits_of_precision(type.getPrecision());
-            print_float(out, fp, digits);
+            Str::print_float(out, fp, digits);
         }
         break;
     }

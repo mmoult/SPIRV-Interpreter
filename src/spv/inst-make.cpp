@@ -43,14 +43,14 @@
 #include "data/manager.hpp"
 #include "token.hpp"
 
-Value* construct_from_vec(const std::vector<Primitive>& vec, const Type* res_type) {
+static Value* construct_from_vec(const std::vector<Primitive>& vec, const Type* res_type) {
     Array& res = static_cast<Array&>(*res_type->construct());
     for (size_t i = 0; i < vec.size(); ++i)
         res[i]->copyFrom(vec[i]);
     return &res;
 }
 
-const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
+static const std::vector<unsigned>* find_request(Instruction::DecoQueue* queue, unsigned at) {
     if (queue != nullptr) {
         for (const auto& request : *queue) {
             if (request.toDecorate == at) {
@@ -266,7 +266,7 @@ Value* Instruction::handleImage(
  * Multiplies the two primitives, x and y, of unknown type, although their type must be the same. Returns the value of
  * the same type.
  */
-Primitive multiply_same(const Primitive& x, const Primitive& y) {
+static Primitive multiply_same(const Primitive& x, const Primitive& y) {
     switch (x.getType().getBase()) {
     case DataType::FLOAT:
         return Primitive(x.data.f * y.data.f);
@@ -282,7 +282,7 @@ Primitive multiply_same(const Primitive& x, const Primitive& y) {
 /**
  * Adds the two primitives, storing the result into x.
  */
-void accum_same(Primitive& x, const Primitive& y) {
+static void accum_same(Primitive& x, const Primitive& y) {
     switch (x.getType().getBase()) {
     case DataType::FLOAT:
         x.data.f += y.data.f;
@@ -298,7 +298,7 @@ void accum_same(Primitive& x, const Primitive& y) {
     }
 }
 
-Value* composite_extract(Value* composite, unsigned index_start, const std::vector<Token>& operands) {
+static Value* composite_extract(Value* composite, unsigned index_start, const std::vector<Token>& operands) {
     // Construct a pointer value and dereference it
     std::vector<unsigned> indices;
     for (unsigned i = index_start; i < operands.size(); ++i) {
@@ -310,18 +310,18 @@ Value* composite_extract(Value* composite, unsigned index_start, const std::vect
     return ptr.dereference(*composite);
 }
 
-const Type& element_type(const Type& type) {
+static const Type& element_type(const Type& type) {
     if (type.isArray())
         return type.getElement();
     return type;
 }
-DataType type_base(const Type& type) {
+static DataType type_base(const Type& type) {
     auto base = type.getBase();
     if (type.isArray())
         base = type.getElement().getBase();
     return base;
 }
-DataType element_base(const Value& operand) {
+static DataType element_base(const Value& operand) {
     return type_base(operand.getType());
 }
 
@@ -340,7 +340,7 @@ using BinOp = std::function<Primitive(const Primitive*, const Primitive*)>;
 /// @param data The data to use in fetching values
 /// @param op   The binary operation to perform on pairs of primitive elements
 /// @param type The expected type of elements or use VOID to disable checking
-void element_bin_op(
+static void element_bin_op(
     unsigned bin0,
     unsigned bin1,
     const OpDst& dst,
@@ -386,7 +386,7 @@ void element_bin_op(
 }
 
 // Sources can be either of the integral types (int or uint)
-void element_int_bin_op(
+static void element_int_bin_op(
     unsigned bin0,
     unsigned bin1,
     const OpDst& dst,
@@ -412,7 +412,7 @@ void element_int_bin_op(
 }
 
 // Sources can be either integral. Result must be *casted* from unsigned result to type which dest specifies.
-void element_shift_op(
+static void element_shift_op(
     unsigned bin0,
     unsigned bin1,
     const OpDst& dst,
@@ -467,7 +467,7 @@ using ExtArithOp = std::function<void(const Primitive*, const Primitive*, Primit
 /// @param data The data to use in fetching values
 /// @param op   The binary operation to perform on pairs of primitive elements
 /// @param type The expected type of elements or use VOID to disable checking
-void element_extended_arith_op(
+static void element_extended_arith_op(
     unsigned bin0,
     unsigned bin1,
     const OpDst& dst,
@@ -518,13 +518,8 @@ void element_extended_arith_op(
 
 using UnOp = std::function<Primitive(const Primitive*)>;
 
-void element_unary_op(
-    [[maybe_unused]] DataType chtype,
-    unsigned unary,
-    const OpDst& dst,
-    DataView& data,
-    UnOp& op
-) {
+static void
+element_unary_op([[maybe_unused]] DataType chtype, unsigned unary, const OpDst& dst, DataView& data, UnOp& op) {
     const Value* src1 = data[unary].getValue();
     assert(element_base(*src1) == chtype && "Cannot do unary operation on other-typed element!");
 
@@ -552,7 +547,7 @@ void element_unary_op(
 }
 
 // Source can be either of the integral types (int or uint)
-void element_int_unary_op(unsigned unary, const OpDst& dst, DataView& data, UnOp& u_op, UnOp& i_op) {
+static void element_int_unary_op(unsigned unary, const OpDst& dst, DataView& data, UnOp& u_op, UnOp& i_op) {
     DataType dt = element_base(*data[unary].getValue());
     assert(
         (dt == DataType::INT || dt == DataType::UINT) &&
@@ -563,7 +558,7 @@ void element_int_unary_op(unsigned unary, const OpDst& dst, DataView& data, UnOp
 }
 
 // Unary operation that is limited to FP16 or FP32 precision in the spec
-void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std::function<float(float)>& op) {
+static void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std::function<float(float)>& op) {
     const Value* src1 = data[unary].getValue();
     const Type& type = *data[dst.type].getType();
 
@@ -596,7 +591,7 @@ void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std
 
 using TernOp = std::function<Primitive(const Primitive*, const Primitive*, const Primitive*)>;
 
-void element_tern_op(
+static void element_tern_op(
     [[maybe_unused]] DataType type,
     unsigned tern0,
     unsigned tern1,
@@ -2145,9 +2140,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         uint32_t other = 0;
         if (extend && mask != 0) {
             single = Bits::safeShl<uint32_t>(1, count_p.data.u - 1);
-            other = Bits::safeShl<uint32_t>(
-                Bits::safeShr<uint32_t>(0xFFFF'FFFF, 32 - count_p.data.u), count_p.data.u
-            );
+            other = Bits::safeShl<uint32_t>(Bits::safeShr<uint32_t>(0xFFFF'FFFF, 32 - count_p.data.u), count_p.data.u);
         }
 
         UnOp ufx = [&](const Primitive* a) {

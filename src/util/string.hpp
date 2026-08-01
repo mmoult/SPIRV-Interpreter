@@ -7,13 +7,10 @@
 #define UTIL_STRING_HPP
 
 #include <sstream>
-#include <string>
 
-/// @brief Get a repeated string.
-/// @param num number of times to repeat a string.
-/// @param str string to repeat.
-/// @return single string of the repeated string.
-std::string repeated_string(const unsigned num, const std::string& str);
+/// Named Str rather than String because `class String` already exists in values/string.hpp, and a namespace may not
+/// share a name with a class in the same scope.
+namespace Str {
 
 /// @brief Force regular behavior for printing of floats.
 /// Regular streaming is prone to truncation (note: not rounding), which confuses the interpreter's equivalence
@@ -21,4 +18,6 @@ std::string repeated_string(const unsigned num, const std::string& str);
 /// @param out where to print the string representation of float, fp
 /// @param fp the float to print. Must not be NaN or infinite!
 void print_float(std::stringstream& out, double fp, unsigned precision_digits);
+
+};  // namespace Str
 #endif

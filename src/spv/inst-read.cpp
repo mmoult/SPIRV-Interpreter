@@ -15,7 +15,7 @@
 
 #include "token.hpp"
 
-bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {
+static bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstream& str) {
     // UTF-8 encoding with four codepoints per word, 0 terminated
     for (; i < words.size(); ++i) {
         uint32_t word = words[i];
@@ -31,7 +31,7 @@ bool parseString(const std::vector<uint32_t>& words, unsigned& i, std::stringstr
     return false;  // we reached the end of string before expected (no 0 termination)!
 }
 
-void
+static void
 handle_type(const Token::Type& type, std::vector<Token>& operands, const std::vector<uint32_t>& words, unsigned& i) {
     uint32_t word = words[i++];
     using Type = Token::Type;

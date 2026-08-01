@@ -32,7 +32,7 @@
 #include "frame.hpp"
 #include "token.hpp"
 
-void
+static void
 invoke_substage_shader(RtStageKind kind, Frame& frame, AccelStruct& as, Value* hit_attrib, Value* payload = nullptr) {
     const Trace& trace = as.getTrace();
     int geom_index = 0;
@@ -74,7 +74,7 @@ invoke_substage_shader(RtStageKind kind, Frame& frame, AccelStruct& as, Value* h
     frame.triggerRaytrace(kind, index, payload, hit_attrib, as);
 }
 
-Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expected) {
+static Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expected) {
     unsigned launch_at = frame_stack.size() - 1;  // can skip current frame since it couldn't launch itself
     while (launch_at-- > 0) {
         if (auto trigger = frame_stack[launch_at]->getRtTrigger(); trigger != RtStageKind::NONE) {
@@ -96,7 +96,7 @@ Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expecte
         break; \
     }
 
-Value* atomic_bin_op(
+static Value* atomic_bin_op(
     Primitive& prev_val,
     const Primitive& other_val,
     const Type* ret_type,

@@ -13,12 +13,12 @@
 
 #include "string.hpp"
 
-std::string to_signed_string(float x, unsigned digits) {
+static std::string to_signed_string(float x, unsigned digits) {
     std::stringstream f;
     if (!std::signbit(x))
         f << '+';
     // The opposite (-) will be added automatically
-    print_float(f, x, digits);
+    Str::print_float(f, x, digits);
     return f.str();
 }
 

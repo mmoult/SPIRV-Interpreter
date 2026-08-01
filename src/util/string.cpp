@@ -8,14 +8,10 @@
 #include <algorithm>  // for max
 #include <cassert>
 #include <cmath>
+#include <string>
 #include <vector>
 
-std::string repeated_string(const unsigned num, const std::string& str) {
-    std::stringstream out;
-    for (unsigned i = 0; i < num; ++i)
-        out << str;
-    return out.str();
-}
+namespace Str {
 
 void print_float(std::stringstream& out, double fp, unsigned precision_digits) {
     assert(!std::isnan(fp));
@@ -141,3 +137,5 @@ void print_float(std::stringstream& out, double fp, unsigned precision_digits) {
             out << "E-" << scientific;
     }
 }
+
+};  // namespace Str
