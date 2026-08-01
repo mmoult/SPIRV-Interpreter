@@ -108,7 +108,9 @@ Ternary InstanceNode::step(Trace* trace_p) const {
         return Ternary::NO;
 
     // Transform the ray to match the instance's object-space.
-    const Intersection& before = trace.getCandidate();
+    // A copy, not a reference: `before` would otherwise alias an element of trace.candidates, and emplace_back
+    // may reallocate while copy-constructing from it. BoxNode::step takes a copy for the same reason.
+    const Intersection before = trace.getCandidate();
     glm::mat4 world_to_obj = this->worldToObj * before.worldToObj;
     glm::mat4 obj_to_world = this->inverse * before.objToWorld;
 

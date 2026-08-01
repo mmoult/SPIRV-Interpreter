@@ -130,6 +130,10 @@ public:
     /// @param minor the number of columns in the matrix
     /// @param element the type of each matrix element
     static inline Type coopMatrix(unsigned /* scope */, unsigned rows, unsigned cols, const Type& element) {
+        // rows and cols come from module operands. construct() divides by rows, so a zero would be a division by
+        // zero rather than a diagnosable error.
+        if (rows == 0 || cols == 0)
+            throw std::invalid_argument("Cooperative matrix must have at least one row and one column!");
         // The scope is a useful hint for compilation by indicating where the data should be stored. Not needed here.
         Type ret(DataType::COOP_MATRIX, rows * cols, &element);
         ret.rowsOrBufferBlock = rows;

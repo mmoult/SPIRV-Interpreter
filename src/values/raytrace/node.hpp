@@ -8,6 +8,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 #include "glm/ext.hpp"
@@ -63,7 +64,12 @@ struct NodeReference {
             index = tri;
             break;
         }
-        ptr = nodes[index + minor];
+        const unsigned at = index + minor;
+        // major/minor come straight from the input file, so this can be out of range for the parsed BVH. The
+        // resolved pointer is later dispatched through virtually, so a wild read here would be far worse.
+        if (at >= nodes.size())
+            throw std::runtime_error("Node reference points outside of the acceleration structure!");
+        ptr = nodes[at];
     }
 };
 
