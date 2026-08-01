@@ -18,6 +18,7 @@ target_sources(tests
     util/string-test.cpp
     util/trie-test.cpp
     values/aggregate-test.cpp
+    values/primitive-test.cpp
 )
 
 target_link_libraries(tests PRIVATE Catch2::Catch2WithMain spv-interp)

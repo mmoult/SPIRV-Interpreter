@@ -26,7 +26,7 @@ void Primitive::copyFrom(const Value& new_val) noexcept(false) {
     uint64_t bitmask = Bits::ones<uint64_t>(prec);
 
     switch (type.getBase()) {  // cast to
-    case FLOAT: {
+    case FLOAT:
         switch (from_base) {  // copy from
         case FLOAT:
             data.f = other.data.f;
@@ -44,7 +44,6 @@ void Primitive::copyFrom(const Value& new_val) noexcept(false) {
         // quantize to the allowed precision.
         data.f = FpConvert::quantize(data.f, prec);
         break;
-    }
     case UINT:
         switch (from_base) {
         case UINT:
@@ -84,6 +83,7 @@ void Primitive::copyFrom(const Value& new_val) noexcept(false) {
             data.all &= bitmask;
         break;
     case BOOL:
+        data.all = 0;
         switch (from_base) {
         case BOOL:
             data.b = other.data.b;
@@ -169,7 +169,8 @@ void Primitive::copyReinterp(const Value& other) noexcept(false) {
     }
     default:
         assert(to_base == BOOL);
-        data.b = from_other != 0;
+        data.all = 0;
+        data.b = (from_other != 0);
         break;
     }
 }

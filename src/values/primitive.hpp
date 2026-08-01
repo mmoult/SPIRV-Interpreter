@@ -18,6 +18,13 @@ struct Primitive final : public Value {
     // NOTE: A very important point is that all values are stored at the largest possible precision and saved after
     // necessary rounding/truncation is applied. This greatly simplifies computation logic and ensures a more accurate
     // result (which is required by the spec).
+    //
+    // This union is deliberately used for type punning: `all` is the raw-bits accessor. Reading a member other than
+    // the one last written is formally undefined in C++, but GCC, Clang and MSVC all document union punning as
+    // supported, and `f`, `u`, `i` and `all` are all 8 bytes with the same alignment.
+    //
+    // The one tricky case is `b`, since bool only has two valid states (0 and 1) and compilers optimize on that.
+    // Therefore, any write to `b` must first zero `all` to ensure no other bits are enabled.
     union {
         bool b;
         double f;
@@ -50,6 +57,7 @@ public:
         data.i = i32;
     }
     Primitive(bool b32) : Value(Type::primitive(BOOL)) {
+        data.all = 0;
         data.b = b32;
     }
 
@@ -59,7 +67,12 @@ public:
 
         if (undef) {
             // Initialize to dummy values (instead of 0 to indicate visibility and help user catch errors)
-            if (t.getBase() == FLOAT)
+            if (t.getBase() == BOOL) {
+                // bool has no "obviously wrong" value to pick, and any bit pattern other than 0 or 1 is an invalid
+                // object representation. Zero `all` first so the raw-bits readers stay coherent.
+                data.all = 0;
+                data.b = false;
+            } else if (t.getBase() == FLOAT)
                 data.f = std::nan("1");
             else {
                 uint64_t dummy = 0x7890'ABCD'1234'DEAFULL;
