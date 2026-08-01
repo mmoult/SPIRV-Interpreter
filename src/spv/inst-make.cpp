@@ -2137,8 +2137,10 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         uint32_t single = 0;
         uint32_t other = 0;
         if (extend && mask != 0) {
-            const auto single = Bits::safeShl<uint32_t>(1, count_p.data.u - 1);
-            const auto other = Bits::safeShl<uint32_t>(Bits::safeShr<uint32_t>(0xFFFF'FFFF, 32 - count_p.data.u), count_p.data.u);
+            single = Bits::safeShl<uint32_t>(1, count_p.data.u - 1);
+            other = Bits::safeShl<uint32_t>(
+                Bits::safeShr<uint32_t>(0xFFFF'FFFF, 32 - count_p.data.u), count_p.data.u
+            );
         }
 
         UnOp ufx = [&](const Primitive* a) {

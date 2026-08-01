@@ -8,6 +8,8 @@
 
 #include <sstream>
 
+#include "../util/bits.hpp"
+
 void Aggregate::addElements(std::vector<const Value*>& es) noexcept(false) {
     // Test that the size matches the current type's:
     unsigned vecsize = es.size();
@@ -129,35 +131,29 @@ void Array::copyReinterp(const Value& other) noexcept(false) {
     // "any single component of S (mapping to multiple components of L) maps its lower-ordered bits to the
     // lower-numbered components of L."
     uint64_t raw = 0;
-    constexpr auto CAPACITY = sizeof(raw) * 8;
-    const unsigned THIS_MASK = ((t_bitsize == CAPACITY) ? 0 : (1 << t_bitsize)) - 1;
+    constexpr unsigned CAPACITY = sizeof(raw) * 8;
+    const uint64_t THIS_MASK = Bits::ones<uint64_t>(t_bitsize);
     unsigned other_index = 0;
     int bit_at = 0;
     for (auto* element : elements) {
-        while (bit_at < t_bitsize) {
-            assert(other_index <= o_size);
+        while (bit_at < static_cast<int>(t_bitsize)) {
+            assert(other_index < o_size);
             const auto* from = static_cast<const Primitive*>(others[other_index]);
             uint64_t fetch = from->getRaw();
             if (bit_at >= 0) {
-                raw |= (fetch << bit_at);
-                if (static_cast<unsigned>(bit_at + o_bitsize) > CAPACITY)
+                raw |= Bits::safeShl<uint64_t>(fetch, bit_at);
+                if (static_cast<unsigned>(bit_at) + o_bitsize > CAPACITY)
                     // The raw at other_index didn't place all of its bits. Skip increment
                     break;
             } else
-                raw |= (fetch >> -bit_at);
+                raw |= Bits::safeShr<uint64_t>(fetch, -bit_at);
 
             ++other_index;
             bit_at += o_bitsize;
         }
         Primitive prim(raw & THIS_MASK, t_bitsize);
         bit_at -= t_bitsize;
-        // Must use a conditional to avoid undefined behavior C spec 6.5.7:
-        // "If the value of the right operand is negative or is greater than or equal to the width of the promoted
-        // left operand, the behavior is undefined."
-        if (t_bitsize != CAPACITY)
-            raw >>= t_bitsize;
-        else
-            raw = 0;
+        raw = Bits::safeShr<uint64_t>(raw, t_bitsize);
 
         static_assert(CAPACITY >= (sizeof(prim.data.all) * 8));  // This algorithm only works if capacity is big enough
         element->copyReinterp(prim);
