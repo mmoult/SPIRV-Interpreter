@@ -43,12 +43,15 @@ public:
     Variable(spv::StorageClass storage_class, bool spec_const)
         : val(nullptr), storage(storage_class), specConst(spec_const) {}
 
+    /// @param copy_val whether to deep-copy the value too. Every other field is copied unconditionally
     Variable(const Variable& other, bool copy_val = true)
         : storage(other.storage)
         , name(other.name)
         , builtIn(other.builtIn)
         , specConst(other.specConst)
-        , nonwritable(other.nonwritable) {
+        , nonwritable(other.nonwritable)
+        , location(other.location)
+        , descr_set(other.descr_set) {
         if (copy_val && other.val != nullptr) {
             val = other.val->getType().construct();
             val->copyFrom(*other.val);
