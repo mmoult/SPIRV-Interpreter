@@ -153,20 +153,24 @@ def recursive_test(interp_path, launch_dir, verbose):
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("search_dir", nargs="?",
-                        help="Directory to search for tests. By default, the \"examples\" directory is used.")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Print the result of all tests found.")
-    args = parser.parse_args()
-
     executable_name = "spirv-run"
     if platform.system() == "Windows":
         executable_name += ".exe"
 
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("search_dir", nargs="?",
+                        help="directory to search for tests. By default, the \"examples\" directory is used.")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="print the result of all tests found")
+    interp_path = os.path.join("build", "src", executable_name)
+    parser.add_argument("--interp",
+                        help=f"path to the interpreter to test. Defaults to \"{interp_path}\".")
+    args = parser.parse_args()
+
     root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    interp_path = os.path.abspath(os.path.join(root_path, "build", "src", executable_name))
+    interp_path = args.interp or os.path.join(root_path, interp_path)
+    interp_path = os.path.abspath(interp_path)
 
     # Recursively search through the examples directory or the path passed in
     launch_dir = os.path.join(os.getcwd(), args.search_dir) if args.search_dir is not None else \

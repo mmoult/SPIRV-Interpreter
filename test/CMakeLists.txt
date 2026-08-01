@@ -9,15 +9,16 @@ add_executable(tests)
 set_target_properties(tests PROPERTIES OUTPUT_NAME "tests")
 
 target_sources(tests
-    PUBLIC
-      format/json-test.cpp
-      format/parse-test.cpp
-      format/yaml-test.cpp
-      spv/instruction-test.cpp
-      util/compare-test.cpp
-      util/string-test.cpp
-      util/trie-test.cpp
+  PUBLIC
+    format/json-test.cpp
+    format/parse-test.cpp
+    format/yaml-test.cpp
+    spv/instruction-test.cpp
+    util/compare-test.cpp
+    util/string-test.cpp
+    util/trie-test.cpp
 )
 
 target_link_libraries(tests PRIVATE Catch2::Catch2WithMain spv-interp)
+target_compile_options(tests PRIVATE ${SPV_WARNINGS})
 install(TARGETS tests)

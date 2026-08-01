@@ -9,23 +9,64 @@ project(SPIRV-Interpreter CXX)
 
 # Set the version of C++ for the project
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 message(STATUS "Compiling with: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    add_compile_definitions(COMPILER_CLANG)
+  add_compile_definitions(COMPILER_CLANG)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    add_compile_definitions(COMPILER_GNU)
+  add_compile_definitions(COMPILER_GNU)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    add_compile_definitions(COMPILER_MSVC)
+  add_compile_definitions(COMPILER_MSVC)
+endif()
+
+# The set of warnings enabled for first-party code. Deliberately does NOT include -Werror: different compiler versions
+# may have different warnings, and that can gate building.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set(SPV_WARNINGS
+    -Wall
+    -Wextra
+    -Wnon-virtual-dtor
+    -Wsuggest-override
+    -Wnull-dereference
+    -Wundef
+    -Wimplicit-fallthrough
+  )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    list(APPEND SPV_WARNINGS -Winconsistent-missing-override -Wconditional-uninitialized)
+  endif()
+elseif(MSVC)
+  # /W4 on MSVC is dominated by conversion warnings that -Wall -Wextra does not report; silence those two so the
+  # remaining output stays readable.
+  set(SPV_WARNINGS /W4 /wd4244 /wd4267)
+endif()
+
+# Sanitizers are a whole-program property; a consumer that wants them should set CMAKE_CXX_FLAGS and
+# CMAKE_EXE_LINKER_FLAGS, or use a toolchain file, which cover every target in the build rather than just ours.
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  option(SPV_INTERP_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Clang/GCC only)" OFF)
+  if(SPV_INTERP_SANITIZE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+      add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+      add_link_options(-fsanitize=address,undefined)
+    else()
+      message(WARNING "SPV_INTERP_SANITIZE is not supported for ${CMAKE_CXX_COMPILER_ID}; ignoring.")
+    endif()
+  endif()
 endif()
 
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-    add_subdirectory(src)
-    add_subdirectory(external/glm)
+  add_subdirectory(src)
+  # SYSTEM marks the include directories as system headers, so third-party code does not report warnings against
+  # our warning flags. Without it, Catch2's headers alone account for dozens of -Wnon-virtual-dtor reports.
+  add_subdirectory(external/glm SYSTEM)
 
-    if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
-        add_subdirectory(test)
-        add_subdirectory(external/Catch2)
-    endif()
+  # Assume most consumers don't want to build and run unit tests: default off
+  option(BUILD_TESTING "Build unit tests" OFF)
+  if(BUILD_TESTING)
+    add_subdirectory(test)
+    add_subdirectory(external/Catch2 SYSTEM)
+  endif()
 endif()

@@ -6,9 +6,9 @@ cmake_minimum_required(VERSION 3.28)
 
 add_library(spv-interp)
 
-# Add other source files
+# Add other source files.
 target_sources(spv-interp
-  PUBLIC
+  PRIVATE
     format/json.cpp
     format/parse.cpp
     format/yaml.cpp
@@ -66,7 +66,17 @@ target_link_libraries(spv-interp glm::glm)
 
 add_executable(spv-run main.cpp)
 set_target_properties(spv-run PROPERTIES OUTPUT_NAME "spirv-run")
-target_compile_options(spv-run PUBLIC "-DHASH=${HASH}" "-DBUILD_DATE=${TODAY}")
-target_compile_options(spv-run PUBLIC "$<$<CONFIG:DEBUG>:-Wall>")
+target_compile_definitions(spv-run PRIVATE "HASH=${HASH}" "BUILD_DATE=${TODAY}")
 target_link_libraries(spv-run spv-interp)
 install(TARGETS spv-run)
+
+# PRIVATE so the flags are not exported to consumers of spv-interp.
+target_compile_options(spv-interp PRIVATE ${SPV_WARNINGS})
+target_compile_options(spv-run PRIVATE ${SPV_WARNINGS})
+
+# stb is third-party; its warnings are not ours to fix and would drown out our own. Source-level COMPILE_OPTIONS are
+# appended to the target's, so these have to be explicit negations rather than an empty list.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties(util/stb-impl.cpp PROPERTIES
+    COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-implicit-fallthrough")
+endif()
