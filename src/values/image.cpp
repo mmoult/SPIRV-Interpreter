@@ -153,8 +153,17 @@ bool Image::equals(const Value& val) const {
     // Do a data analysis
     // In theory, the data of all mipmaps should be synchronized. Therefore, we can compare only the mipmaps with
     // most data (mipmap 0)
+
+    // Unused dimensions stay 0 (yy is only set for 2D and up, zz only for 3D), so they must be clamped to 1 or the
+    // extent comes out as 0 and the loop below never runs. Mipmap 0 holds comps.count entries per texel, matching the
+    // layout used by read()/write().
+    const unsigned texels = std::max(xx, 1u) * std::max(yy, 1u) * std::max(zz, 1u);
+    const unsigned mip0 = texels * comps.count;
+    const unsigned limit = std::min(mip0, static_cast<unsigned>(data.size()));
+
     const Type& subelement = type.getElement();
-    for (unsigned i = 0; i < (xx * yy * zz); i += comps.count) {
+    assert(comps.count != 0);
+    for (unsigned i = 0; i + comps.count <= limit; i += comps.count) {
         for (unsigned j = 0; j < 4; ++j) {
             if (comps[j] == 0)
                 continue;
@@ -397,7 +406,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
         if (base == DataType::INT)
             return static_cast<double>(prim.data.i);
         if (base == DataType::UINT)
-            return static_cast<double>(prim.data.i);
+            return static_cast<double>(prim.data.u);
         assert(base == DataType::FLOAT);
         return prim.data.f;
     };
@@ -550,7 +559,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
                     converted = prim.data.i;
                 } else {
                     assert(el_base == DataType::UINT);
-                    converted = prim.data.i;
+                    converted = prim.data.u;
                 }
                 sums[chan] += (converted * weight);
             }
