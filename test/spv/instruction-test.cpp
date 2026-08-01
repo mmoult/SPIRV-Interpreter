@@ -3,6 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#include <memory>
+
 #include <catch2/catch_test_macros.hpp>
 #include "../../external/GLSL.std.450.h"
 #include "../../src/spv/instruction.hpp"
@@ -71,8 +73,9 @@ TEST_CASE("OpVectorTimesMatrix", "[instruction]") {
 
     auto inst = DummyInstruction::make(spv::OpVectorTimesMatrix);
     auto result_id = manager.allocateNew();
-    auto* fp64 = new Type(Type::primitive(DataType::FLOAT, 64));
-    auto* fvec4 = new Type(Type::array(4, *fp64));
+    // fp64 is only borrowed by fvec4's type, so it must outlive it but has no other owner.
+    auto fp64 = std::make_unique<Type>(Type::primitive(DataType::FLOAT, 64));
+    auto* fvec4 = new Type(Type::array(4, *fp64));  // ownership passes to the DataView via make_ref
     auto* vector = construct_vec4(1.0, 2.0, 3.0, 4.0);
     std::vector<Value*> mat_elements{
         construct_vec4(-1.0, 1.5, -2.0, 2.5),
@@ -99,8 +102,9 @@ TEST_CASE("OpMatrixTimesVector", "[instruction]") {
 
     auto inst = DummyInstruction::make(spv::OpMatrixTimesVector);
     auto result_id = manager.allocateNew();
-    auto* fp64 = new Type(Type::primitive(DataType::FLOAT, 64));
-    auto* fvec4 = new Type(Type::array(4, *fp64));
+    // fp64 is only borrowed by fvec4's type, so it must outlive it but has no other owner.
+    auto fp64 = std::make_unique<Type>(Type::primitive(DataType::FLOAT, 64));
+    auto* fvec4 = new Type(Type::array(4, *fp64));  // ownership passes to the DataView via make_ref
     std::vector<Value*> mat_elements{
         construct_vec4(1.1, -1.2, 1.3, -1.4),
         construct_vec4(-1.2, 1.3, -1.4, 1.5),

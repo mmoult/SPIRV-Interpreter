@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -126,6 +127,13 @@ ReturnCode handle_record(
         if (auto ret = load_file(extra_inputs, record.extraInput, format); ret != ReturnCode::OK)
             return ret;
     }
+    // We loaded these, so we own them. initRaytrace only copies out of them, but it erases entries as it consumes
+    // them and drops the pointer, so ownership has to be taken before the call, not recovered from the map after.
+    std::vector<std::unique_ptr<const Value>> owned;
+    owned.reserve(extra_inputs.size());
+    for (const auto& [_, val] : extra_inputs)
+        owned.emplace_back(val);
+
     // Should delete the view after the record is done, but since it exists until main is exited, don't bother
     program.initRaytrace(stage, expected, extra_inputs, unused);
     return ReturnCode::OK;
@@ -347,6 +355,8 @@ int main(int argc, char* argv[]) {
     // Of course, even if there are specialization constants, they should have some default value which will be used if
     // the user doesn't provide something to override it.
     ValueMap inputs;
+    // Owns whatever the input parsing below produces, so that the many early returns do not leak it.
+    std::vector<std::unique_ptr<const Value>> owned_inputs;
     if (in_arg.isPresent()) {
         for (std::string input : in_arg.getValues())
             REQUIRE(load_file(inputs, input, format));
@@ -363,6 +373,11 @@ int main(int argc, char* argv[]) {
             return ReturnCode::BAD_PARSE;
         }
     }
+
+    // Every input has now been parsed, from the file and from --set. Take ownership before anything consumes the map.
+    owned_inputs.reserve(inputs.size());
+    for (const auto& [_, val] : inputs)
+        owned_inputs.emplace_back(val);
 
     RayTraceSubstage dummy;
     try {
@@ -473,6 +488,10 @@ int main(int argc, char* argv[]) {
     if (check.isPresent()) {
         ValueMap check_map;
         load_file(check_map, check.getValue(), format);
+        std::vector<std::unique_ptr<const Value>> owned_checks;
+        owned_checks.reserve(check_map.size());
+        for (const auto& [_, val] : check_map)
+            owned_checks.emplace_back(val);
         auto [ok, total_tests] = program.checkOutputs(check_map);
         if (!ok) {
             std::cerr << "Output did NOT match!" << std::endl;
@@ -486,14 +505,7 @@ int main(int argc, char* argv[]) {
                 std::cout << " outputs match!";
             std::cout << std::endl;
         }
-
-        for (const auto& [_, val] : check_map)
-            delete val;
     }
-
-    // Clean up before successful exit
-    for (const auto& [_, val] : inputs)
-        delete val;
 
     return ReturnCode::OK;
 }

@@ -38,9 +38,14 @@ void input_test(Yaml& yaml, std::map<std::string, const Value*>& compare, std::s
             yaml.printFile(failure, read);
             failure << "!=\n  ";
             yaml.printFile(failure, compare);
+            for (const auto& [_, val] : read)
+                delete val;
             FAIL(failure.str());
         }
     }
+    // parseVariable allocates the values it puts in `read`; this helper owns them.
+    for (const auto& [_, val] : read)
+        delete val;
 }
 
 TEST_CASE("input", "[yaml]") {
@@ -271,7 +276,9 @@ TEST_CASE("i/o", "[yaml]") {
 
         Struct top(top_type);
         std::vector<const Value*> top_elements{first, second};
-        top.addElements(top_elements);
+        top.addElements(top_elements);  // deep-copies, so these remain ours to free
+        delete first;
+        delete second;
         circle_test(format, "test", top,
             "test:\n"
             "  first:\n"

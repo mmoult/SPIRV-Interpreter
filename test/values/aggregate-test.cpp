@@ -15,12 +15,30 @@
 
 namespace {
 
+/// @brief A uint element type outliving any array built from it here.
+/// Type::array stores the address of its element type without owning it, so the type must outlive the array. Static
+/// storage duration gives that without leaking, unlike heap allocations kept alive in a never-emptied list.
+const Type& uintType(unsigned precision) {
+    static const Type t8 = Type::primitive(DataType::UINT, 8);
+    static const Type t16 = Type::primitive(DataType::UINT, 16);
+    static const Type t32 = Type::primitive(DataType::UINT, 32);
+    static const Type t64 = Type::primitive(DataType::UINT, 64);
+    switch (precision) {
+    case 8:
+        return t8;
+    case 16:
+        return t16;
+    case 32:
+        return t32;
+    default:
+        REQUIRE(precision == 64);
+        return t64;
+    }
+}
+
 /// @brief Build an array of uint primitives of the given precision.
 Array* makeUintArray(unsigned precision, const std::vector<uint64_t>& vals) {
-    static std::vector<Type*> kept;  // the array borrows its element type, so it must outlive the array
-    Type* el = new Type(Type::primitive(DataType::UINT, precision));
-    kept.push_back(el);
-    auto* arr = new Array(*el, vals.size());
+    auto* arr = new Array(uintType(precision), vals.size());
     std::vector<Value*> elements;
     elements.reserve(vals.size());
     for (uint64_t v : vals)
