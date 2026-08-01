@@ -132,7 +132,9 @@ class Image final : public Value {
     [[nodiscard]] Array* outOfBoundsAccess() const;
 
 public:
-    Image(Type t) : Value(t), xx(0), yy(0), zz(0), comps(t.getComps(), false) {};
+    // mipmaps defaults to the documented minimum of 1. copyFrom(const Struct&) overwrites it, but toStruct() and the
+    // LOD clamp in read() can both run on an Image that Type::construct() only default-constructed.
+    Image(Type t) : Value(t), xx(0), yy(0), zz(0), mipmaps(1), comps(t.getComps(), false) {};
 
     bool equals(const Value& val) const override;
 

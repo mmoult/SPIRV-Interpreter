@@ -72,9 +72,6 @@ public:
                     error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
                     throw std::runtime_error(error.str());
                 }
-                std::stringstream error;
-                error << "Index " << idx << " beyond the bound of composite (" << agg.getSize() << ")!";
-                throw std::runtime_error(error.str());
             }
             res = agg[idx];
             // Repeat the process for all indices

@@ -7,6 +7,7 @@
 #define SPV_DATA_MANAGER_HPP
 
 #include <algorithm>  // find
+#include <cassert>
 #include <map>
 #include <stdexcept>
 #include <vector>
@@ -106,10 +107,12 @@ public:
         return view;
     }
 
+    /// Called from ~Frame, which is implicitly noexcept, so this must not throw.
     inline void destroyView(DataView* view) {
         auto it = std::find(views.begin(), views.end(), view);
+        assert(it != views.end() && "Cannot destroy a view not present in this manager!");
         if (it == views.end())
-            throw std::runtime_error("Could not delete view not present in manager!");
+            return;
         views.erase(it);
         delete view;
     }

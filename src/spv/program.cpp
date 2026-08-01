@@ -485,7 +485,6 @@ void Program::checkInputs(ValueMap& provided, bool unused) noexcept(false) {
                 }
                 // Remove the interface from the check list
                 inputs.erase(inputs.begin() + i);
-                --i;
                 break;
             }
         }
@@ -529,7 +528,7 @@ void Program::checkInputs(ValueMap& provided, bool unused) noexcept(false) {
     }
 }
 
-std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcept(true) {
+std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcept(false) {
     // First, create a list of variables from outputs
     std::vector<const Variable*> outputs;
     const auto& global = data.getGlobal();
@@ -559,26 +558,24 @@ std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcep
             // into it, then compare for equality.
             const Value& var_val = var->getVal();
             const auto& v_type = var_val.getType();
-            Value* dummy;
+            Value* dummy = nullptr;
             try {
                 dummy = v_type.construct();
                 dummy->copyFrom(*val);
-                bool compare = dummy->equals(var_val);
+                const bool compare = dummy->equals(var_val);
                 delete dummy;
+                dummy = nullptr;
                 if (!compare) {
-                    std::stringstream err;
                     std::cerr << "Output variable \"" << name;
                     std::cerr << "\" did not match the expected value!" << std::endl;
                     return std::tuple(false, total_tests);
                 }
-            } catch (const std::exception& e) {
-                if (dummy != nullptr)
-                    delete dummy;
+            } catch (const std::exception&) {
+                delete dummy;  // no-op when null
                 return std::tuple(false, total_tests);
             }
             // Remove the interface from the compare list
             outputs.erase(outputs.begin() + i);
-            --i;
             break;
         }
 
@@ -623,7 +620,7 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
     // function appropriately
     std::vector<Data*> entry_args;
     unsigned location = ep.getLocation();
-    for (unsigned i = location + 1; location < insts.size(); ++i) {
+    for (unsigned i = location + 1; i < insts.size(); ++i) {
         const Instruction& inst = insts[i];
         if (inst.getOpcode() != spv::OpFunctionParameter)
             break;

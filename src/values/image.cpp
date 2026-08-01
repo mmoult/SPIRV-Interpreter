@@ -6,6 +6,7 @@
 #include "image.hpp"
 
 #include <algorithm>  // for std::max
+#include <bit>  // for std::bit_cast
 #include <sstream>
 
 #include "../../external/stb/stb_image.h"
@@ -236,7 +237,7 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
                     if (comps[c] == 0)
                         continue;
                     double norm = img[load_idx + c] / 255.0;
-                    data[store_idx + comps[c] - 1] = *reinterpret_cast<uint64_t*>(&norm);
+                    data[store_idx + comps[c] - 1] = std::bit_cast<uint64_t>(norm);
                 }
                 load_idx += gc;
                 store_idx += comps.count;

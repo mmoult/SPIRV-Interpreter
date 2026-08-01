@@ -42,7 +42,7 @@ ValueFormat::LineHandler::IdValidity ValueFormat::LineHandler::isIdent(char c, b
         return ValueFormat::LineHandler::IdValidity::VALID;
     if (!first && ((c >= '0' && c <= '9')))
         return ValueFormat::LineHandler::IdValidity::VALID;
-    if (std::isspace(c))
+    if (std::isspace(static_cast<unsigned char>(c)))
         return ValueFormat::LineHandler::IdValidity::BREAK;
     return ValueFormat::LineHandler::IdValidity::INVALID;
 }
@@ -237,7 +237,9 @@ Value* ValueFormat::parseNumber(ValueFormat::LineHandler& handler) const noexcep
                 }
             } else
                 throw std::runtime_error("Ill-formatted number!");
-        } else if (std::isspace(c) || c == ',' || c == ']' || c == '}' || c == '"' || c == '\'')
+        } else if (
+            std::isspace(static_cast<unsigned char>(c)) || c == ',' || c == ']' || c == '}' || c == '"' || c == '\''
+        )
             break;
         else {
             std::stringstream err;

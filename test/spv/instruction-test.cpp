@@ -15,9 +15,10 @@ struct DummyInstruction : public Instruction {
         : Instruction(op, has_result, has_type) {}
 
     static DummyInstruction make(spv::Op op) {
-        bool has_result;
-        bool has_type;
-        assert(spv::HasResultAndType(op, &has_result, &has_type));
+        bool has_result = false;
+        bool has_type = false;
+        const bool known = spv::HasResultAndType(op, &has_result, &has_type);
+        REQUIRE(known);
         return DummyInstruction(op, has_result, has_type);
     }
 

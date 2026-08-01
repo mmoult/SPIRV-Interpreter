@@ -53,24 +53,28 @@ struct Intersection {
 };
 
 struct Trace {
+    /// Sentinel for `candidate` and `committed` meaning "none". Matches what initTrace assigns, and is out of range
+    /// for any candidates vector, so getCandidate()/getCommitted() throw and hasCommitted() reports false.
+    static constexpr unsigned NONE = std::numeric_limits<unsigned>::max();
+
     bool active = false;
     std::vector<Intersection> candidates;
-    unsigned candidate;  // the next candidate to consider
-    unsigned committed;  // index of best intersection so far
+    unsigned candidate = NONE;  // the next candidate to consider
+    unsigned committed = NONE;  // index of best intersection so far
 
     // Ray properties
     RayFlags rayFlags = RayFlags(0);
-    unsigned cullMask;
+    unsigned cullMask = 0;
     double rayTMin = 0.0;
     double rayTMax = 0.0;
     glm::vec3 rayOrigin {0.0, 0.0, 0.0};
     glm::vec3 rayDirection {0.0, 0.0, 0.0};
 
     // shader binding table info
-    bool useSBT;
-    unsigned offsetSBT;
-    unsigned strideSBT;
-    unsigned missIndex;
+    bool useSBT = false;
+    unsigned offsetSBT = 0;
+    unsigned strideSBT = 0;
+    unsigned missIndex = 0;
 
     inline Intersection& getCandidate() {
         if (candidate >= candidates.size())

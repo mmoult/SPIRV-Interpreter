@@ -107,7 +107,7 @@ public:
     ///               default values.
     void checkInputs(ValueMap& provided, bool unused) noexcept(false);
 
-    std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(true);
+    [[nodiscard]] std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(false);
 
     /// @brief Executes the program with the current data and entry point
     /// @param verbose display: whether to print extra info during execution, such as instructions executed and results

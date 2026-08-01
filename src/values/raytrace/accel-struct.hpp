@@ -127,13 +127,13 @@ public:
         trace.strideSBT = stride_sbt;
         trace.missIndex = miss_index;
 
-        trace.committed = std::numeric_limits<decltype(trace.committed)>::max();
+        trace.committed = Trace::NONE;
         trace.active = true;
         trace.candidates.clear();
         // Start the candidates fresh with the root node in the bvh
         trace.candidates.emplace_back(tlas.ptr);
         // start at the end of the list because stepTrace is pre-increment
-        trace.candidate = std::numeric_limits<decltype(trace.candidate)>::max();
+        trace.candidate = Trace::NONE;
     }
 
     /// @brief Take a step in the trace. Each step reaches the next non-instance primitive that was intersected.

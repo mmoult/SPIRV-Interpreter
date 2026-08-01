@@ -38,7 +38,7 @@ std::optional<char> Yaml::skipWhitespace(LineHandler& handler, bool break_at_new
             } while (c != '\n');
             if (break_at_newline)
                 return {c};
-        } else if (!std::isspace(c) || (break_at_newline && c == '\n'))
+        } else if (!std::isspace(static_cast<unsigned char>(c)) || (break_at_newline && c == '\n'))
             return {c};  // semantically relevant character
         handler.skip();
     }
@@ -229,7 +229,7 @@ void Yaml::verifyBlank(LineHandler& handler, bool break_at_newline) {
             // Should only be triggered if break at newline true
             assert(break_at_newline);
             break;
-        } else if (!std::isspace(c)) {
+        } else if (!std::isspace(static_cast<unsigned char>(c))) {
             std::stringstream err;
             err << "Unexpected character (" << c << ") found after value!";
             throw std::runtime_error(err.str());
@@ -247,7 +247,7 @@ void Yaml::printKey(std::stringstream& out, const std::string& name) const {
     QuoteNeed need = name.empty() ? SINGLE : NONE;
     for (unsigned i = 0; i < name.length(); ++i) {
         char c = name[i];
-        if (i == 0 && std::isdigit(c) && need < SINGLE)
+        if (i == 0 && std::isdigit(static_cast<unsigned char>(c)) && need < SINGLE)
             need = SINGLE;
         else if (
             (c == ':' || c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == '&' || c == '*' || c == '#' ||

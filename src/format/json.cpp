@@ -6,6 +6,7 @@
 #include "json.hpp"
 
 #include <array>
+#include <cctype>  // for std::isspace
 #include <cmath>
 #include <limits>
 
@@ -156,7 +157,7 @@ std::optional<char> Json::skipWhitespace(LineHandler& handler) const {
                 last = '\0';
             } else
                 last = c;
-        } else if (!std::isspace(c)) {
+        } else if (!std::isspace(static_cast<unsigned char>(c))) {
             if (last == '/' && c == '*')
                 in_comment = true;
             else if (last == '/' && c == '/') {
