@@ -286,7 +286,7 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
         const Instruction& inst = insts[i];
         if (inst.getOpcode() != spv::OpFunctionParameter)
             break;
-        bool made = inst.makeResult(data, i, &decorations);
+        [[maybe_unused]] bool made = inst.makeResult(data, i, &decorations);
         assert(made);
         process_visible_io(inst, 0);
     }
@@ -723,7 +723,8 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
         for (unsigned threadVar : threadVars) {
             Instruction& inst = insts[threadVar];
             assert(inst.getOpcode() == spv::OpVariable);
-            bool blocked = inst.execute(new_frame->getData(), frame_stacks, i, num_invocations, use_sbt);
+            [[maybe_unused]] bool blocked =
+                inst.execute(new_frame->getData(), frame_stacks, i, num_invocations, use_sbt);
             assert(!blocked);
             // Variable* var_v = global[inst.getResult()].getVariable();
         }

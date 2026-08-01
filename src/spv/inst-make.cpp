@@ -346,14 +346,14 @@ void element_bin_op(
     const OpDst& dst,
     DataView& data,
     BinOp& op,
-    DataType type = DataType::VOID
+    [[maybe_unused]] DataType type = DataType::VOID
 ) {
     const Value* src1 = data[bin0].getValue();
     const Value* src2 = data[bin1].getValue();
 
     // Operate on two primitive arrays or two primitive scalars
     const Type& type1 = src1->getType();
-    const Type& type2 = src2->getType();
+    [[maybe_unused]] const Type& type2 = src2->getType();
     assert(
         type == DataType::VOID || ((element_base(*src1) == element_base(*src2)) &&
                                    "Cannot perform element-wise operation on operands of different bases!")
@@ -425,7 +425,7 @@ void element_shift_op(
 
     // Operate on two primitive arrays or two primitive scalars
     const Type& tbase = src1->getType();
-    auto tb = element_base(*src1);
+    [[maybe_unused]] auto tb = element_base(*src1);
     assert((tb == DataType::UINT || tb == DataType::INT) && "Cannot perform shift operation on non-integral element!");
     Value* res = dst_type.construct();
 
@@ -473,14 +473,14 @@ void element_extended_arith_op(
     const OpDst& dst,
     DataView& data,
     ExtArithOp& op,
-    DataType type = DataType::VOID
+    [[maybe_unused]] DataType type = DataType::VOID
 ) {
     const Value* src1 = data[bin0].getValue();
     const Value* src2 = data[bin1].getValue();
 
     // Operate on two primitive arrays or two primitive scalars
     const Type& type1 = src1->getType();
-    const Type& type2 = src2->getType();
+    [[maybe_unused]] const Type& type2 = src2->getType();
     assert(
         type == DataType::VOID || ((element_base(*src1) == element_base(*src2)) &&
                                    "Cannot perform element-wise operation on operands of different bases!")
@@ -518,7 +518,13 @@ void element_extended_arith_op(
 
 using UnOp = std::function<Primitive(const Primitive*)>;
 
-void element_unary_op(DataType chtype, unsigned unary, const OpDst& dst, DataView& data, UnOp& op) {
+void element_unary_op(
+    [[maybe_unused]] DataType chtype,
+    unsigned unary,
+    const OpDst& dst,
+    DataView& data,
+    UnOp& op
+) {
     const Value* src1 = data[unary].getValue();
     assert(element_base(*src1) == chtype && "Cannot do unary operation on other-typed element!");
 
@@ -562,8 +568,8 @@ void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std
     const Type& type = *data[dst.type].getType();
 
     const Type& el_type = element_type(type);
-    DataType btype = el_type.getBase();
-    unsigned prec = el_type.getPrecision();
+    [[maybe_unused]] DataType btype = el_type.getBase();
+    [[maybe_unused]] unsigned prec = el_type.getPrecision();
     assert(btype == DataType::FLOAT && "Cannot do unary operation on non-float element!");
     assert(prec == 16 || prec == 32);
 
@@ -591,7 +597,7 @@ void element_prec_unary_op(unsigned unary, const OpDst& dst, DataView& data, std
 using TernOp = std::function<Primitive(const Primitive*, const Primitive*, const Primitive*)>;
 
 void element_tern_op(
-    DataType type,
+    [[maybe_unused]] DataType type,
     unsigned tern0,
     unsigned tern1,
     unsigned tern2,
@@ -605,8 +611,8 @@ void element_tern_op(
 
     // Operate on two primitive arrays or two primitive scalars
     const Type& type1 = src1->getType();
-    const Type& type2 = src2->getType();
-    const Type& type3 = src3->getType();
+    [[maybe_unused]] const Type& type2 = src2->getType();
+    [[maybe_unused]] const Type& type3 = src3->getType();
     assert(
         type == DataType::VOID ||
         (element_base(*src1) == element_base(*src2) && element_base(*src2) == element_base(*src3) &&
@@ -2090,8 +2096,8 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         const Value* base_v = getValue(src_at, data);
         const Value* insert_v = getValue(src_at + 1, data);
         // Check the type of base_v and insert_v as ints (either signed or unsigned) manually
-        auto base_base = element_base(*base_v);
-        auto insert_base = element_base(*insert_v);
+        [[maybe_unused]] auto base_base = element_base(*base_v);
+        [[maybe_unused]] auto insert_base = element_base(*insert_v);
         assert(base_base == DataType::INT || base_base == DataType::UINT);
         assert(insert_base == DataType::INT || insert_base == DataType::UINT);
 
@@ -2228,7 +2234,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         // uint64_t address = 0;
         if (address_ptr->getType().getBase() == DataType::ARRAY) {
             // case uvec2
-            Array& address_components = static_cast<Array&>(*address_ptr);
+            [[maybe_unused]] Array& address_components = static_cast<Array&>(*address_ptr);
             assert(address_components.getSize() == 2);
             // address = static_cast<Primitive&>(*(address_components[0])).data.u;
             // address <<= 32;

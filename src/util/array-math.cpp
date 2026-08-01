@@ -28,7 +28,7 @@ double dot(const Value* first, const Value* second) {
     const Value& v1 = *second;
 
     const Type& v0t = v0.getType();
-    const Type& v1t = v1.getType();
+    [[maybe_unused]] const Type& v1t = v1.getType();
 
     if (v0t.getBase() == DataType::FLOAT) {
         assert(v1t.getBase() == DataType::FLOAT);
@@ -46,7 +46,7 @@ double determinant(const Array& arr) {
     unsigned size = arr.getSize();
     assert(size > 0 && "Cannot find the determinant of an empty matrix!");
     const Value* el = arr[0];
-    const Type& el_type = el->getType();
+    [[maybe_unused]] const Type& el_type = el->getType();
     assert(
         (el_type.getBase() == DataType::ARRAY && el_type.getSize() == size) &&
         "Cannot compute determinant for non-square matrix!"

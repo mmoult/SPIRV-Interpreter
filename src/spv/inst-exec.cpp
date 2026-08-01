@@ -832,7 +832,7 @@ bool Instruction::execute(
         std::vector<const Value*> elements;
         std::vector<Primitive> prims;
         prims.reserve(e_fin - e_beg);
-        const Type& element_type = res_type.getElement();
+        [[maybe_unused]] const Type& element_type = res_type.getElement();
         // Perform the matrix multiplication first
         for (unsigned i = e_beg; i < e_fin; ++i) {
             unsigned result_row = i / result_num_cols;
