@@ -46,3 +46,62 @@ TEST_CASE("A bool Primitive never holds an invalid representation", "[primitive]
         CHECK(as_bool.data.b == true);  // the dummy uint is nonzero
     }
 }
+
+// uSub builds an artificial borrow bit at `1 << prec`. With `1` as an int this was undefined for prec >= 32 and
+// silently produced the wrong borrow for a 32-bit subtraction.
+TEST_CASE("Primitive::uSub borrows correctly at every precision", "[primitive]") {
+    auto sub = [](unsigned prec, uint64_t a, uint64_t b) {
+        Primitive lhs(a, prec);
+        Primitive rhs(b, prec);
+        Primitive diff(Type::primitive(DataType::UINT, prec), false);
+        const bool borrow = lhs.uSub(&rhs, &diff);
+        return std::pair {diff.data.u, borrow};
+    };
+
+    for (unsigned prec : {8u, 16u, 32u, 64u}) {
+        const uint64_t mask = Bits::ones<uint64_t>(prec);
+
+        // No borrow: 5 - 3 == 2
+        auto [d1, b1] = sub(prec, 5, 3);
+        CHECK(d1 == 2);
+        CHECK(b1 == false);
+
+        // Exact zero: 7 - 7 == 0, no borrow
+        auto [d2, b2] = sub(prec, 7, 7);
+        CHECK(d2 == 0);
+        CHECK(b2 == false);
+
+        // Borrow: 0 - 1 wraps to all ones for the precision
+        auto [d3, b3] = sub(prec, 0, 1);
+        CHECK(d3 == mask);
+        CHECK(b3 == true);
+
+        // Borrow: 3 - 5 wraps to mask - 1
+        auto [d4, b4] = sub(prec, 3, 5);
+        CHECK(d4 == ((3 - 5) & mask));
+        CHECK(b4 == true);
+    }
+}
+
+TEST_CASE("Primitive::uAdd carries correctly at every precision", "[primitive]") {
+    auto add = [](unsigned prec, uint64_t a, uint64_t b) {
+        Primitive lhs(a, prec);
+        Primitive rhs(b, prec);
+        Primitive sum(Type::primitive(DataType::UINT, prec), false);
+        const bool carry = lhs.uAdd(&rhs, &sum);
+        return std::pair {sum.data.u, carry};
+    };
+
+    for (unsigned prec : {8u, 16u, 32u, 64u}) {
+        const uint64_t mask = Bits::ones<uint64_t>(prec);
+
+        auto [s1, c1] = add(prec, 2, 3);
+        CHECK(s1 == 5);
+        CHECK(c1 == false);
+
+        // mask + 1 wraps to 0 and carries
+        auto [s2, c2] = add(prec, mask, 1);
+        CHECK(s2 == 0);
+        CHECK(c2 == true);
+    }
+}

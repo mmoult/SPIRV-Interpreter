@@ -5,7 +5,7 @@
  */
 #include "primitive.hpp"
 
-#include <bit>  // bit_cast, countl_zero
+#include <bit>  // bit_cast
 #include <stdexcept>
 
 #include "../util/bits.hpp"
@@ -202,31 +202,29 @@ bool Primitive::equals(const Value& val) const {
 bool Primitive::uAdd(const Primitive* addend, Primitive* sum) const {
     assert(type.getBase() == DataType::UINT);
     assert(addend->getType().getBase() == DataType::UINT);
-    uint64_t res = uint64_t(this->data.u) + uint64_t(addend->data.u);
-    const unsigned need_prec = 64 - static_cast<unsigned>(std::countl_zero(res));
-    unsigned res_prec = sum->getType().getPrecision();
+    const uint64_t augend = this->data.u;
+    const uint64_t res = augend + addend->data.u;  // wraps modulo 2^64, which is the result we want
+    const unsigned res_prec = sum->getType().getPrecision();
     const uint64_t dest_mask = Bits::ones<uint64_t>(res_prec);
     sum->data.u = res & dest_mask;
-    return (need_prec > res_prec);
+    // Carry means the true sum did not fit in res_prec bits. Below 64 bits the addition cannot wrap, so any bit above
+    // the mask is the carry. At 64 bits it does wrap, and the only evidence left is that the sum came out lower than
+    // the augend -- inferring the carry from the bit width of `res` cannot work there, because the overflowing bit is
+    // already gone.
+    if (res_prec >= 64)
+        return res < augend;
+    return res > dest_mask;
 }
 
 bool Primitive::uSub(const Primitive* subtrahend, Primitive* difference) const {
     assert(type.getBase() == DataType::UINT);
     assert(subtrahend->getType().getBase() == DataType::UINT);
-    uint64_t res = this->data.u;
-    unsigned prec = type.getPrecision();
-    assert(prec >= subtrahend->getType().getPrecision());
-    if (prec < 64)
-        res |= 1ULL << prec;
-    res -= uint64_t(subtrahend->data.u);
-    if (prec < 64) {
-        res &= ~(1ULL << prec);  // return the borrow bit to normal
-    } else {
-        // We cannot create an artificial borrow bit for 64-bit sizes.
-        // However, we can count on automatic rollover. overflow_result + 1 = expected
-        if (subtrahend->data.u > this->data.u)
-            res++;  // by definition, this cannot overflow
-    }
+    assert(type.getPrecision() >= subtrahend->getType().getPrecision());
+    // Unsigned subtraction already wraps modulo 2^64, and masking that down to the destination width gives the correct
+    // result modulo 2^prec for every precision. The previous version built an artificial borrow bit at `1 << prec` to
+    // achieve this, which worked below 64 bits but could not represent the borrow at 64, and the compensating `res++`
+    // in that branch made every 64-bit borrowing subtraction off by one.
+    const uint64_t res = this->data.u - subtrahend->data.u;
     const uint64_t dest_mask = Bits::ones<uint64_t>(difference->getType().getPrecision());
     difference->data.u = res & dest_mask;
     return this->data.u < subtrahend->data.u;
