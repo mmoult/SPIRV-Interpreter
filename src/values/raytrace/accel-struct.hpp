@@ -81,6 +81,19 @@ public:
         if (this == &other)
             return *this;
 
+        // The invariant is one owner plus any number of borrowers over the same Node* vector (see the copy ctor).
+        // Releasing unconditionally would be wrong: if `other` borrows OUR nodes, deleting them first leaves
+        // `other.bvh`, which we are about to copy straight back in, full of dangling pointers. The equality check
+        // above does not catch that, since those are distinct objects over one node set.
+        //
+        // Release only when `other` genuinely brings a different set, and stay the owner only if nothing changed.
+        const bool same_nodes = (bvh == other.bvh);  // element-wise pointer comparison
+        if (ownNodes && !same_nodes) {
+            for (Node* node : bvh)
+                delete node;
+        }
+        ownNodes = ownNodes && same_nodes;
+
         bvh = other.bvh;
         tlas = other.tlas;
         boxIndex = other.boxIndex;
@@ -88,6 +101,7 @@ public:
         triangleIndex = other.triangleIndex;
         proceduralIndex = other.proceduralIndex;
         trace = other.trace;
+        // `type` is always Type::accelStruct(), so there is nothing to assign.
         return *this;
     }
 

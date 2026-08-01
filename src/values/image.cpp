@@ -612,7 +612,7 @@ bool Image::write(int x, int y, int z, const Array& texel) {
     // fetch the values out of the texel presented
     const Type& el = type.getElement();
     assert(el.isPrimitive());
-    Primitive& dummy = static_cast<Primitive&>(*el.construct());
+    Primitive dummy(el, false);
     unsigned tex_size = texel.getSize();
     assert(tex_size <= 4);  // texel array to write cannot have more than 4 channels!
     tex_size = std::min(tex_size, comps.count);

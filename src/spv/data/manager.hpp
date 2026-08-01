@@ -28,7 +28,7 @@ public:
     DataView& operator=(const DataView& other) = delete;
     ~DataView() {
         // Must clear out all data
-        for (auto [index, dat] : data) {
+        for (auto& [index, dat] : data) {
             // Nice to keep the index for debugging purposes (ie if we double-delete something, the index will say what)
             dat.clear();
         }

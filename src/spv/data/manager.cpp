@@ -49,7 +49,7 @@ unsigned DataView::getBound() const {
 
 DataView* DataView::clone() const {
     auto& other = *new DataView(src);
-    for (auto [index, dat] : data) {
+    for (const auto& [index, dat] : data) {
         const Data cloned = dat.clone();
         other.data[index].redefine(cloned);
     }
