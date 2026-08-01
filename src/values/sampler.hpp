@@ -12,7 +12,7 @@
 #include "type.hpp"
 #include "value.hpp"
 
-class Sampler : public Value {
+class Sampler final : public Value {
     float defaultLod;
 
     inline static const std::vector<std::string> names {"lod"};

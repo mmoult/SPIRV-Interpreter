@@ -13,7 +13,7 @@
 #include "type.hpp"
 #include "value.hpp"
 
-class SampledImage : public Value {
+class SampledImage final : public Value {
     Sampler sampler;
     Image image;
 

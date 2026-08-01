@@ -33,6 +33,16 @@ enum class Extension : unsigned {
     INVALID,
 };
 
+/// @brief A single SPIR-V instruction.
+///
+/// This is a non-polymorphic value type: it declares no virtual functions and is stored by value in
+/// std::vector<Instruction> (see InstList). Deliberately has no destructor.
+///
+/// Do NOT give it a virtual destructor. Nothing is ever deleted through a base pointer, so a vptr would only cost
+/// space on every element of a large vector and imply polymorphism that does not exist. Making the destructor
+/// protected is also not an option: std::vector<T> requires T to be Erasable, which needs an accessible destructor.
+///
+/// The only class deriving from Instruction is a test fixture, which does so purely to reach field `operands`.
 class Instruction {
     spv::Op opcode;
     bool hasResult;

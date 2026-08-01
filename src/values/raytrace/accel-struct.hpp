@@ -57,7 +57,7 @@ private:
 
 public:
     AccelStruct() : Value(Type::accelStruct()) {}
-    ~AccelStruct() {
+    ~AccelStruct() override {
         if (ownNodes) {
             for (unsigned i = 0; i < bvh.size(); ++i)
                 delete bvh[i];

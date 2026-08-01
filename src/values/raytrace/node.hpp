@@ -67,7 +67,7 @@ struct NodeReference {
     }
 };
 
-class BoxNode : public Node {
+class BoxNode final : public Node {
     inline static Type type;
     inline static Type childNodesType;
     inline static const std::vector<std::string> names {"min_bounds", "max_bounds", "child_nodes"};
@@ -95,7 +95,7 @@ public:
     [[nodiscard]] Struct* toStruct() const override;
 };
 
-class InstanceNode : public Node {
+class InstanceNode final : public Node {
     inline static Type type;
     inline static Type mat4x3Type;
     inline static const std::vector<std::string>
@@ -152,7 +152,7 @@ public:
     [[nodiscard]] Struct* toStruct() const override;
 };
 
-class TriangleNode : public Node {
+class TriangleNode final : public Node {
     inline static Type type;
     inline static Type mat3Type;
     inline static const std::vector<std::string> names {"geometry_index", "primitive_index", "opaque", "vertices"};
@@ -186,7 +186,7 @@ public:
     [[nodiscard]] Struct* toStruct() const override;
 };
 
-class ProceduralNode : public Node {
+class ProceduralNode final : public Node {
     inline static Type type;
     inline static const std::vector<std::string>
         names {"min_bounds", "max_bounds", "opaque", "geometry_index", "primitive_index"};

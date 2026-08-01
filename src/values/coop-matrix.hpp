@@ -13,7 +13,7 @@
 #include "aggregate.hpp"
 #include "type.hpp"
 
-class CoopMatrix : public Array {
+class CoopMatrix final : public Array {
 protected:
     unsigned rows;
     bool unsized;

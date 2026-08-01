@@ -56,9 +56,8 @@ public:
             val = nullptr;
     }
     Variable& operator=(const Variable&) = delete;
-    virtual ~Variable() {
-        if (val != nullptr)
-            delete val;
+    ~Variable() override {
+        delete val;
     }
 
     spv::StorageClass getStorageClass() const {
@@ -141,7 +140,6 @@ class Function : public Valuable {
 
 public:
     Function(Type* type, unsigned location) : type(type), location(location) {}
-    virtual ~Function() = default;
 
     void setName(const std::string& new_name) {
         name = new_name;

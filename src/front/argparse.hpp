@@ -25,7 +25,6 @@ struct Option {
 struct Flag final : public Option {
     bool enabled = false;
 
-    virtual ~Flag() = default;
     inline unsigned getNumArgs() override {
         enabled = true;
         return 0;
@@ -53,8 +52,6 @@ public:
     UnaryOption(const std::string& arg_name, const T& def_value) : argName(arg_name) {
         values.push_back(def_value);
     }
-    virtual ~UnaryOption() = default;
-
     inline const T& getValue() {
         assert(!values.empty());
         return values.back();
@@ -110,7 +107,6 @@ protected:
 public:
     explicit UintOption(const std::string& arg_name) : UnaryOption(arg_name) {}
     UintOption(const std::string& arg_name, unsigned def_value) : UnaryOption(arg_name, def_value) {}
-    virtual ~UintOption() = default;
 };
 
 class Parser {

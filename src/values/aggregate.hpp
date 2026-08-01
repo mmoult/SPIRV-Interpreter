@@ -26,7 +26,7 @@ protected:
 public:
     Aggregate(const Type& t) : Value(t) {}
 
-    virtual ~Aggregate() {
+    ~Aggregate() override {
         for (const auto& e : elements)
             delete e;
     }
