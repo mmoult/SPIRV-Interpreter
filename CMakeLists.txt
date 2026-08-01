@@ -50,6 +50,9 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
       add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
       add_link_options(-fsanitize=address,undefined)
+      # Bounds-check container operator[] too. This caught an out-of-bounds read in Aggregate::equals, which
+      # neither sanitizer sees because the access stays inside the heap block. Ignored when not on libstdc++.
+      add_compile_definitions(_GLIBCXX_ASSERTIONS)
     else()
       message(WARNING "SPV_INTERP_SANITIZE is not supported for ${CMAKE_CXX_COMPILER_ID}; ignoring.")
     endif()

@@ -67,7 +67,9 @@ bool Aggregate::equals(const Value& val) const {
     if (val.getType().getBase() != type.getBase())
         return false;
     const auto& other = static_cast<const Aggregate&>(val);
-    // Shouldn't have to test lengths since that is encoded in the type
+    // The lengths must be tested to account for runtime arrays (which may be type-equal but have different sizes)
+    if (elements.size() != other.elements.size())
+        return false;
     for (unsigned i = 0; i < elements.size(); ++i) {
         if (!elements[i]->equals(*other.elements[i]))
             return false;

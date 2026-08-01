@@ -149,3 +149,23 @@ TEST_CASE("Type::construct(false) zero-fills aggregates", "[aggregate]") {
         delete arr;
     }
 }
+
+// A runtime array carries a size of 0 in its type, so two arrays of the same element type but different actual lengths
+// reach Aggregate::equals. It used to iterate over this->elements and index other.elements without a length check.
+TEST_CASE("Aggregate::equals handles differing lengths", "[aggregate]") {
+    Array* shorter = makeUintArray(32, {1, 2});
+    Array* longer = makeUintArray(32, {1, 2, 3});
+    Array* same = makeUintArray(32, {1, 2});
+    Array* differing = makeUintArray(32, {1, 9});
+
+    CHECK(shorter->equals(*same));
+    CHECK(!shorter->equals(*differing));
+    // Both orders: the shorter one on the left is what used to read past the end of the other.
+    CHECK(!shorter->equals(*longer));
+    CHECK(!longer->equals(*shorter));
+
+    delete shorter;
+    delete longer;
+    delete same;
+    delete differing;
+}
