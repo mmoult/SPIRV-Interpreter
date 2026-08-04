@@ -6,11 +6,13 @@
 #ifndef VALUES_TYPE_HPP
 #define VALUES_TYPE_HPP
 
+#include <bit>  // for std::bit_cast
 #include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>  // for std::has_unique_object_representations_v
 #include <vector>
 
 #include "valuable.hpp"
@@ -67,11 +69,33 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     return os;
 }
 
-// necessary forward reference
-class Value;
+/// @brief Image type fields packed into subsize
+/// The bit order is implementation-defined, but not relied upon. Unused guarantees the bit sum matches 32 bits for
+/// easy conversion.
+struct ImageFields {
+    /// The number of dimensions. Ie a 1D image = 1, 2D = 2, 3D = 3. Max is 3.
+    unsigned dim : 3;
+    /// Describes the presence and order of RGBA components. Each digit defines the order, starting from 1 (0 indicates
+    /// the component is unused). For example:
+    /// - 1234: all channels of RGBA are included and given in that order
+    /// - 1000: only red is enabled
+    /// - 2341: all components active in ARGB order
+    /// The largest valid value is therefore 4321, which takes 13 bits.
+    unsigned comps : 13;
+    unsigned unused : 16;
+};
+// Guarantees there are no undefined padding bits in the byte match
+static_assert(std::has_unique_object_representations_v<ImageFields>, "ImageFields width must sum to exactly 32");
+
+class Value;  // necessary forward reference
 
 class Type final : public Valuable {
     DataType base;
+    /// Overloaded by base, since no type is more than one of these:
+    ///  - FLOAT, UINT, INT: the precision, in bits
+    ///  - ARRAY, COOP_MATRIX: the number of elements
+    ///  - POINTER: the storage class
+    ///  - IMAGE: an ImageFields, to be read back through bit_cast
     uint32_t subSize;
     // memory for subElement and subList elements is NOT managed by the Type
     // In other words, the original allocator is expected to deallocate or transfer ownership
@@ -84,12 +108,6 @@ class Type final : public Valuable {
     ///  - STRUCT: nonzero if and only if decorated with BufferBlock
     ///  - COOP_MATRIX: the number of rows in the matrix
     unsigned rowsOrBufferBlock = 0;
-
-    /// For IMAGE, subSize packs the dimensionality in the low bits and the component order above it.
-    static constexpr unsigned DIM_BITS = 3;
-    static constexpr unsigned COMPS_BITS = 13;
-    static constexpr uint32_t DIM_MAX = (1u << DIM_BITS) - 1;
-    static constexpr uint32_t COMPS_MAX = (1u << COMPS_BITS) - 1;
 
     inline Type(DataType base, uint32_t sub_size, const Type* sub_element)
         : base(base), subSize(sub_size), subElement(sub_element) {}
@@ -115,11 +133,10 @@ public:
     }
 
     /// @brief Construct an array type
-    /// @param array_size the size of the array. The number of elements. Must be > 0 for regular arrays, == 0 for
-    ///                   runtime arrays.
-    /// @param element a Type which will outlive this Type. Must not be null. Ownership is not transferred to the
-    ///                constructed array- in other words, the allocator is expected to deallocate element some time
-    ///                after the deallocation of this array
+    /// @param array_size the size of the array, in elements. Must be > 0 for regular arrays, == 0 for runtime arrays.
+    /// @param element a Type which will outlive this Type. Ownership is not transferred to the constructed array. In
+    ///                other words, the allocator is expected to deallocate element some time after the deallocation of
+    ///                this array
     static inline Type array(unsigned array_size, const Type& element) {
         return Type(DataType::ARRAY, array_size, &element);
     }
@@ -142,8 +159,8 @@ public:
 
     /// @brief Construct a structure type
     /// @param sub_list a list of non-null types. Each Type must outlive the struct created here. Ownership is not
-    ///                 transferred- meaning that the original allocator is expected to deallocate some time after
-    ///                 the deallocation of this struct
+    ///                 transferred- meaning that the original allocator is expected to deallocate some time after the
+    ///                 deallocation of this struct
     static inline Type structure(const std::vector<const Type*>& sub_list) {
         std::vector<std::string> names(sub_list.size());
         std::fill(names.begin(), names.end(), "");
@@ -151,8 +168,8 @@ public:
     }
     /// @brief Construct a structure type
     /// @param sub_list a list of non-null types. Each Type must outlive the struct created here. Ownership is not
-    ///                 transferred- meaning that the original allocator is expected to deallocate some time after
-    ///                 the deallocation of this struct
+    ///                 transferred- meaning that the original allocator is expected to deallocate some time after the
+    ///                 deallocation of this struct
     /// @param name_list a list of string names, corresponding to the Types at the same indices. Must have the same
     ///                  length as sub_list
     static inline Type structure(const std::vector<const Type*>& sub_list, const std::vector<std::string>& name_list) {
@@ -189,18 +206,15 @@ public:
 
     /// @brief Creates an image type
     /// @param texel_type the base type of the image. Should be a numeric scalar or void
-    /// @param dim the number of dimensions. Ie a 1D image = 1, 2D = 2, 3D = 3. Max is 3
-    /// @param comps integer defining the use and order of RGBA components. Each digit defines the order, starting
-    ///              from 1 (0 indicates the component is unused). For example,
-    ///              - comps = 1234 means that all channels of RGBA are included and given in order
-    ///              - comps = 1000 means that only red is enabled
-    ///              - comps = 2341 means that all components active in ARGB order
+    /// @param dim the number of dimensions.
+    /// @param comps integer defining the use and order of RGBA components.
     /// @return the created image type
     static inline Type image(const Type* texel_type, unsigned dim, unsigned comps) {
-        assert(dim <= 3);  // a 3D image is the largest; DIM_BITS has room to spare
-        assert(comps <= 4321);  // the largest meaningful component order, and within COMPS_BITS
-        static_assert(3 <= DIM_MAX && 4321 <= COMPS_MAX, "subSize cannot hold the image fields");
-        return Type(DataType::IMAGE, (dim & DIM_MAX) | ((comps & COMPS_MAX) << DIM_BITS), texel_type);
+        assert(dim <= 3);  // a 3D image is the largest
+        assert(comps <= 4321);  // the largest meaningful component order
+        const ImageFields fields {.dim = dim, .comps = comps, .unused = 0};
+        // bit_cast statically verifies conversion matches the number of bytes
+        return Type(DataType::IMAGE, std::bit_cast<decltype(Type::subSize)>(fields), texel_type);
     }
 
     static inline Type sampledImage(const Type* image) {
@@ -238,12 +252,12 @@ public:
 
     inline unsigned getDim() const {
         assert(base == DataType::IMAGE);
-        return subSize & DIM_MAX;
+        return std::bit_cast<ImageFields>(subSize).dim;
     }
 
     inline unsigned getComps() const {
         assert(base == DataType::IMAGE);
-        return (subSize >> DIM_BITS) & COMPS_MAX;
+        return std::bit_cast<ImageFields>(subSize).comps;
     }
 
     inline const std::vector<const Type*>& getFields() const {
