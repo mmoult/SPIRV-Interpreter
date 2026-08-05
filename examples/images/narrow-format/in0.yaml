@@ -1,0 +1,39 @@
+one:
+  # r32f: red alone, so green and blue read as zero and alpha as one
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1000
+  data: [ 0.5 ]
+two:
+  # rg32f: no blue, no alpha
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1200
+  data: [ 0.5, 0.25 ]
+three:
+  # r11f_g11f_b10f: the only three-channel format there is
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1230
+  data: [ 0.5, 0.25, 0.125 ]
+out1:
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1234
+  data: [ 0.0, 0.0, 0.0, 0.0 ]
+out2:
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1234
+  data: [ 0.0, 0.0, 0.0, 0.0 ]
+out3:
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1234
+  data: [ 0.0, 0.0, 0.0, 0.0 ]

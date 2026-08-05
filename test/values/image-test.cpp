@@ -380,6 +380,45 @@ TEST_CASE("layered image equality", "[image]") {
     }
 }
 
+// An image operation yields four components however few the image carries, so the absent ones are filled in: zero,
+// except alpha, which is one. Which slot each stored channel belongs in comes from comps and not from how many there
+// are, since a two-channel image may hold red and green or red and blue, and those place differently.
+TEST_CASE("expansion to four components", "[image]") {
+    // The texel type is a 32-bit float, so a stored value does not come back bit-identical to the double written here.
+    auto expands = [](unsigned comps, const std::vector<double>& data, const std::vector<double>& want) {
+        Image img(Type::image(&floatTexel(), ImageDim::D2, false, 0));
+        std::unique_ptr<Struct> fields(imageStruct({1, 1}, 1, comps, data));
+        img.copyFrom(*fields);
+        std::unique_ptr<Array> texel(img.read(Image::Location {}));
+        std::unique_ptr<Array> rgba(img.expandToRgba(*texel));
+        REQUIRE(rgba->getSize() == 4);
+        REQUIRE(want.size() == 4);
+        for (unsigned i = 0; i < 4; ++i)
+            REQUIRE(static_cast<const Primitive*>((*rgba)[i])->data.f == Approx(want[i]));
+    };
+
+    SECTION("a full texel passes through unchanged") {
+        expands(1234, {0.1, 0.2, 0.3, 0.4}, {0.1, 0.2, 0.3, 0.4});
+    }
+
+    SECTION("absent channels are zero, but absent alpha is one") {
+        expands(1000, {0.1}, {0.1, 0.0, 0.0, 1.0});
+        expands(1200, {0.1, 0.2}, {0.1, 0.2, 0.0, 1.0});
+        expands(1230, {0.1, 0.2, 0.3}, {0.1, 0.2, 0.3, 1.0});
+    }
+
+    SECTION("the count alone does not say where a channel goes") {
+        // Both hold two channels. 1200 is red and green; 1020 is red and blue, with green missing between them.
+        expands(1200, {0.7, 0.3}, {0.7, 0.3, 0.0, 1.0});
+        expands(1020, {0.7, 0.3}, {0.7, 0.0, 0.3, 1.0});
+    }
+
+    SECTION("a channel set need not include red") {
+        // comps 1 is alpha alone, so the one stored value belongs in the last slot, not the first.
+        expands(1, {0.9}, {0.0, 0.0, 0.0, 0.9});
+    }
+}
+
 // An image whose type names no format lets the input file decide which channels are present. The order the file uses is
 // its own business, but the layout behind it is not: SPIR-V works in RGBA order, so the data is permuted into that
 // order on the way in.

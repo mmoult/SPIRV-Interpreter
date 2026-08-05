@@ -1,0 +1,18 @@
+out1:
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1234
+  data: [ 0.5, 0.0, 0.0, 1.0 ]
+out2:
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1234
+  data: [ 0.5, 0.25, 0.0, 1.0 ]
+out3:
+  ref: ""
+  dim: [ 1, 1 ]
+  mipmaps: 1
+  comps: 1234
+  data: [ 0.5, 0.25, 0.125, 1.0 ]

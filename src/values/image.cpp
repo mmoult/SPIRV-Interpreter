@@ -755,6 +755,41 @@ Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type
     return new Array(vals);
 }
 
+[[nodiscard]] Array* Image::expandToRgba(const Array& texel) const {
+    assert(texel.getSize() == comps.count);
+    assert(comps.isAscending());
+    const Type& el = type.getElement();
+    const DataType el_base = el.getBase();
+
+    // The fill has to be of the texel type, the same way read() builds its results.
+    auto typed = [el_base](double val) {
+        if (el_base == DataType::FLOAT)
+            return Primitive(val);
+        if (el_base == DataType::INT)
+            return Primitive(static_cast<int64_t>(val));
+        assert(el_base == DataType::UINT);
+        return Primitive(static_cast<uint64_t>(val));
+    };
+
+    std::vector<Value*> vals(4, nullptr);
+    for (unsigned chan = 0; chan < 4; ++chan) {
+        auto* prim = new Primitive(0u);
+        prim->cast(el);
+        if (comps[chan] == 0) {
+            // Absent channels read as zero, except alpha, which reads as one so that a color without one is opaque.
+            // This is the substitution Vulkan mandates, in the format's numeric type (0.0/1.0 for float and
+            // normalized formats, integer 0/1 otherwise); see "Component Substitution":
+            // https://docs.vulkan.org/spec/latest/chapters/resources.html#images-component-substitution
+            prim->copyFrom(typed((chan == 3) ? 1.0 : 0.0));
+        } else {
+            // comps gives the slot this channel occupies, which is where read() left it.
+            prim->copyFrom(*texel[comps[chan] - 1]);
+        }
+        vals[chan] = prim;
+    }
+    return new Array(vals);
+}
+
 std::array<unsigned, 4> Image::getSize(uint32_t lod) const {
     // Each spatial axis halves per mipmap level. For example, 0 is full size, 1 is half-size, etc
     const unsigned divide = mipDivisor(lod);

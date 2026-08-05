@@ -1,0 +1,16 @@
+#version 460
+// imageLoad yields a vec4 whatever the format holds, so a format with fewer channels has the rest filled in: zero,
+// except alpha, which is one. Three formats of differing width write their loads side by side.
+layout(local_size_x = 1) in;
+layout(binding = 0, r32f) readonly uniform image2D one;
+layout(binding = 1, rg32f) readonly uniform image2D two;
+layout(binding = 2, r11f_g11f_b10f) readonly uniform image2D three;
+layout(binding = 3, rgba32f) writeonly uniform image2D out1;
+layout(binding = 4, rgba32f) writeonly uniform image2D out2;
+layout(binding = 5, rgba32f) writeonly uniform image2D out3;
+
+void main() {
+    imageStore(out1, ivec2(0, 0), imageLoad(one, ivec2(0, 0)));
+    imageStore(out2, ivec2(0, 0), imageLoad(two, ivec2(0, 0)));
+    imageStore(out3, ivec2(0, 0), imageLoad(three, ivec2(0, 0)));
+}

@@ -310,7 +310,23 @@ public:
     static Location extractCoords(const Value* coords_v, const Type& img_type, Access access, bool proj);
 
     /// @brief Gets the (interpolated) pixel value at the given location.
+    /// The result holds one value per channel the image actually carries, in the order #data stores them, which is not
+    /// necessarily the four an image operation yields. See #expandToRgba.
     [[nodiscard]] Array* read(const Location& loc) const;
+
+    /// @brief Places a texel's stored channels into the four an image operation produces.
+    /// @param texel a texel as read() returned it, holding one value per channel the image carries
+    /// @return red, green, blue and alpha, in that order, owned by the caller
+    ///
+    /// An image operation yields four components however few the format holds, so a channel the image does not carry
+    /// has to be filled in: zero, except for alpha, which is one. Doing that needs #comps and not merely how many
+    /// channels there are, because the count does not say *which*. A two-channel image may hold red and green, which
+    /// expand to (r, g, 0, 1), or red and blue, which expand to (r, 0, b, 1).
+    ///
+    /// This is deliberately separate from read(). Which channels exist is the image's own business, so read() reports
+    /// them as they are; filling the absent ones is what the client API asks of an image *operation*, so it belongs to
+    /// the instruction performing one, which also knows how many of the four it means to keep.
+    [[nodiscard]] Array* expandToRgba(const Array& texel) const;
 
     /// @brief Writes a texel at whole coordinates. The layer, like the coordinates, must name an existing element.
     bool write(int x, int y, int z, int layer, const Array& texel);

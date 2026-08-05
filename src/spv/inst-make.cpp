@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>  // for nan
+#include <memory>
 #include <numbers>
 #include <sstream>
 #include <stdexcept>
@@ -259,12 +260,19 @@ Value* Instruction::handleImage(
         calcImageLocation(data, image, coords, img_qualifier, defer_pairs, access, lod_init, proj);
     assert(defer_pairs.empty());
 
-    const Array& arr = *image->read(loc);
-    if (arr.getSize() == 1)
-        to_ret->copyFrom(*(arr[0]));
-    else
-        to_ret->copyFrom(arr);
-    delete &arr;
+    std::unique_ptr<Array> texel(image->read(loc));
+    // An image operation yields four components whatever the image carries, and the result type says how many of them
+    // are wanted: a vec4 takes all of them, a scalar result takes red alone. Anything the image has no channel for was
+    // filled in on the way, so a one-channel image can still satisfy a vec4.
+    std::unique_ptr<Array> rgba(image->expandToRgba(*texel));
+    if (to_ret->getType().getBase() == DataType::ARRAY) {
+        auto& out = static_cast<Array&>(*to_ret);
+        assert(out.getSize() <= 4);
+        for (unsigned i = 0; i < out.getSize(); ++i)
+            out[i]->copyFrom(*(*rgba)[i]);
+    } else {
+        to_ret->copyFrom(*(*rgba)[0]);
+    }
     return to_ret;
 }
 
@@ -1509,10 +1517,11 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             at.x = ux + xx;
             at.y = uy + yy;
             at.z = uz;
-            Array* read_res = image.read(at);
-            Primitive* read_prim = static_cast<Primitive*>((*read_res)[comp]);
-            to_ret[i]->copyFrom(*read_prim);
-            delete read_res;
+            std::unique_ptr<Array> read_res(image.read(at));
+            // A gather names one of the four components, which the image need not carry: component 3 of a two-channel
+            // image is an alpha that is not there. Indexing the texel directly walked off the end of it.
+            std::unique_ptr<Array> rgba(image.expandToRgba(*read_res));
+            to_ret[i]->copyFrom(*(*rgba)[comp]);
         }
         data[result_at].redefine(&to_ret);
         break;
