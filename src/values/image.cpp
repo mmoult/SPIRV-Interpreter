@@ -7,6 +7,7 @@
 
 #include <algorithm>  // for std::max
 #include <bit>  // for std::bit_cast
+#include <cmath>  // for std::modf, std::fmod, std::floor, std::nearbyint
 #include <sstream>
 
 #include "../../external/stb/stb_image.h"
@@ -138,6 +139,29 @@ unsigned Image::lodOffset(unsigned lod) const {
     return total;
 }
 
+unsigned Image::layerStride() const {
+    return lodOffset(mipmaps);
+}
+
+unsigned Image::arrayLength() const {
+    assert(layers > 0);
+    // Six faces make up one array element of a cube map, and are not separately addressable by a coordinate.
+    const unsigned per_element = (type.getImageDim() == ImageDim::CUBE) ? 6 : 1;
+    assert(layers % per_element == 0);
+    return layers / per_element;
+}
+
+unsigned Image::layerIndex(float layer) const {
+    const unsigned length = arrayLength();
+    unsigned index = 0;
+    if (layer > 0.0) {
+        const float rounded = std::nearbyint(layer);
+        index = (rounded >= static_cast<float>(length)) ? (length - 1) : static_cast<unsigned>(rounded);
+    }
+    // layers / length is the storage-layers-per-element stride: 6 for a cube map, 1 otherwise.
+    return index * (layers / length);
+}
+
 std::tuple<unsigned, float> Image::decompose(float val) {
     // TODO this needs to be refactored since pixel centers are at 0.5. Also, bounds conditions defined by the sampler.
     float base;
@@ -155,7 +179,7 @@ bool Image::equals(const Value& val) const {
     const Image& other = static_cast<const Image&>(val);
 
     // reference is not compared since it only is used in generating the data
-    if (xx != other.xx || yy != other.yy || zz != other.zz)
+    if (xx != other.xx || yy != other.yy || zz != other.zz || layers != other.layers)
         return false;
 
     // The ordering of components does not have to be identical, but all active components per fragment in one image
@@ -171,23 +195,29 @@ bool Image::equals(const Value& val) const {
     // In theory, the data of all mipmaps should be synchronized. Therefore, we can compare only the mipmaps with
     // most data (mipmap 0)
 
-    // Mipmap 0 holds comps.count entries per texel, matching the layout used by read()/write().
+    // Mipmap 0 holds comps.count entries per texel, matching the layout used by read()/write(). Each layer carries a
+    // mipmap chain of its own, so the level 0 of every layer is a separate run, one layer stride from the last, rather
+    // than a single block at the front of the data.
     const unsigned mip0 = texelsAt(0) * comps.count;
-    const unsigned limit = std::min(mip0, static_cast<unsigned>(data.size()));
+    const unsigned stride = layerStride();
 
     const Type& subelement = type.getElement();
     assert(comps.count != 0);
-    for (unsigned i = 0; i + comps.count <= limit; i += comps.count) {
-        for (unsigned j = 0; j < 4; ++j) {
-            if (comps[j] == 0)
-                continue;
-            // Compare data in the primitive type (needed since float allow for a more lenient comparison)
-            Primitive mine(data[i + comps[j] - 1]);
-            Primitive your(other.data[i + other.comps[j] - 1]);
-            mine.cast(subelement);
-            your.cast(subelement);
-            if (!mine.equals(your))
-                return false;
+    for (unsigned layer = 0; layer < layers; ++layer) {
+        const unsigned begin = layer * stride;
+        const unsigned limit = std::min(begin + mip0, static_cast<unsigned>(data.size()));
+        for (unsigned i = begin; i + comps.count <= limit; i += comps.count) {
+            for (unsigned j = 0; j < 4; ++j) {
+                if (comps[j] == 0)
+                    continue;
+                // Compare data in the primitive type (needed since float allow for a more lenient comparison)
+                Primitive mine(data[i + comps[j] - 1]);
+                Primitive your(other.data[i + other.comps[j] - 1]);
+                mine.cast(subelement);
+                your.cast(subelement);
+                if (!mine.equals(your))
+                    return false;
+            }
         }
     }
     return true;
@@ -202,21 +232,31 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
         throw std::runtime_error("The first image field, \"ref\", must be a string path to the image source or empty!");
     reference = static_cast<const String*>(ref)->get();
 
-    // dim: uvec1, uvec2, or uvec3
-    unsigned dim_size = this->type.getSpatialDims();
-    if (dim_size < 1 || dim_size > 3)
-        throw std::runtime_error("Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive.");
-    std::vector<uint64_t> dims = Statics::extractUvec(other[1], names[1], dim_size);
+    // dim: one component per spatial axis, plus a trailing array length when the image is arrayed
+    const unsigned spatial = this->type.getSpatialDims();
+    const bool arrayed = this->type.isArrayed();
+    std::vector<uint64_t> dims = Statics::extractUvec(other[1], names[1], spatial + (arrayed ? 1 : 0));
     xx = dims[0];
-    if (dim_size > 1) {
+    if (spatial > 1) {
         yy = dims[1];
-        if (dim_size > 2)
+        if (spatial > 2)
             zz = dims[2];
     }
+    // The trailing component counts array elements rather than stored layers, so a cube map's six faces per element
+    // are implied by the type instead of spelled out in the file.
+    const unsigned array_length = arrayed ? static_cast<unsigned>(dims[spatial]) : 1;
+    if (array_length == 0)
+        throw std::runtime_error("The image field \"dim\" must give at least one array element for an arrayed image!");
+    layers = array_length * ((this->type.getImageDim() == ImageDim::CUBE) ? 6 : 1);
 
     // Now that we have the expected dimensions, fetch data (if any) from the reference path
     // TODO: handle dimensions besides 2D and add support for mipmaps
     if (!reference.empty()) {
+        if (layers > 1) {
+            // One file holds one image, and there is no convention here yet for where the other layers would come
+            // from. Refuse rather than silently filling only the first layer.
+            throw std::runtime_error("Loading a layered image from a file is not yet supported!");
+        }
         int width, height, channels;
         unsigned char* img = stbi_load(reference.c_str(), &width, &height, &channels, 0);
         if (img == nullptr) {
@@ -326,11 +366,12 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
             throw std::runtime_error("The image field \"data\" must have elements of type: uint, int, or float!");
         unsigned size = data_a.getSize();
         // Verify that the data matches expected from the given dimensions
-        unsigned total = lodOffset(mipmaps);
+        unsigned total = layers * layerStride();
         if (total != size) {
             std::stringstream err;
             err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
-            err << xx << " x " << yy << " x " << zz << ", with " << comps.count << " active channels. This requires ";
+            err << xx << " x " << yy << " x " << zz << " over " << layers << " layer(s), with " << comps.count;
+            err << " active channels. This requires ";
             err << total << " values, however, " << size << " were provided.";
             throw std::runtime_error(err.str());
         }
@@ -362,6 +403,7 @@ void Image::copyFrom(const Value& new_val) noexcept(false) {
     this->xx = other.xx;
     this->yy = other.yy;
     this->zz = other.zz;
+    this->layers = other.layers;
     this->mipmaps = other.mipmaps;
 
     // Now, copy over the data:
@@ -383,14 +425,18 @@ Struct* Image::toStruct() const {
     elements.reserve(names.size());
     elements.push_back(new String(reference));
     std::vector<Value*> dims;
-    unsigned num_dims = type.getSpatialDims();
-    dims.reserve(num_dims);
+    const unsigned spatial = type.getSpatialDims();
+    const bool arrayed = type.isArrayed();
+    dims.reserve(spatial + (arrayed ? 1 : 0));
     dims.push_back(new Primitive(xx));
-    if (num_dims > 1) {
+    if (spatial > 1) {
         dims.push_back(new Primitive(yy));
-        if (num_dims > 2)
+        if (spatial > 2)
             dims.push_back(new Primitive(zz));
     }
+    // Mirror what copyFrom reads: the array length, with a cube map's faces left implicit.
+    if (arrayed)
+        dims.push_back(new Primitive(arrayLength()));
     elements.push_back(new Array(dims));
     elements.push_back(new Primitive(mipmaps));
     // Reconstruct the components uint from the actual components breakdown
@@ -409,15 +455,14 @@ Struct* Image::toStruct() const {
     return new Struct(elements, names);
 }
 
-std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_v, unsigned dim, bool proj) {
+Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type, bool proj) {
     const Type* coord_type = &coords_v->getType();
-    bool arrayed = false;
+    bool aggregate = false;
     if (coord_type->getBase() == DataType::ARRAY) {
         coord_type = &coord_type->getElement();
-        arrayed = true;
+        aggregate = true;
     }
-    DataType base = coord_type->getBase();
-    float x = 0.0, y = 0.0, z = 0.0, q = 0.0;
+    const DataType base = coord_type->getBase();
 
     auto get = [](const Value* val, DataType base) {
         const auto& prim = static_cast<const Primitive&>(*val);
@@ -429,27 +474,49 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
         return prim.data.f;
     };
 
-    if (!arrayed) {
-        assert(dim == 1 && !proj);
-        x = get(coords_v, base);
-    } else {
-        const auto& coords = static_cast<const Array&>(*coords_v);
-        assert(coords.getSize() >= dim + proj ? 1 : 0);
-        x = get(coords[0], base);
-        if (dim >= 2) {
-            y = get(coords[1], base);
-            if (dim >= 3)
-                z = get(coords[2], base);
-        }
-        if (proj)
-            q = get(coords[dim], base);
+    // The components come in a fixed order: every spatial one, then the array element, then the projective divisor.
+    // Only the spatial ones are always present.
+    // TODO A cube map's integer accesses (OpImageRead, OpImageWrite, OpImageFetch) name a face where a third spatial
+    // axis would go instead of carrying a direction vector, so their face lands in z rather than in layer. Face
+    // selection for the sampling path is not implemented either; both belong with cube map support.
+    const bool arrayed = img_type.isArrayed();
+    const unsigned spatial = img_type.getCoordCount() - (arrayed ? 1 : 0);
+
+    Location loc;
+    if (!aggregate) {
+        // A lone spatial axis with no layer and no divisor is the only case that fits in a scalar
+        assert(spatial == 1 && !arrayed && !proj);
+        loc.x = get(coords_v, base);
+        return loc;
     }
-    return {x, y, z, q};
+
+    const auto& coords = static_cast<const Array&>(*coords_v);
+    assert(coords.getSize() >= spatial + (arrayed ? 1u : 0u) + (proj ? 1u : 0u));
+    loc.x = get(coords[0], base);
+    if (spatial >= 2) {
+        loc.y = get(coords[1], base);
+        if (spatial >= 3)
+            loc.z = get(coords[2], base);
+    }
+    unsigned next = spatial;
+    if (arrayed)
+        loc.layer = get(coords[next++], base);
+    if (proj)
+        loc.q = get(coords[next], base);
+    return loc;
 }
 
-[[nodiscard]] Array* Image::read(float x, float y, float z, float lod) const {
+[[nodiscard]] Array* Image::read(const Location& loc) const {
+    const float x = loc.x;
+    const float y = loc.y;
+    const float z = loc.z;
+    const float lod = loc.lod;
     if (x < 0 || y < 0 || z < 0 || lod < 0)
         return outOfBoundsAccess();
+
+    // The layer is selected, not interpolated, so it only decides where this read begins. It needs no bounds check of
+    // its own: layerIndex clamps, which is what a sampled array access is specified to do.
+    const unsigned layer_base = layerIndex(loc.layer) * layerStride();
 
     // coordinates are given in the scale of lod=0, regardless of the actual lod to use
     auto [lBase, lRatio] = decompose(lod);
@@ -525,7 +592,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
         const unsigned div = mipDivisor(use_lod);
         const unsigned xxx = std::max(xx / div, 1u);
         const unsigned yyy = std::max(yy / div, 1u);
-        unsigned anchor = lodOffset(use_lod);
+        unsigned anchor = layer_base + lodOffset(use_lod);
 
         unsigned factor = comps.count;
         if (rx > 0.0)
@@ -598,29 +665,48 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
 }
 
 std::array<unsigned, 4> Image::getSize(uint32_t lod) const {
-    // we divide each dimension by 2 times the lod. For example, 0 is full size, 1 is half-size, etc
-    unsigned divide = mipDivisor(lod);
+    // Each spatial axis halves per mipmap level. For example, 0 is full size, 1 is half-size, etc
+    const unsigned divide = mipDivisor(lod);
     auto trunc = [divide](unsigned size) { return std::max(size / divide, 1u); };
-    return {trunc(xx), trunc(yy), trunc(zz), 1u};
+    const unsigned spatial = type.getSpatialDims();
+    assert(spatial < 4);
+
+    std::array<unsigned, 4> size {0, 0, 0, 0};
+    size[0] = trunc(xx);
+    if (spatial > 1) {
+        size[1] = trunc(yy);
+        if (spatial > 2)
+            size[2] = trunc(zz);
+    }
+    // The array length follows the spatial axes with no gap, and is reported undivided: a mipmap level subdivides the
+    // axes and leaves the layers alone, so textureSize on a cube array counts cubes rather than faces.
+    if (type.isArrayed())
+        size[spatial] = arrayLength();
+    return size;
 }
 
-bool Image::write(int x, int y, int z, const Array& texel) {
+bool Image::write(int x, int y, int z, int layer, const Array& texel) {
     // Verify that the texel to write to is in bounds
-    bool oob = (x < 0 || y < 0 || z < 0);
+    bool oob = (x < 0 || y < 0 || z < 0 || layer < 0);
 
     unsigned xu = static_cast<unsigned>(x);
     unsigned yu = static_cast<unsigned>(y);
     unsigned zu = static_cast<unsigned>(z);
+    unsigned lu = static_cast<unsigned>(layer);
     // If the coordinate specified matches or exceeds the maximum (exclusive), then we are out of bounds.
     // However, there is some special behavior for 0, since coordinate matching is appropriate there.
     if ((xu > 0 && xu >= xx) || (yu > 0 && yu >= yy) || (zu > 0 && zu >= zz))
+        oob = true;
+    // The layer of a write is a whole index into the stored layers, so unlike the clamp a sampled read performs,
+    // naming a layer that does not exist is out of bounds like any other coordinate.
+    if (lu >= layers)
         oob = true;
     if (oob)
         return false;
 
     unsigned yyy = xx * comps.count;
     unsigned zzz = yy * yyy;
-    unsigned base = (xu * comps.count) + (yu * yyy) + (zu * zzz);
+    unsigned base = (lu * layerStride()) + (xu * comps.count) + (yu * yyy) + (zu * zzz);
     assert(base < data.size());  // should be checked in copying that dimensions match data count actually given
 
     // TODO: write at the same location to all mipmaps

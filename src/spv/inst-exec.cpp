@@ -276,14 +276,14 @@ bool Instruction::execute(
             throw std::runtime_error("Unimplemented ImageWrite variant!");
         }
 
-        auto [x, y, z, q] = Image::extractCoords(getValue(1, data), image.getCoordCount(), false);
+        const Image::Location loc = Image::extractCoords(getValue(1, data), image.getType(), false);
         // We only support int coordinates currently
         auto get = [](float x) {
             if ((1.0 - (std::ceil(x) - x)) != 1.0)
                 throw std::runtime_error("Unsupported float coordinates to Image Write!");
             return static_cast<int>(x);
         };
-        image.write(get(x), get(y), get(z), *composed);
+        image.write(get(loc.x), get(loc.y), get(loc.z), get(loc.layer), *composed);
         break;
     }
     case spv::OpControlBarrier: {  // 224

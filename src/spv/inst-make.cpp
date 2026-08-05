@@ -124,7 +124,7 @@ void Instruction::selectName(Variable& var) const {
     }
 }
 
-std::array<float, 4> Instruction::calcImageLocation(
+Image::Location Instruction::calcImageLocation(
     DataView& data,
     const Image* image,
     const Value* coords,
@@ -133,13 +133,14 @@ std::array<float, 4> Instruction::calcImageLocation(
     float lod,
     bool proj
 ) const {
-    auto [x, y, z, q] = Image::extractCoords(coords, image->getCoordCount(), proj);
+    Image::Location loc = Image::extractCoords(coords, image->getType(), proj);
+    loc.lod = lod;
     if (proj) {
-        if (q == 0.0)
+        if (loc.q == 0.0)
             throw std::runtime_error("Invalid projection value (0.0) in image access!");
-        x /= q;
-        y /= q;
-        z /= q;
+        loc.x /= loc.q;
+        loc.y /= loc.q;
+        loc.z /= loc.q;
     }
 
     if (img_qualifier < operands.size()) {
@@ -161,7 +162,7 @@ std::array<float, 4> Instruction::calcImageLocation(
                 const Value* bias = getNext();
                 // bias must be a float per the spec
                 assert(bias->getType().getBase() == DataType::FLOAT);
-                lod += static_cast<const Primitive*>(bias)->data.f;
+                loc.lod += static_cast<const Primitive*>(bias)->data.f;
                 break;
             }
             case spv::ImageOperandsLodMask: {
@@ -169,7 +170,7 @@ std::array<float, 4> Instruction::calcImageLocation(
                 const auto& lodp = static_cast<const Primitive&>(*lodv);
                 Primitive prim(0.0);
                 prim.copyFrom(lodp);
-                lod = prim.data.f;
+                loc.lod = prim.data.f;
                 break;
             }
             case spv::ImageOperandsConstOffsetMask:
@@ -180,17 +181,19 @@ std::array<float, 4> Instruction::calcImageLocation(
                 if (shift_type == DataType::ARRAY) {
                     assert(shifts->getType().getElement().getBase() == DataType::INT);
                     const auto& sh = static_cast<const Array&>(*shifts);
+                    // An offset shifts the spatial coordinates only. There is no layer case below because an arrayed
+                    // image's offset has one component per spatial axis, leaving the array element alone.
                     for (unsigned j = 0; j < sh.getSize(); ++j) {
                         const auto& shp = static_cast<const Primitive&>(*(sh[j]));
                         switch (j) {
                         case 0:
-                            x += shp.data.i;
+                            loc.x += shp.data.i;
                             break;
                         case 1:
-                            y += shp.data.i;
+                            loc.y += shp.data.i;
                             break;
                         case 2:
-                            z += shp.data.i;
+                            loc.z += shp.data.i;
                             break;
                         default:
                             throw std::runtime_error("Offset coordinate count exceeds components usable!");
@@ -198,7 +201,7 @@ std::array<float, 4> Instruction::calcImageLocation(
                     }
                 } else {
                     assert(shift_type == DataType::INT);
-                    x += static_cast<const Primitive&>(*shifts).data.i;
+                    loc.x += static_cast<const Primitive&>(*shifts).data.i;
                 }
                 break;
             }
@@ -213,7 +216,7 @@ std::array<float, 4> Instruction::calcImageLocation(
                 const Value* min_lodv = getNext();
                 assert(min_lodv->getType().getBase() == DataType::FLOAT);
                 // spec explicitly requires it to be a floating point scalar
-                lod = std::max(lod, static_cast<float>(static_cast<const Primitive&>(*min_lodv).data.f));
+                loc.lod = std::max(loc.lod, static_cast<float>(static_cast<const Primitive&>(*min_lodv).data.f));
                 break;
             }
             default: {
@@ -228,7 +231,7 @@ std::array<float, 4> Instruction::calcImageLocation(
             throw std::runtime_error("Unused image qualifier operands!");
     }
 
-    return {x, y, z, lod};
+    return loc;
 }
 
 Value* Instruction::handleImage(
@@ -250,10 +253,10 @@ Value* Instruction::handleImage(
         image = static_cast<const Image*>(&img);
     }
     std::vector<std::pair<uint32_t, unsigned>> defer_pairs;
-    auto [x, y, z, lod] = calcImageLocation(data, image, coords, img_qualifier, defer_pairs, lod_init, proj);
+    const Image::Location loc = calcImageLocation(data, image, coords, img_qualifier, defer_pairs, lod_init, proj);
     assert(defer_pairs.empty());
 
-    const Array& arr = *image->read(x, y, z, lod);
+    const Array& arr = *image->read(loc);
     if (arr.getSize() == 1)
         to_ret->copyFrom(*(arr[0]));
     else
@@ -1445,12 +1448,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         Value& component = *getValue(src_at + 2, data);
 
         std::vector<std::pair<uint32_t, unsigned>> defer_pairs;
-        auto [x, y, z, lod] =
+        const Image::Location loc =
             Instruction::calcImageLocation(data, &image, coords, src_at + 3, defer_pairs, sampler.getImplicitLod());
         // TODO: f* should be ignored, but C++ doesn't have placeholder (_) until C++26.
-        auto [ux, fx] = Image::decompose(x);
-        auto [uy, fy] = Image::decompose(y);
-        auto [uz, fz] = Image::decompose(z);
+        auto [ux, fx] = Image::decompose(loc.x);
+        auto [uy, fy] = Image::decompose(loc.y);
+        auto [uz, fz] = Image::decompose(loc.z);
 
         unsigned comp;
         assert(component.getType().getBase() == DataType::UINT || component.getType().getBase() == DataType::INT);
@@ -1488,7 +1491,13 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
                     assert(false);  // Unknown mask!
             }
 
-            Array* read_res = image.read(ux + xx, uy + yy, uz, lod);
+            // The gather offsets shift the spatial coordinates; everything else about the location is preserved,
+            // including the layer, so each of the four reads lands in the same array element.
+            Image::Location at = loc;
+            at.x = ux + xx;
+            at.y = uy + yy;
+            at.z = uz;
+            Array* read_res = image.read(at);
             Primitive* read_prim = static_cast<Primitive*>((*read_res)[comp]);
             to_ret[i]->copyFrom(*read_prim);
             delete read_res;

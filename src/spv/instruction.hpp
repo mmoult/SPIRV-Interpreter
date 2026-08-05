@@ -84,7 +84,9 @@ private:
     bool makeResultGlsl(DataView& data, unsigned result_at) const noexcept(false);
     bool makeResultPrintf(DataView& data) const noexcept(false);
 
-    std::array<float, 4> calcImageLocation(
+    /// @brief Resolves an image operation's coordinate and qualifier operands into the point it accesses.
+    /// @param lod the level of detail to start from, which a Bias, Lod, or MinLod qualifier may adjust or replace
+    Image::Location calcImageLocation(
         DataView& data,
         const Image* image,
         const Value* coords,

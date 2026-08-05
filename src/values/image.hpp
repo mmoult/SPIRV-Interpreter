@@ -18,12 +18,21 @@
 #include "value.hpp"
 
 class Image final : public Value {
-    /// Dimensions of the image:
-    /// - xx is width
-    /// - yy is height
-    /// - zz is depth
-    /// - ww is number of array elements (not currently supported)
+    /// @brief The extent of each spatial axis at mipmap level 0: xx is width, yy is height, zz is depth.
+    /// Only as many of these as Type::getSpatialDims() reports are meaningful; the rest stay 0 rather than 1, so any
+    /// arithmetic over all three has to clamp (see #texelsAt). For a cube map, xx and yy are the extent of a single
+    /// face, which is square.
     unsigned xx, yy, zz;
+
+    /// @brief How many independent images the data holds, each with a complete mipmap chain of its own.
+    /// This counts *storage* layers, which is not the same as what a coordinate indexes: a cube map stores six layers
+    /// per array element, one per face, and #arrayLength divides that back out. An image with neither the Arrayed flag
+    /// nor a cube dimensionality has exactly one layer.
+    ///
+    /// Layers differ from the spatial axes in two ways that the rest of this class depends on. They are never
+    /// interpolated between, because adjacent layers hold unrelated images rather than neighboring texels, and their
+    /// count does not shrink with the mipmap level: level 3 of a 16-layer image still has 16 layers.
+    unsigned layers;
 
     /// @brief The number of mipmap levels, which decrease in level of detail (LOD).
     /// Each mipmap has half the dimensions of the prior (truncating as needed except when dividing 1). Fields xx, yy,
@@ -143,10 +152,50 @@ class Image final : public Value {
     /// #mipmaps therefore yields the size of the entire chain.
     unsigned lodOffset(unsigned lod) const;
 
+    /// @brief How many elements one layer occupies, which is its whole mipmap chain.
+    /// Layers are stored back to back, so layer n begins at n * layerStride(). Note the consequence for anything that
+    /// wants a single mipmap level across all layers: that region is not contiguous.
+    unsigned layerStride() const;
+
+    /// @brief How many layers a coordinate can address, which is #layers with a cube map's six faces factored out.
+    /// This is the count the shader sees, and so what textureSize reports and what a coordinate's layer component is
+    /// bounded by. A cube map's faces are storage layers but not array elements.
+    unsigned arrayLength() const;
+
+    /// @brief Converts a coordinate's array index into the index of the first storage layer it names.
+    ///
+    /// Rounds rather than interpolating, since neighboring layers are unrelated images, and clamps into range. Both
+    /// follow the Vulkan specification: the section "(u,v,w,a) to (i,j,k,l,n) Transformation and Array Layer Selection"
+    /// of docs.vulkan.org/spec/latest/chapters/textures.html resolves the array coordinate to a layer by rounding to
+    /// the nearest even integer and then clamping against the layer count. std::nearbyint is that rounding under the
+    /// default rounding mode, where std::round is not.
+    ///
+    /// For a cube map, one array element spans six consecutive layers, so it returns the first layer of the element
+    /// the coordinate selects. The specific face lies at that layer plus its face index.
+    unsigned layerIndex(float layer) const;
+
 public:
-    // mipmaps defaults to the documented minimum of 1. copyFrom(const Struct&) overwrites it, but toStruct() and the
-    // LOD clamp in read() can both run on an Image that Type::construct() only default-constructed.
-    Image(Type t) : Value(t), xx(0), yy(0), zz(0), mipmaps(1), comps(t.getComps(), false) {};
+    /// @brief Where in an image an operation reads or writes, as its coordinate and qualifier operands describe it.
+    /// Which members the coordinate actually supplies depends on the image type, in the order they appear here; see
+    /// Type::getCoordCount(). Whatever the level of detail says, the spatial coordinates are always in the scale of
+    /// mipmap level 0.
+    struct Location {
+        float x = 0.0;
+        float y = 0.0;
+        float z = 0.0;
+        /// @brief The array element to read from, used only for an arrayed image.
+        float layer = 0.0;
+        /// @brief The projective divisor, used only for the Proj variants, after every other component.
+        /// Instruction::calcImageLocation consumes it: x, y, and z are divided through before the Image sees them.
+        float q = 0.0;
+        /// @brief The mipmap level of detail, which comes from the instruction's qualifiers, not the coordinate.
+        float lod = 0.0;
+    };
+
+    // mipmaps defaults to the documented minimum of 1, and layers to the one every image has. copyFrom(const Struct&)
+    // overwrites both, but toStruct() and the LOD clamp in read() can each run on an Image that Type::construct() only
+    // default-constructed.
+    Image(Type t) : Value(t), xx(0), yy(0), zz(0), layers(1), mipmaps(1), comps(t.getComps(), false) {};
 
     bool equals(const Value& val) const override;
 
@@ -170,6 +219,12 @@ public:
     //   data :
     //   - float, int, or uint, as long as it is consistent
     //   - <...>
+    //
+    // "dim" holds one component per spatial axis, and one more at the end when the image is arrayed. Three components
+    // is therefore the most it ever has, since the only dimensionality with three spatial axes is the one Arrayed is
+    // forbidden on. That trailing component is the number of array elements, not the number of stored layers, so a cube
+    // map's six faces are left implicit: an arrayed cube map of three elements writes [w, h, 3] rather than [w, h, 18],
+    // and a lone cube map writes [w, h] with the six understood.
     Struct* toStruct() const;
 
     /// @brief How many components are expected for a coordinate targeting a single texel in this image. This is NOT
@@ -181,19 +236,28 @@ public:
 
     /// @brief Get the size of the image at the given LOD level
     /// @param lod the level of detail to query. 0 is the most detailed level
-    /// @return a tuple of four uints: width, height, depth, and number of array elements.
+    /// @return the extent of each spatial axis, followed by the number of array elements if the image is arrayed.
     ///
-    /// Note, some images are of a dimensionality which don't have meaningful values for some of the return channels.
-    /// However, all return values must be at least 1, so the caller is responsible for using #getSpatialDims() to
-    /// determine which should be used.
+    /// The components are packed from the front with no gaps, so which slot means what depends on the image type: the
+    /// array length of a 2D arrayed image lands in slot 2, where the depth of a 3D image would be. The caller is
+    /// expected to take exactly Type::getSpatialDims() + Type::isArrayed() of them, which is how many components the
+    /// result type of an OpImageQuerySize* has; any slot past that is left 0 and means nothing.
+    ///
+    /// The array length is reported whole at every level of detail. Mipmapping subdivides the spatial axes, never the
+    /// layers, so textureSize on a cube array counts cubes rather than faces and does not halve.
     std::array<unsigned, 4> getSize(uint32_t lod = 0) const;
 
-    static std::tuple<float, float, float, float> extractCoords(const Value* coords_v, unsigned dim, bool proj);
+    /// @brief Splits an operation's coordinate operand into the roles its components play.
+    /// @param coords_v the coordinate operand, either a scalar or an array of them
+    /// @param img_type the type of the image being accessed, which decides how many components mean what
+    /// @param proj whether the instruction is a Proj variant, which appends a divisor after everything else
+    static Location extractCoords(const Value* coords_v, const Type& img_type, bool proj);
 
-    /// @brief Gets the (interpolated) pixel value at the specified coordinates.
-    [[nodiscard]] Array* read(float x, float y, float z, float lod) const;
+    /// @brief Gets the (interpolated) pixel value at the given location.
+    [[nodiscard]] Array* read(const Location& loc) const;
 
-    bool write(int x, int y, int z, const Array& texel);
+    /// @brief Writes a texel at whole coordinates. The layer, like the coordinates, must name an existing element.
+    bool write(int x, int y, int z, int layer, const Array& texel);
 
     /// @brief Decomposes the float value into an unsigned int base and a float ratio
     ///
