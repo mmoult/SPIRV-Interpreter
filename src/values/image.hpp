@@ -71,11 +71,30 @@ class Image final : public Value {
 
         void assertCompatible(const Component& other);
 
+        /// @brief Whether the active channels are stored in RGBA order, rather than permuted into some other order.
+        /// SPIR-V defines an image texel as an RGBA-ordered vector: OpImageRead/OpImageFetch/OpImageSample return
+        /// component 0 as red, and OpImageWrite supplies them the same way. RGBA is therefore the canonical layout for
+        /// #data, and read()/write() move channels by position only because storage already matches it.
+        ///
+        /// A file may declare any order, but must be normalized before use. No currently supported formats introduce a
+        /// permuted order, so this is only currently relevant for files. However, it is expected that the OpenCL path
+        /// may need this functionality in the future.
+        bool isAscending() const {
+            unsigned next = 1;
+            for (unsigned i = 0; i < 4; ++i) {
+                if ((*this)[i] == 0)
+                    continue;
+                if ((*this)[i] != next++)
+                    return false;
+            }
+            return next - 1 == count;
+        }
+
         friend std::ostream& operator<<(std::ostream& os, const Component& comp) {
             if (comp.count == 0)
                 os << "Unknown";
             else {
-                for (unsigned i = 1; i < 4; ++i) {
+                for (unsigned i = 1; i <= 4; ++i) {
                     if (comp.r == i)
                         os << 'R';
                     else if (comp.g == i)

@@ -89,20 +89,26 @@ unsigned Image::Component::operator[](unsigned index) const {
 }
 
 void Image::Component::assertCompatible(const Component& other) {
-    if (count == 0) {  // unknown format is coerced to the other
-        *this = other;
+    if (count == 0) {
+        // An unknown format lets the other say which channels are present, but not the order they are stored in.
+        // SPIR-V hands image texels to and from a shader in RGBA order, so #data is kept in that order and the channels
+        // are permuted to match on the way in.
+        unsigned next = 1;
+        for (unsigned i = 0; i < 4; ++i)
+            (*this)[i] = (other[i] == 0) ? 0 : next++;
+        count = next - 1;
         return;
     }
 
-    // It is possible to copy from an image with different component order, but all active channels on one must
-    // also be active in the other (bidirectional check).
+    // It is possible to copy from an image with different component order, but all active channels on one must also be
+    // active in the other (bidirectional check).
     for (unsigned i = 0; i < 4; ++i) {
         unsigned n = other[i];
         unsigned t = (*this)[i];
         if ((n == 0) != (t == 0)) {
             std::stringstream err;
-            err << "Cannot copy image from another with an incompatible components value! Order of active ";
-            err << "channels may vary, but which channels are active must be the same. Attempt to copy ";
+            err << "Cannot copy image from another with an incompatible components value! Order of active channels ";
+            err << "may vary, but which channels are active must be the same. Attempt to copy ";
             err << other << " to " << *this;
             throw std::runtime_error(err.str());
         }
@@ -726,7 +732,9 @@ Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type
     // The size of the array returned is the number of components in each texel
     std::vector<Value*> vals(comps.count, nullptr);
 
-    // Output the channels in the same order defined by the comps
+    // SPIR-V returns a texel as an RGBA-ordered vector and #data is stored that way, so the channels come back in
+    // storage order directly.
+    assert(comps.isAscending());
     for (unsigned chan = 0; chan < comps.count; ++chan) {
         float sum = sums[chan];
         Primitive from(0u);
@@ -794,7 +802,8 @@ bool Image::write(int x, int y, int z, int layer, const Array& texel) {
 
     // TODO: write at the same location to all mipmaps
 
-    // fetch the values out of the texel presented
+    // OpImageWrite supplies an RGBA-ordered vector, matching how #data is stored, so its channels drop in by position
+    assert(comps.isAscending());
     const Type& el = type.getElement();
     assert(el.isPrimitive());
     Primitive dummy(el, false);

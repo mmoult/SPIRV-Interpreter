@@ -1,0 +1,9 @@
+Tex:
+  sampler: { lod: 0 }
+  image:
+    # the file's order fully reversed, so every channel has to move
+    ref: ""
+    dim: [ 1, 1 ]
+    mipmaps: 1
+    comps: 4321
+    data: [ 0.1, 0.2, 0.3, 0.4 ]

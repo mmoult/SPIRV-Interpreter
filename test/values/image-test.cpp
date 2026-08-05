@@ -380,6 +380,37 @@ TEST_CASE("layered image equality", "[image]") {
     }
 }
 
+// An image whose type names no format lets the input file decide which channels are present. The order the file uses is
+// its own business, but the layout behind it is not: SPIR-V works in RGBA order, so the data is permuted into that
+// order on the way in.
+TEST_CASE("component order normalization", "[image]") {
+    SECTION("a file's channel order does not become the layout") {
+        // comps 2341 puts red second and alpha first, so the data below is written A, R, G, B.
+        Image img(Type::image(&floatTexel(), ImageDim::D2, false, 0));
+        std::unique_ptr<Struct> fields(imageStruct({1, 1}, 1, 2341, {0.25, 1.0, 0.5, 0.75}));
+        img.copyFrom(*fields);
+
+        std::unique_ptr<Array> got(img.read(Image::Location {}));
+        REQUIRE(got->getSize() == 4);
+        REQUIRE(static_cast<const Primitive*>((*got)[0])->data.f == Approx(1.0));  // red, written second
+        REQUIRE(static_cast<const Primitive*>((*got)[1])->data.f == Approx(0.5));  // green
+        REQUIRE(static_cast<const Primitive*>((*got)[2])->data.f == Approx(0.75));  // blue
+        REQUIRE(static_cast<const Primitive*>((*got)[3])->data.f == Approx(0.25));  // alpha, written first
+    }
+
+    SECTION("a partial set of channels is still made ascending") {
+        // comps 2100 has only red and green, with green written first.
+        Image img(Type::image(&floatTexel(), ImageDim::D2, false, 0));
+        std::unique_ptr<Struct> fields(imageStruct({1, 1}, 1, 2100, {0.5, 0.25}));
+        img.copyFrom(*fields);
+
+        std::unique_ptr<Array> got(img.read(Image::Location {}));
+        REQUIRE(got->getSize() == 2);
+        REQUIRE(static_cast<const Primitive*>((*got)[0])->data.f == Approx(0.25));  // red, written second
+        REQUIRE(static_cast<const Primitive*>((*got)[1])->data.f == Approx(0.5));  // green, written first
+    }
+}
+
 // The layer count in "dim" is the number of array elements, so a cube map's six faces per element stay implicit.
 TEST_CASE("image serialization", "[image]") {
     SECTION("an arrayed image writes its array length") {

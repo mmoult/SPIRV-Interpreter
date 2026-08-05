@@ -1,0 +1,9 @@
+Tex:
+  sampler: { lod: 0 }
+  image:
+    # ARGB in the file: slot 1 holds alpha, and red does not come first
+    ref: ""
+    dim: [ 1, 1 ]
+    mipmaps: 1
+    comps: 2341
+    data: [ 0.25, 1.0, 0.5, 0.75 ]
