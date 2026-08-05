@@ -92,12 +92,19 @@ private:
         const Value* coords,
         unsigned img_qualifier,
         std::vector<std::pair<uint32_t, unsigned>>& defer_pairs,
+        Image::Access access,
         float lod = 0.0f,
         bool proj = false
     ) const;
 
-    [[nodiscard]] Value*
-    handleImage(DataView& data, const Value& img, const Value* coords, unsigned img_qualifier, bool proj = false) const;
+    [[nodiscard]] Value* handleImage(
+        DataView& data,
+        const Value& img,
+        const Value* coords,
+        unsigned img_qualifier,
+        Image::Access access,
+        bool proj = false
+    ) const;
 
 public:
     Instruction(spv::Op opcode, bool has_result, bool has_result_type)

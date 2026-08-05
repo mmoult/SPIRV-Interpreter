@@ -276,7 +276,8 @@ bool Instruction::execute(
             throw std::runtime_error("Unimplemented ImageWrite variant!");
         }
 
-        const Image::Location loc = Image::extractCoords(getValue(1, data), image.getType(), false);
+        const Image::Location loc =
+            Image::extractCoords(getValue(1, data), image.getType(), Image::Access::DIRECT, false);
         // We only support int coordinates currently
         auto get = [](float x) {
             if ((1.0 - (std::ceil(x) - x)) != 1.0)

@@ -130,10 +130,11 @@ Image::Location Instruction::calcImageLocation(
     const Value* coords,
     unsigned img_qualifier,
     std::vector<std::pair<uint32_t, unsigned>>& defer_pairs,
+    Image::Access access,
     float lod,
     bool proj
 ) const {
-    Image::Location loc = Image::extractCoords(coords, image->getType(), proj);
+    Image::Location loc = Image::extractCoords(coords, image->getType(), access, proj);
     loc.lod = lod;
     if (proj) {
         if (loc.q == 0.0)
@@ -239,6 +240,7 @@ Value* Instruction::handleImage(
     const Value& img,
     const Value* coords,
     unsigned img_qualifier,
+    Image::Access access,
     bool proj
 ) const {
     Type* res_type = getType(0, data);
@@ -253,7 +255,8 @@ Value* Instruction::handleImage(
         image = static_cast<const Image*>(&img);
     }
     std::vector<std::pair<uint32_t, unsigned>> defer_pairs;
-    const Image::Location loc = calcImageLocation(data, image, coords, img_qualifier, defer_pairs, lod_init, proj);
+    const Image::Location loc =
+        calcImageLocation(data, image, coords, img_qualifier, defer_pairs, access, lod_init, proj);
     assert(defer_pairs.empty());
 
     const Array& arr = *image->read(loc);
@@ -1425,7 +1428,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             throw std::runtime_error("The third operand to OpImageSample* must be an sampler!");
 
         bool proj = (opcode == spv::OpImageSampleProjImplicitLod) || (opcode == spv::OpImageSampleProjExplicitLod);
-        Value* to_ret = handleImage(data, *sampled_v, getValue(src_at + 1, data), 4, proj);
+        Value* to_ret = handleImage(data, *sampled_v, getValue(src_at + 1, data), 4, Image::Access::SAMPLED, proj);
         data[result_at].redefine(to_ret);
         break;
     }
@@ -1436,7 +1439,9 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to OpImage* must be an image!");
 
-        Value* to_ret = handleImage(data, *image_v, getValue(src_at + 1, data), 4);
+        // OpImageFetch and OpImageRead address texels rather than filtering between them, which is what tells a
+        // cube map that its coordinate names a face instead of pointing in a direction.
+        Value* to_ret = handleImage(data, *image_v, getValue(src_at + 1, data), 4, Image::Access::DIRECT);
         data[result_at].redefine(to_ret);
         break;
     }
@@ -1448,8 +1453,15 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         Value& component = *getValue(src_at + 2, data);
 
         std::vector<std::pair<uint32_t, unsigned>> defer_pairs;
-        const Image::Location loc =
-            Instruction::calcImageLocation(data, &image, coords, src_at + 3, defer_pairs, sampler.getImplicitLod());
+        const Image::Location loc = Instruction::calcImageLocation(
+            data,
+            &image,
+            coords,
+            src_at + 3,
+            defer_pairs,
+            Image::Access::SAMPLED,
+            sampler.getImplicitLod()
+        );
         // TODO: f* should be ignored, but C++ doesn't have placeholder (_) until C++26.
         auto [ux, fx] = Image::decompose(loc.x);
         auto [uy, fy] = Image::decompose(loc.y);

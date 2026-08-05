@@ -175,6 +175,14 @@ class Image final : public Value {
     unsigned layerIndex(float layer) const;
 
 public:
+    /// @brief How an operation reaches the texels: by addressing them, or by sampling with a filter.
+    /// This distinction only matters for a cube map, the one dimensionality whose coordinate means different things to
+    /// the two. OpImageSample* and OpImageGather sample; OpImageRead, OpImageWrite, and OpImageFetch are direct.
+    enum class Access {
+        SAMPLED,
+        DIRECT,
+    };
+
     /// @brief Where in an image an operation reads or writes, as its coordinate and qualifier operands describe it.
     /// Which members the coordinate actually supplies depends on the image type, in the order they appear here; see
     /// Type::getCoordCount(). Whatever the level of detail says, the spatial coordinates are always in the scale of
@@ -183,14 +191,42 @@ public:
         float x = 0.0;
         float y = 0.0;
         float z = 0.0;
-        /// @brief The array element to read from, used only for an arrayed image.
+        /// @brief Which layer to reach, present only for an arrayed image or a cube map addressed directly.
+        /// What it counts follows #access: a sampled access gives an array element, to which a selected cube face is
+        /// added, while a direct access gives a whole layer with any face already folded in.
         float layer = 0.0;
         /// @brief The projective divisor, used only for the Proj variants, after every other component.
         /// Instruction::calcImageLocation consumes it: x, y, and z are divided through before the Image sees them.
         float q = 0.0;
         /// @brief The mipmap level of detail, which comes from the instruction's qualifiers, not the coordinate.
         float lod = 0.0;
+        /// @brief How to read the members above, which a cube map's coordinate needs in order to be unambiguous.
+        /// Sampling a cube map puts a direction vector from the cube's center in x, y, and z; addressing one directly
+        /// puts a position in x and y and the face in layer. Nothing distinguishes the two from the values alone,
+        /// since (1, 0, 0) is a legitimate direction. For every other dimensionality the two agree.
+        Access access = Access::SAMPLED;
     };
+
+    /// @brief The face of a cube map that a direction vector names, and where on that face it lands.
+    struct CubeFace {
+        /// @brief Index of the face, in the layer order +X, -X, +Y, -Y, +Z, -Z.
+        /// SPIR-V does not define this order. OpTypeImage says only that the dimensionality is Cube, and leaves how
+        /// the layers are laid out to the client API, so the order comes from the same Vulkan table cited below on
+        /// selectCubeFace. OpenGL's cube map targets and D3D agree with it.
+        unsigned face = 0;
+        float s = 0.0;  ///< how far across the face, from 0 at its left edge to 1 at its right
+        float t = 0.0;  ///< how far down the face, from 0 at its top edge to 1 at its bottom
+    };
+
+    /// @brief Selects which face of a cube map a direction names, and projects the direction onto that face.
+    /// The component of largest magnitude is the major axis; its sign picks one of the six faces, and the other two
+    /// components divided by it give a position on that face. The table "Cube Map Face and Coordinate Selection" in
+    /// docs.vulkan.org/spec/latest/chapters/textures.html is the per-face assignment reproduced here.
+    ///
+    /// A direction whose largest components tie is not resolved by the specification, so this prefers x, then y, for
+    /// the sake of being deterministic. A direction of all zeros names no face at all, and reports the middle of
+    /// whichever face the tie-breaking landed on.
+    static CubeFace selectCubeFace(float rx, float ry, float rz);
 
     // mipmaps defaults to the documented minimum of 1, and layers to the one every image has. copyFrom(const Struct&)
     // overwrites both, but toStruct() and the LOD clamp in read() can each run on an Image that Type::construct() only
@@ -250,8 +286,9 @@ public:
     /// @brief Splits an operation's coordinate operand into the roles its components play.
     /// @param coords_v the coordinate operand, either a scalar or an array of them
     /// @param img_type the type of the image being accessed, which decides how many components mean what
+    /// @param access how the operation reaches the texels, which a cube map's coordinate depends on
     /// @param proj whether the instruction is a Proj variant, which appends a divisor after everything else
-    static Location extractCoords(const Value* coords_v, const Type& img_type, bool proj);
+    static Location extractCoords(const Value* coords_v, const Type& img_type, Access access, bool proj);
 
     /// @brief Gets the (interpolated) pixel value at the given location.
     [[nodiscard]] Array* read(const Location& loc) const;

@@ -162,6 +162,57 @@ unsigned Image::layerIndex(float layer) const {
     return index * (layers / length);
 }
 
+Image::CubeFace Image::selectCubeFace(float rx, float ry, float rz) {
+    const float ax = std::fabs(rx);
+    const float ay = std::fabs(ry);
+    const float az = std::fabs(rz);
+
+    // The major axis picks the face. The two remaining components, once divided by it, are the position on that face,
+    // and which of them runs across and which runs down differs per face: the faces are oriented so that the cube is
+    // seen from the outside, which flips or swaps axes depending on the face.
+    unsigned face = 0;
+    float ma = 0.0;
+    float sc = 0.0;
+    float tc = 0.0;
+    if (ax >= ay && ax >= az) {
+        ma = ax;
+        tc = -ry;
+        if (rx >= 0.0) {
+            face = 0;  // +X
+            sc = -rz;
+        } else {
+            face = 1;  // -X
+            sc = rz;
+        }
+    } else if (ay >= az) {
+        ma = ay;
+        sc = rx;
+        if (ry >= 0.0) {
+            face = 2;  // +Y
+            tc = rz;
+        } else {
+            face = 3;  // -Y
+            tc = -rz;
+        }
+    } else {
+        ma = az;
+        tc = -ry;
+        if (rz >= 0.0) {
+            face = 4;  // +Z
+            sc = rx;
+        } else {
+            face = 5;  // -Z
+            sc = -rx;
+        }
+    }
+
+    if (ma == 0.0)
+        return {face, 0.5, 0.5};  // a direction of no length points at nothing; the middle of a face is as good as any
+
+    // sc/ma and tc/ma each span [-1, 1] across the face, which is remapped to the [0, 1] the face is measured in.
+    return {face, 0.5f * (sc / ma + 1.0f), 0.5f * (tc / ma + 1.0f)};
+}
+
 std::tuple<unsigned, float> Image::decompose(float val) {
     // TODO this needs to be refactored since pixel centers are at 0.5. Also, bounds conditions defined by the sampler.
     float base;
@@ -455,7 +506,7 @@ Struct* Image::toStruct() const {
     return new Struct(elements, names);
 }
 
-Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type, bool proj) {
+Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type, Access access, bool proj) {
     const Type* coord_type = &coords_v->getType();
     bool aggregate = false;
     if (coord_type->getBase() == DataType::ARRAY) {
@@ -474,24 +525,29 @@ Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type
         return prim.data.f;
     };
 
-    // The components come in a fixed order: every spatial one, then the array element, then the projective divisor.
-    // Only the spatial ones are always present.
-    // TODO A cube map's integer accesses (OpImageRead, OpImageWrite, OpImageFetch) name a face where a third spatial
-    // axis would go instead of carrying a direction vector, so their face lands in z rather than in layer. Face
-    // selection for the sampling path is not implemented either; both belong with cube map support.
+    // The components come in a fixed order: every spatial one, then the layer, then the projective divisor. Only the
+    // spatial ones are always present.
     const bool arrayed = img_type.isArrayed();
-    const unsigned spatial = img_type.getCoordCount() - (arrayed ? 1 : 0);
+    // A cube map is the one dimensionality whose coordinate depends on how the image is reached. Sampling supplies a
+    // direction vector from the center of the cube, so all three components are spatial and the face is derived from
+    // them. Addressing it directly instead names the face, leaving a flat position behind, which is the same shape any
+    // other layered image takes. So a direct cube access always has a layer component, arrayed or not, and that layer
+    // already counts faces.
+    const bool direct_cube = (img_type.getImageDim() == ImageDim::CUBE) && access == Access::DIRECT;
+    const unsigned spatial = direct_cube ? img_type.getSpatialDims() : (img_type.getCoordCount() - (arrayed ? 1 : 0));
+    const bool has_layer = arrayed || direct_cube;
 
     Location loc;
+    loc.access = access;
     if (!aggregate) {
         // A lone spatial axis with no layer and no divisor is the only case that fits in a scalar
-        assert(spatial == 1 && !arrayed && !proj);
+        assert(spatial == 1 && !has_layer && !proj);
         loc.x = get(coords_v, base);
         return loc;
     }
 
     const auto& coords = static_cast<const Array&>(*coords_v);
-    assert(coords.getSize() >= spatial + (arrayed ? 1u : 0u) + (proj ? 1u : 0u));
+    assert(coords.getSize() >= spatial + (has_layer ? 1u : 0u) + (proj ? 1u : 0u));
     loc.x = get(coords[0], base);
     if (spatial >= 2) {
         loc.y = get(coords[1], base);
@@ -499,7 +555,7 @@ Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type
             loc.z = get(coords[2], base);
     }
     unsigned next = spatial;
-    if (arrayed)
+    if (has_layer)
         loc.layer = get(coords[next++], base);
     if (proj)
         loc.q = get(coords[next], base);
@@ -507,16 +563,43 @@ Image::Location Image::extractCoords(const Value* coords_v, const Type& img_type
 }
 
 [[nodiscard]] Array* Image::read(const Location& loc) const {
-    const float x = loc.x;
-    const float y = loc.y;
-    const float z = loc.z;
+    float x = loc.x;
+    float y = loc.y;
+    float z = loc.z;
     const float lod = loc.lod;
+
+    // The layer is selected, not interpolated, so it only decides where this read begins.
+    unsigned layer;
+    if (loc.access == Access::DIRECT) {
+        // A direct access names a whole layer, faces and all. Naming one that does not exist is out of bounds, the
+        // same as any other coordinate past its extent, rather than something to clamp.
+        const float rounded = std::nearbyint(loc.layer);
+        if (rounded < 0.0 || rounded >= static_cast<float>(layers))
+            return outOfBoundsAccess();
+        layer = static_cast<unsigned>(rounded);
+    } else {
+        // A sampled access gives an array element, which layerIndex clamps as a sampled access is specified to.
+        layer = layerIndex(loc.layer);
+        if (type.getImageDim() == ImageDim::CUBE) {
+            // The coordinate is a direction from the center of the cube rather than a position on a face, so it has to
+            // pick a face first. Faces are layers, consecutive within an array element, so the face joins the layer
+            // instead of becoming a third coordinate.
+            const CubeFace at = selectCubeFace(x, y, z);
+            layer += at.face;
+            // TODO The face position is mapped onto the interpreter's coordinates, which run from the center of the
+            // first texel to the center of the last. Vulkan instead puts s == 0 half a texel outside the first center,
+            // which is what lets filtering at a face's edge reach the neighboring face. Adopting that needs those
+            // cross-face fetches to exist first, so until then the outermost half texel is not blended across a seam.
+            x = at.s * static_cast<float>(std::max(xx, 1u) - 1);
+            y = at.t * static_cast<float>(std::max(yy, 1u) - 1);
+            z = 0.0;
+        }
+    }
+
     if (x < 0 || y < 0 || z < 0 || lod < 0)
         return outOfBoundsAccess();
 
-    // The layer is selected, not interpolated, so it only decides where this read begins. It needs no bounds check of
-    // its own: layerIndex clamps, which is what a sampled array access is specified to do.
-    const unsigned layer_base = layerIndex(loc.layer) * layerStride();
+    const unsigned layer_base = layer * layerStride();
 
     // coordinates are given in the scale of lod=0, regardless of the actual lod to use
     auto [lBase, lRatio] = decompose(lod);
