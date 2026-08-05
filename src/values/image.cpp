@@ -121,6 +121,23 @@ void Image::Component::assertCompatible(const Component& other) {
     return new Array(vals);
 }
 
+unsigned Image::mipDivisor(unsigned lod) {
+    assert(lod < 32);
+    return 1u << lod;
+}
+
+unsigned Image::texelsAt(unsigned lod) const {
+    const unsigned div = mipDivisor(lod);
+    return std::max(xx / div, 1u) * std::max(yy / div, 1u) * std::max(zz / div, 1u);
+}
+
+unsigned Image::lodOffset(unsigned lod) const {
+    unsigned total = 0;
+    for (unsigned i = 0; i < lod; ++i)
+        total += comps.count * texelsAt(i);
+    return total;
+}
+
 std::tuple<unsigned, float> Image::decompose(float val) {
     // TODO this needs to be refactored since pixel centers are at 0.5. Also, bounds conditions defined by the sampler.
     float base;
@@ -154,11 +171,8 @@ bool Image::equals(const Value& val) const {
     // In theory, the data of all mipmaps should be synchronized. Therefore, we can compare only the mipmaps with
     // most data (mipmap 0)
 
-    // Unused dimensions stay 0 (yy is only set for 2D and up, zz only for 3D), so they must be clamped to 1 or the
-    // extent comes out as 0 and the loop below never runs. Mipmap 0 holds comps.count entries per texel, matching the
-    // layout used by read()/write().
-    const unsigned texels = std::max(xx, 1u) * std::max(yy, 1u) * std::max(zz, 1u);
-    const unsigned mip0 = texels * comps.count;
+    // Mipmap 0 holds comps.count entries per texel, matching the layout used by read()/write().
+    const unsigned mip0 = texelsAt(0) * comps.count;
     const unsigned limit = std::min(mip0, static_cast<unsigned>(data.size()));
 
     const Type& subelement = type.getElement();
@@ -262,6 +276,17 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
     mipmaps = Statics::extractUint(other[2], names[2]);
     if (mipmaps == 0)
         throw std::runtime_error("The image field \"mipmaps\" is an must have an integer value greater than 0!");
+    // A chain halves the largest axis each level, bottoming out at 1 after floor(log2(maxdim)) + 1 levels, which is
+    // what std::bit_width returns. More than that would name levels no image this size can have, and would break
+    // mipDivisor's precondition that a level index fits the shift, so reject it here rather than accept a bad count.
+    const unsigned max_extent = std::max({xx, yy, zz, 1u});
+    const unsigned max_mipmaps = std::bit_width(max_extent);
+    if (mipmaps > max_mipmaps) {
+        std::stringstream err;
+        err << "The image field \"mipmaps\" is " << mipmaps << ", but an image whose largest dimension is "
+            << max_extent << " can have at most " << max_mipmaps << " mipmap level(s)!";
+        throw std::runtime_error(err.str());
+    }
 
     // comps: <uint>
     const Value& comps_v = *other[3];
@@ -301,14 +326,7 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
             throw std::runtime_error("The image field \"data\" must have elements of type: uint, int, or float!");
         unsigned size = data_a.getSize();
         // Verify that the data matches expected from the given dimensions
-        unsigned total = 0;
-        for (unsigned i = 0; i < mipmaps; ++i) {
-            unsigned div = std::max(2 * i, 1u);
-            unsigned xxx = std::max(xx / div, 1u);
-            unsigned yyy = std::max(yy / div, 1u);
-            unsigned zzz = std::max(zz / div, 1u);
-            total += comps.count * xxx * yyy * zzz;
-        }
+        unsigned total = lodOffset(mipmaps);
         if (total != size) {
             std::stringstream err;
             err << "The amount of data provided for the image does not match the dimensions given! Dimensions were ";
@@ -452,7 +470,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
             return decompose(coord);
 
         // we divide each dimension by 2 times the lod. For example, 0 is full size, 1 is half-size, etc
-        unsigned divide = lod * 2;
+        unsigned divide = mipDivisor(lod);
         unsigned trunc = std::max(size / divide, 1u);
         // The integral division truncates, which means the actual divisor may exceed divide
         float actual_div = float(size) / float(trunc);
@@ -489,7 +507,6 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
 
     // Perform interpolation for all affected values. A single texel cannot have more than 4 components.
     float sums[] = {0.0, 0.0, 0.0, 0.0};
-    unsigned lod_offs = 0;  // the first index where data of this lod is stored
     for (unsigned which_lod = 0; which_lod < 2; ++which_lod) {
         unsigned use_lod = lBase + which_lod;
         float lod_weight = (which_lod == 0) ? (1.0 - lRatio) : lRatio;
@@ -505,20 +522,10 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
         // Determine the "anchor", which is the data index which points to (bx, by, bz) for this lod.
         // We add some factor to the anchor to calculate the location of the alternate texel (ie, `b + 1`), for each
         // coordinate with nonzero ratio.
-
-        // To get the anchor, we must first determine where the data for this lod starts. For the second iteration
-        // of the for loop, we can use the data calculated from the previous iteration
-        unsigned xxx = std::max(xx, 1u);
-        unsigned yyy = std::max(yy, 1u);
-        unsigned zzz = std::max(zz, 1u);
-        for (unsigned lod_start = (which_lod == 0) ? 1 : use_lod; lod_start <= use_lod; ++lod_start) {
-            lod_offs += comps.count * xxx * yyy * zzz;
-            unsigned div = std::max(2 * lod_start, 1u);
-            xxx = std::max(xx / div, 1u);
-            yyy = std::max(yy / div, 1u);
-            zzz = std::max(zz / div, 1u);
-        }
-        unsigned anchor = lod_offs;
+        const unsigned div = mipDivisor(use_lod);
+        const unsigned xxx = std::max(xx / div, 1u);
+        const unsigned yyy = std::max(yy / div, 1u);
+        unsigned anchor = lodOffset(use_lod);
 
         unsigned factor = comps.count;
         if (rx > 0.0)
@@ -592,7 +599,7 @@ std::tuple<float, float, float, float> Image::extractCoords(const Value* coords_
 
 std::array<unsigned, 4> Image::getSize(uint32_t lod) const {
     // we divide each dimension by 2 times the lod. For example, 0 is full size, 1 is half-size, etc
-    unsigned divide = std::max(lod * 2, 1u);
+    unsigned divide = mipDivisor(lod);
     auto trunc = [divide](unsigned size) { return std::max(size / divide, 1u); };
     return {trunc(xx), trunc(yy), trunc(zz), 1u};
 }

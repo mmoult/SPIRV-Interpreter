@@ -131,6 +131,18 @@ class Image final : public Value {
     /// This value is vendor-specific, ie, not defined by the spec. All zeros is common in practice.
     [[nodiscard]] Array* outOfBoundsAccess() const;
 
+    /// @brief The factor each spatial axis is divided by at the given mipmap level.
+    /// Level n is half the size of level n-1, and level n is twice the size of level n+1.
+    static unsigned mipDivisor(unsigned lod);
+
+    /// @brief How many texels the given mipmap level holds.
+    unsigned texelsAt(unsigned lod) const;
+
+    /// @brief The index, within one mipmap chain, of the first element of the given level.
+    /// Levels are stored in order of decreasing detail, so a level begins after every level before it. Passing
+    /// #mipmaps therefore yields the size of the entire chain.
+    unsigned lodOffset(unsigned lod) const;
+
 public:
     // mipmaps defaults to the documented minimum of 1. copyFrom(const Struct&) overwrites it, but toStruct() and the
     // LOD clamp in read() can both run on an Image that Type::construct() only default-constructed.
