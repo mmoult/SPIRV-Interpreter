@@ -133,7 +133,7 @@ std::array<float, 4> Instruction::calcImageLocation(
     float lod,
     bool proj
 ) const {
-    auto [x, y, z, q] = Image::extractCoords(coords, image->getDimensionality(), proj);
+    auto [x, y, z, q] = Image::extractCoords(coords, image->getCoordCount(), proj);
     if (proj) {
         if (q == 0.0)
             throw std::runtime_error("Invalid projection value (0.0) in image access!");
@@ -820,7 +820,53 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         break;
     }
     case spv::OpTypeImage: {  // 25
+        // OpTypeImage (with example operands) is defined as:
+        // [0] %image = result image type
+        // [1] %float = texel type
+        // [2] 2D = Dimension
+        // [3] 0 = Depth
+        // [4] 1 = Arrayed
+        // [5] 0 = MS
+        // [6] 1 = Sampled
+        // [7] Unknown = Image Format
+
         Type* texel_type = getType(1, data);
+
+        assert(operands[2].type == Token::Type::CONST);
+        ImageDim dim;
+        switch (static_cast<spv::Dim>(std::get<unsigned>(operands[2].raw))) {
+        case spv::Dim1D:
+            dim = ImageDim::D1;
+            break;
+        case spv::Dim2D:
+            dim = ImageDim::D2;
+            break;
+        case spv::Dim3D:
+            dim = ImageDim::D3;
+            break;
+        case spv::DimCube:
+            dim = ImageDim::CUBE;
+            break;
+        case spv::DimRect:
+            dim = ImageDim::RECT;
+            break;
+        case spv::DimBuffer:
+            dim = ImageDim::BUFFER;
+            break;
+        case spv::DimSubpassData:
+            dim = ImageDim::SUBPASS_DATA;
+            break;
+        default:
+            throw std::runtime_error("Cannot handle unsupported dimension!");
+        }
+
+        // [3] Depth ignored...
+
+        assert(operands[4].type == Token::Type::UINT);
+        const bool arrayed = std::get<unsigned>(operands[4].raw) != 0;
+
+        // [5] MS ignored...
+        // [6] Sampled ignored...
 
         assert(operands[7].type == Token::Type::CONST);
         unsigned comps = 0;
@@ -881,25 +927,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             throw std::runtime_error("Cannot handle unsupported image format!");
         }
 
-        assert(operands[2].type == Token::Type::CONST);
-        unsigned dim = 0;
-        switch (static_cast<spv::Dim>(std::get<unsigned>(operands[2].raw))) {
-        case spv::Dim1D:
-        case spv::DimBuffer:
-            dim = 1;
-            break;
-        case spv::Dim2D:
-        case spv::DimRect:
-            dim = 2;
-            break;
-        case spv::Dim3D:
-        case spv::DimCube:
-            dim = 3;
-            break;
-        default:
-            throw std::runtime_error("Cannot handle unsupported dimension!");
-        }
-        data[result_at].redefine(new Type(Type::image(texel_type, dim, comps)));
+        data[result_at].redefine(new Type(Type::image(texel_type, dim, arrayed, comps)));
         break;
     }
     case spv::OpTypeSampler: {  // 26

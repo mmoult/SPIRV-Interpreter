@@ -276,7 +276,7 @@ bool Instruction::execute(
             throw std::runtime_error("Unimplemented ImageWrite variant!");
         }
 
-        auto [x, y, z, q] = Image::extractCoords(getValue(1, data), image.getDimensionality(), false);
+        auto [x, y, z, q] = Image::extractCoords(getValue(1, data), image.getCoordCount(), false);
         // We only support int coordinates currently
         auto get = [](float x) {
             if ((1.0 - (std::ceil(x) - x)) != 1.0)

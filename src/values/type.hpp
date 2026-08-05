@@ -69,12 +69,27 @@ inline std::ostream& operator<<(std::ostream& os, const DataType& type) {
     return os;
 }
 
+/// @brief The dimensionality of an image, mirroring SPIR-V's Dim operand.
+/// Values are deliberately independent of SPIR-V headers. Users are responsible for mapping between enums.
+enum class ImageDim : unsigned {
+    D1 = 0,
+    D2,
+    D3,
+    CUBE,
+    RECT,
+    BUFFER,
+    SUBPASS_DATA,
+};
+
 /// @brief Image type fields packed into subsize
 /// The bit order is implementation-defined, but not relied upon. Unused guarantees the bit sum matches 32 bits for
 /// easy conversion.
 struct ImageFields {
-    /// The number of dimensions. Ie a 1D image = 1, 2D = 2, 3D = 3. Max is 3.
+    /// The image's dimensionality, held as an ImageDim. Three bits hold all seven values.
     unsigned dim : 3;
+    /// SPIR-V's Arrayed operand: whether the image is a stack of independent layers. Orthogonal to dim, because layers
+    /// are addressed by index, never interpolated between, and never shrink with the mipmap level.
+    unsigned arrayed : 1;
     /// Describes the presence and order of RGBA components. Each digit defines the order, starting from 1 (0 indicates
     /// the component is unused). For example:
     /// - 1234: all channels of RGBA are included and given in that order
@@ -82,7 +97,7 @@ struct ImageFields {
     /// - 2341: all components active in ARGB order
     /// The largest valid value is therefore 4321, which takes 13 bits.
     unsigned comps : 13;
-    unsigned unused : 16;
+    unsigned unused : 15;
 };
 // Guarantees there are no undefined padding bits in the byte match
 static_assert(std::has_unique_object_representations_v<ImageFields>, "ImageFields width must sum to exactly 32");
@@ -206,13 +221,20 @@ public:
 
     /// @brief Creates an image type
     /// @param texel_type the base type of the image. Should be a numeric scalar or void
-    /// @param dim the number of dimensions.
+    /// @param dim the dimensionality
+    /// @param arrayed whether the image is a stack of independent layers
     /// @param comps integer defining the use and order of RGBA components.
     /// @return the created image type
-    static inline Type image(const Type* texel_type, unsigned dim, unsigned comps) {
-        assert(dim <= 3);  // a 3D image is the largest
+    static inline Type image(const Type* texel_type, ImageDim dim, bool arrayed, unsigned comps) {
         assert(comps <= 4321);  // the largest meaningful component order
-        const ImageFields fields {.dim = dim, .comps = comps, .unused = 0};
+        // Vulkan forbids arraying a 3D image: that would be a 4D texture, which does not exist.
+        assert(!(arrayed && dim == ImageDim::D3));
+        const ImageFields fields {
+            .dim = static_cast<unsigned>(dim),
+            .arrayed = arrayed ? 1u : 0u,
+            .comps = comps,
+            .unused = 0,
+        };
         // bit_cast statically verifies conversion matches the number of bytes
         return Type(DataType::IMAGE, std::bit_cast<decltype(Type::subSize)>(fields), texel_type);
     }
@@ -250,9 +272,47 @@ public:
         return subSize;
     }
 
-    inline unsigned getDim() const {
+    inline ImageDim getImageDim() const {
         assert(base == DataType::IMAGE);
-        return std::bit_cast<ImageFields>(subSize).dim;
+        return static_cast<ImageDim>(std::bit_cast<ImageFields>(subSize).dim);
+    }
+
+    inline bool isArrayed() const {
+        assert(base == DataType::IMAGE);
+        return std::bit_cast<ImageFields>(subSize).arrayed != 0;
+    }
+
+    /// @brief How many axes the texel data extends along, NOT counting layers.
+    /// A cube map counts as two: each of its six faces is a square, and the faces are layers rather than a third axis.
+    inline unsigned getSpatialDims() const {
+        switch (getImageDim()) {
+        case ImageDim::D1:
+        case ImageDim::BUFFER:
+            return 1;
+        case ImageDim::D2:
+        case ImageDim::RECT:
+        case ImageDim::SUBPASS_DATA:
+        case ImageDim::CUBE:
+            return 2;
+        case ImageDim::D3:
+            return 3;
+        }
+        assert(false && "unhandled ImageDim!");
+        return 1;
+    }
+
+    /// @brief Whether the texel data is divided into layers, which are addressed by index rather than interpolated.
+    /// True for any arrayed image, and for every cube map, since a cube map's six faces are layers.
+    inline bool hasLayers() const {
+        return isArrayed() || getImageDim() == ImageDim::CUBE;
+    }
+
+    /// @brief How many components a coordinate operand carries for a sampling operation.
+    /// A cube map takes three, but they are a direction vector rather than a position: the largest of the three
+    /// selects a face and the other two are projected onto it.
+    inline unsigned getCoordCount() const {
+        const unsigned spatial = (getImageDim() == ImageDim::CUBE) ? 3 : getSpatialDims();
+        return spatial + (isArrayed() ? 1 : 0);
     }
 
     inline unsigned getComps() const {

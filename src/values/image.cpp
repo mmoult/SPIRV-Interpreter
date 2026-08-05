@@ -189,7 +189,7 @@ void Image::copyFrom(const Struct& str) noexcept(false) {
     reference = static_cast<const String*>(ref)->get();
 
     // dim: uvec1, uvec2, or uvec3
-    unsigned dim_size = this->type.getDim();
+    unsigned dim_size = this->type.getSpatialDims();
     if (dim_size < 1 || dim_size > 3)
         throw std::runtime_error("Invalid number of dimensions in image struct! Must be between 1 and 3, inclusive.");
     std::vector<uint64_t> dims = Statics::extractUvec(other[1], names[1], dim_size);
@@ -365,7 +365,7 @@ Struct* Image::toStruct() const {
     elements.reserve(names.size());
     elements.push_back(new String(reference));
     std::vector<Value*> dims;
-    unsigned num_dims = type.getDim();
+    unsigned num_dims = type.getSpatialDims();
     dims.reserve(num_dims);
     dims.push_back(new Primitive(xx));
     if (num_dims > 1) {

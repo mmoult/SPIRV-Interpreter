@@ -160,17 +160,20 @@ public:
     //   - <...>
     Struct* toStruct() const;
 
-    unsigned getDimensionality() const {
-        return type.getDim();
+    /// @brief How many components are expected for a coordinate targeting a single texel in this image. This is NOT
+    /// necessarily the number of storage axes. For example, A cube map reports three (a direction vector) over two
+    /// spatial axes, and an arrayed image reports one more than its non-arrayed equivalent.
+    unsigned getCoordCount() const {
+        return type.getCoordCount();
     }
 
     /// @brief Get the size of the image at the given LOD level
     /// @param lod the level of detail to query. 0 is the most detailed level
-    /// @return a tuple of four floats: width, height, depth, and number of array elements.
+    /// @return a tuple of four uints: width, height, depth, and number of array elements.
     ///
-    /// Note, some images are of a dimensionality which don't specify some of the return floats. For all missing
-    /// component(s), an undefined returned and the output is expected to be truncated in dimension to match with
-    /// #getDimensionality().
+    /// Note, some images are of a dimensionality which don't have meaningful values for some of the return channels.
+    /// However, all return values must be at least 1, so the caller is responsible for using #getSpatialDims() to
+    /// determine which should be used.
     std::array<unsigned, 4> getSize(uint32_t lod = 0) const;
 
     static std::tuple<float, float, float, float> extractCoords(const Value* coords_v, unsigned dim, bool proj);
