@@ -1,0 +1,9 @@
+#version 450
+// Writing into one layer of a 2D array. The image is deliberately not square, so that transposing the row stride
+// against the column stride changes which texel is hit.
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0, rgba32f) uniform image2DArray Img;
+
+void main() {
+    imageStore(Img, ivec3(3, 1, 1), vec4(7.0, 8.0, 9.0, 1.0));
+}

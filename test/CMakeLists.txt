@@ -18,6 +18,7 @@ target_sources(tests
     util/string-test.cpp
     util/trie-test.cpp
     values/aggregate-test.cpp
+    values/image-test.cpp
     values/primitive-test.cpp
 )
 
