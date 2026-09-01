@@ -408,6 +408,7 @@ Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vecto
     case spv::OpAtomicIIncrement:  // 232
     case spv::OpAtomicIDecrement:  // 233
     case spv::OpGroupNonUniformQuadSwap:  // 366
+    case spv::OpFmaKHR:  // 4427
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);

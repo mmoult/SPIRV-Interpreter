@@ -2277,6 +2277,13 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(new Primitive(result));
         break;
     }
+    case spv::OpFmaKHR: {  // 4427
+        TernOp fx = [](const Primitive* a, const Primitive* b, const Primitive* c) {
+            return (a->data.f * b->data.f) + c->data.f;
+        };
+        E_TERN_OP(FLOAT, fx);
+        break;
+    }
     case spv::OpConvertUToAccelerationStructureKHR: {  // 4447
         assert(hasResultType);
         // TODO: needs the get an acceleration structure from a buffer via a 64-bit address. How to do this?
