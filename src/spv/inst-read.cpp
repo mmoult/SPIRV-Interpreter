@@ -295,7 +295,6 @@ Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vecto
     case spv::OpPtrEqual:  // 401
     case spv::OpPtrNotEqual:  // 402
     case spv::OpExecuteCallableKHR:  // 4446
-    case spv::OpSDot:  // 4450
     case spv::OpRayQueryGenerateIntersectionKHR:  // 4475
     case spv::OpRayQueryGetIntersectionTypeKHR:  // 4479
     case spv::OpReportIntersectionKHR:  // 5334
@@ -313,6 +312,21 @@ Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vecto
     case spv::OpRayQueryGetIntersectionWorldToObjectKHR:  // 6032
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);
+        break;
+    case spv::OpSDot:  // 4450
+    case spv::OpUDot:  // 4451
+    case spv::OpSUDot:  // 4452
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        optional.push_back(Type::UINT);
+        break;
+    case spv::OpSDotAccSat:  // 4453
+    case spv::OpUDotAccSat:  // 4454
+    case spv::OpSUDotAccSat:  // 4455
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        to_load.push_back(Type::REF);
+        optional.push_back(Type::UINT);
         break;
     case spv::OpTypeStruct:  // 30
                              // "It is valid for the structure to have no members."

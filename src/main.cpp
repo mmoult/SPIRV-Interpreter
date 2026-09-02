@@ -26,7 +26,7 @@ constexpr auto VERSION = "0.10.0";
 
 enum ReturnCode : int {
     OK = 0,
-    INFO = 1,
+    INFO = 0,
     BAD_ARGS = 2,
     BAD_FILE = 3,
     BAD_PARSE = 4,

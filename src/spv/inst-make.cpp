@@ -2336,6 +2336,132 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         data[result_at].redefine(ret);
         break;
     }
+    case spv::OpUDot: {  // 4451
+        const auto& op0 = static_cast<const Array&>(*getValue(src_at, data));
+        const auto& op1 = static_cast<const Array&>(*getValue(src_at + 1, data));
+        assert(op0.getType().getBase() == DataType::ARRAY && "The first operand to OpUDot must be an array!");
+        assert(op1.getType().getBase() == DataType::ARRAY && "The second operand to OpUDot must be an array!");
+        assert(op0.getSize() == op1.getSize() && "The operands to OpUDot must have matching sizes!");
+
+        uint32_t dot_product = 0;
+        for (unsigned i = 0; i < op0.getSize(); ++i) {
+            const uint32_t second_elem = static_cast<const Primitive*>(op1[i])->data.u;
+            const uint32_t this_elem = static_cast<const Primitive*>(op0[i])->data.u;
+            dot_product += second_elem * this_elem;
+        }
+        Primitive tot_prim(dot_product);
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
+        break;
+    }
+    case spv::OpSUDot: {  // 4452
+        const auto& op0 = static_cast<const Array&>(*getValue(src_at, data));  // unsigned vector
+        const auto& op1 = static_cast<const Array&>(*getValue(src_at + 1, data));  // signed vector
+        assert(op0.getType().getBase() == DataType::ARRAY && "The first operand to OpSUDot must be an array!");
+        assert(op1.getType().getBase() == DataType::ARRAY && "The second operand to OpSUDot must be an array!");
+        assert(op0.getSize() == op1.getSize() && "The operands to OpSUDot must have matching sizes!");
+
+        int32_t dot_product = 0;
+        for (unsigned i = 0; i < op0.getSize(); ++i) {
+            const int32_t unsigned_elem = static_cast<int32_t>(static_cast<const Primitive*>(op0[i])->data.u);
+            const int32_t signed_elem = static_cast<const Primitive*>(op1[i])->data.i;
+            dot_product += unsigned_elem * signed_elem;
+        }
+        Primitive tot_prim(dot_product);
+        Value* ret = getType(dst_type_at, data)->construct();
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
+        break;
+    }
+    case spv::OpSDotAccSat: {  // 4453
+        const auto& op0 = static_cast<const Array&>(*getValue(src_at, data));
+        const auto& op1 = static_cast<const Array&>(*getValue(src_at + 1, data));
+        const auto& acc = static_cast<const Primitive&>(*getValue(src_at + 2, data));
+        assert(op0.getType().getBase() == DataType::ARRAY && "The first operand to OpSDotAccSat must be an array!");
+        assert(op1.getType().getBase() == DataType::ARRAY && "The second operand to OpSDotAccSat must be an array!");
+        assert(
+            op0.getType().getElement().getBase() == DataType::INT &&
+            "The first operand to OpSDotAccSat must be an int array!"
+        );
+        assert(
+            op1.getType().getElement().getBase() == DataType::INT &&
+            "The second operand to OpSDotAccSat must be an int array!"
+        );
+        assert(op0.getSize() == op1.getSize() && "The operands to OpSDotAccSat must have matching sizes!");
+
+        int64_t sum = acc.data.i;
+        for (unsigned i = 0; i < op0.getSize(); ++i) {
+            const int64_t second_elem = static_cast<const Primitive*>(op1[i])->data.i;
+            const int64_t this_elem = static_cast<const Primitive*>(op0[i])->data.i;
+            sum += second_elem * this_elem;
+        }
+
+        Type* res_type = getType(dst_type_at, data);
+        unsigned prec = res_type->getPrecision();
+        const int64_t min_val = -(static_cast<int64_t>(1) << (prec - 1));
+        const int64_t max_val = (static_cast<int64_t>(1) << (prec - 1)) - 1;
+        sum = std::clamp(sum, min_val, max_val);
+
+        Primitive tot_prim(sum, prec);
+        Value* ret = res_type->construct();
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
+        break;
+    }
+    case spv::OpUDotAccSat: {  // 4454
+        const auto& op0 = static_cast<const Array&>(*getValue(src_at, data));
+        const auto& op1 = static_cast<const Array&>(*getValue(src_at + 1, data));
+        const auto& acc = static_cast<const Primitive&>(*getValue(src_at + 2, data));
+        assert(op0.getType().getBase() == DataType::ARRAY && "The first operand to OpUDotAccSat must be an array!");
+        assert(op1.getType().getBase() == DataType::ARRAY && "The second operand to OpUDotAccSat must be an array!");
+        assert(op0.getSize() == op1.getSize() && "The operands to OpUDotAccSat must have matching sizes!");
+
+        uint64_t sum = acc.data.u;
+        for (unsigned i = 0; i < op0.getSize(); ++i) {
+            const uint64_t second_elem = static_cast<const Primitive*>(op1[i])->data.u;
+            const uint64_t this_elem = static_cast<const Primitive*>(op0[i])->data.u;
+            sum += second_elem * this_elem;
+        }
+
+        Type* res_type = getType(dst_type_at, data);
+        unsigned prec = res_type->getPrecision();
+        const uint64_t max_val = (prec >= 64) ? UINT64_MAX : ((static_cast<uint64_t>(1) << prec) - 1);
+        sum = std::min(sum, max_val);
+
+        Primitive tot_prim(sum, prec);
+        Value* ret = res_type->construct();
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
+        break;
+    }
+    case spv::OpSUDotAccSat: {  // 4455
+        const auto& op0 = static_cast<const Array&>(*getValue(src_at, data));  // unsigned vector
+        const auto& op1 = static_cast<const Array&>(*getValue(src_at + 1, data));  // signed vector
+        const auto& acc = static_cast<const Primitive&>(*getValue(src_at + 2, data));
+        assert(op0.getType().getBase() == DataType::ARRAY && "The first operand to OpSUDotAccSat must be an array!");
+        assert(op1.getType().getBase() == DataType::ARRAY && "The second operand to OpSUDotAccSat must be an array!");
+        assert(op0.getSize() == op1.getSize() && "The operands to OpSUDotAccSat must have matching sizes!");
+
+        int64_t sum = acc.data.i;
+        for (unsigned i = 0; i < op0.getSize(); ++i) {
+            const int64_t unsigned_elem = static_cast<int64_t>(static_cast<const Primitive*>(op0[i])->data.u);
+            const int64_t signed_elem = static_cast<const Primitive*>(op1[i])->data.i;
+            sum += unsigned_elem * signed_elem;
+        }
+
+        Type* res_type = getType(dst_type_at, data);
+        unsigned prec = res_type->getPrecision();
+        const int64_t min_val = -(static_cast<int64_t>(1) << (prec - 1));
+        const int64_t max_val = (static_cast<int64_t>(1) << (prec - 1)) - 1;
+        sum = std::clamp(sum, min_val, max_val);
+
+        Primitive tot_prim(sum, prec);
+        Value* ret = res_type->construct();
+        ret->copyFrom(tot_prim);
+        data[result_at].redefine(ret);
+        break;
+    }
     case spv::OpTypeCooperativeMatrixKHR: {  // 4456
         Type* sub = getType(1, data);
         const auto& scope = static_cast<const Primitive&>(*getValue(src_at, data));

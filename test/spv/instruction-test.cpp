@@ -173,3 +173,165 @@ TEST_CASE("GLSLstd450PackHalf2x16", "[instruction]") {
         check_pack(65504.0, -65504.0, 4227824639);
     }
 }
+
+Array* construct_ivec(std::vector<int64_t> vals, unsigned prec) {
+    std::vector<Value*> elements;
+    for (int64_t v : vals)
+        elements.push_back(new Primitive(v, prec));
+    return new Array(elements);
+}
+
+Array* construct_uvec(std::vector<uint64_t> vals, unsigned prec) {
+    std::vector<Value*> elements;
+    for (uint64_t v : vals)
+        elements.push_back(new Primitive(v, prec));
+    return new Array(elements);
+}
+
+TEST_CASE("OpUDot", "[instruction]") {
+    DataManager manager;
+    DataView& data = *manager.makeView();
+
+    auto inst = DummyInstruction::make(spv::OpUDot);
+    auto result_id = manager.allocateNew();
+    auto* u32 = new Type(Type::primitive(DataType::UINT, 32));
+    auto* vec0 = construct_uvec({1, 2, 3, 4}, 8);
+    auto* vec1 = construct_uvec({5, 6, 7, 8}, 8);
+
+    inst.setOperand(0, make_ref(data, u32));
+    inst.setOperand(1, Token(Token::Type::REF, result_id));
+    inst.setOperand(2, make_ref(data, vec0));
+    inst.setOperand(3, make_ref(data, vec1));
+
+    REQUIRE(inst.makeResult(data, 0, nullptr));
+    const auto& result = static_cast<const Primitive&>(*data[result_id].getValue());
+    // 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
+    CHECK(result.data.u == 70);
+}
+
+TEST_CASE("OpSUDot", "[instruction]") {
+    DataManager manager;
+    DataView& data = *manager.makeView();
+
+    auto inst = DummyInstruction::make(spv::OpSUDot);
+    auto result_id = manager.allocateNew();
+    auto* i32 = new Type(Type::primitive(DataType::INT, 32));
+    auto* vec0 = construct_uvec({1, 2, 3, 4}, 8);  // unsigned
+    auto* vec1 = construct_ivec({-1, -2, -3, -4}, 8);  // signed
+
+    inst.setOperand(0, make_ref(data, i32));
+    inst.setOperand(1, Token(Token::Type::REF, result_id));
+    inst.setOperand(2, make_ref(data, vec0));
+    inst.setOperand(3, make_ref(data, vec1));
+
+    REQUIRE(inst.makeResult(data, 0, nullptr));
+    const auto& result = static_cast<const Primitive&>(*data[result_id].getValue());
+    // 1*-1 + 2*-2 + 3*-3 + 4*-4 = -1 - 4 - 9 - 16 = -30
+    CHECK(result.data.i == -30);
+}
+
+TEST_CASE("OpSDotAccSat", "[instruction]") {
+    DataManager manager;
+    DataView& data = *manager.makeView();
+
+    auto inst = DummyInstruction::make(spv::OpSDotAccSat);
+    auto result_id = manager.allocateNew();
+    auto* i16 = new Type(Type::primitive(DataType::INT, 16));
+
+    inst.setOperand(0, make_ref(data, i16));
+    inst.setOperand(1, Token(Token::Type::REF, result_id));
+
+    auto check = [&](std::vector<int64_t> v0, std::vector<int64_t> v1, int64_t acc, int64_t expected) {
+        inst.setOperand(2, make_ref(data, construct_ivec(v0, 8)));
+        inst.setOperand(3, make_ref(data, construct_ivec(v1, 8)));
+        inst.setOperand(4, make_ref(data, new Primitive(acc, 16)));
+
+        REQUIRE(inst.makeResult(data, 0, nullptr));
+        const auto& result = static_cast<const Primitive&>(*data[result_id].getValue());
+        CHECK(result.data.i == expected);
+    };
+
+    SECTION("in range") {
+        // 1*5 + 2*6 + 3*7 + 4*8 + 10 = 5 + 12 + 21 + 32 + 10 = 80
+        check({1, 2, 3, 4}, {5, 6, 7, 8}, 10, 80);
+    }
+
+    SECTION("saturates to max") {
+        // 4*(100*100) = 40000, which overflows int16 (max 32767)
+        check({100, 100, 100, 100}, {100, 100, 100, 100}, 0, 32767);
+    }
+
+    SECTION("saturates to min") {
+        // 4*(-100*100) = -40000, which underflows int16 (min -32768)
+        check({-100, -100, -100, -100}, {100, 100, 100, 100}, 0, -32768);
+    }
+}
+
+TEST_CASE("OpUDotAccSat", "[instruction]") {
+    DataManager manager;
+    DataView& data = *manager.makeView();
+
+    auto inst = DummyInstruction::make(spv::OpUDotAccSat);
+    auto result_id = manager.allocateNew();
+    auto* u16 = new Type(Type::primitive(DataType::UINT, 16));
+
+    inst.setOperand(0, make_ref(data, u16));
+    inst.setOperand(1, Token(Token::Type::REF, result_id));
+
+    auto check = [&](std::vector<uint64_t> v0, std::vector<uint64_t> v1, uint64_t acc, uint64_t expected) {
+        inst.setOperand(2, make_ref(data, construct_uvec(v0, 8)));
+        inst.setOperand(3, make_ref(data, construct_uvec(v1, 8)));
+        inst.setOperand(4, make_ref(data, new Primitive(acc, 16)));
+
+        REQUIRE(inst.makeResult(data, 0, nullptr));
+        const auto& result = static_cast<const Primitive&>(*data[result_id].getValue());
+        CHECK(result.data.u == expected);
+    };
+
+    SECTION("in range") {
+        // 1*5 + 2*6 + 3*7 + 4*8 + 10 = 5 + 12 + 21 + 32 + 10 = 80
+        check({1, 2, 3, 4}, {5, 6, 7, 8}, 10, 80);
+    }
+
+    SECTION("saturates to max") {
+        // 4*(255*255) = 260100, which overflows uint16 (max 65535)
+        check({255, 255, 255, 255}, {255, 255, 255, 255}, 0, 65535);
+    }
+}
+
+TEST_CASE("OpSUDotAccSat", "[instruction]") {
+    DataManager manager;
+    DataView& data = *manager.makeView();
+
+    auto inst = DummyInstruction::make(spv::OpSUDotAccSat);
+    auto result_id = manager.allocateNew();
+    auto* i16 = new Type(Type::primitive(DataType::INT, 16));
+
+    inst.setOperand(0, make_ref(data, i16));
+    inst.setOperand(1, Token(Token::Type::REF, result_id));
+
+    auto check = [&](std::vector<uint64_t> v0, std::vector<int64_t> v1, int64_t acc, int64_t expected) {
+        inst.setOperand(2, make_ref(data, construct_uvec(v0, 8)));  // unsigned
+        inst.setOperand(3, make_ref(data, construct_ivec(v1, 8)));  // signed
+        inst.setOperand(4, make_ref(data, new Primitive(acc, 16)));
+
+        REQUIRE(inst.makeResult(data, 0, nullptr));
+        const auto& result = static_cast<const Primitive&>(*data[result_id].getValue());
+        CHECK(result.data.i == expected);
+    };
+
+    SECTION("in range") {
+        // 1*5 + 2*6 + 3*7 + 4*8 + 10 = 5 + 12 + 21 + 32 + 10 = 80
+        check({1, 2, 3, 4}, {5, 6, 7, 8}, 10, 80);
+    }
+
+    SECTION("saturates to max") {
+        // 4*(255*100) = 102000, which overflows int16 (max 32767)
+        check({255, 255, 255, 255}, {100, 100, 100, 100}, 0, 32767);
+    }
+
+    SECTION("saturates to min") {
+        // 4*(255*-100) = -102000, which underflows int16 (min -32768)
+        check({255, 255, 255, 255}, {-100, -100, -100, -100}, 0, -32768);
+    }
+}
