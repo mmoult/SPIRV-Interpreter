@@ -119,18 +119,17 @@ static Value* atomic_bin_op(
     return ret;
 }
 
-bool Instruction::execute(
-    DataView& data,
-    // NOTE: The instruction is strictly forbidden from modifying any but the current frame stack
-    std::vector<std::vector<Frame*>>& frame_stacks,
+Instruction::ThreadAction Instruction::execute(
+    // NOTE: The instruction is strictly forbidden from modifying any but the selected frame stack
+    std::vector<ThreadState>& thread_states,
     unsigned invocation,
-    unsigned num_invocations,
     bool use_sbt
 ) const {
-    bool inc_pc = true;
-    bool blocked = false;
-    std::vector<Frame*>& frame_stack = frame_stacks[invocation];
+    const auto num_invocations = thread_states.size();
+    const bool demoted = thread_states[invocation].demoted;
+    std::vector<Frame*>& frame_stack = thread_states[invocation].frames;
     Frame& frame = *frame_stack.back();
+    DataView& data = frame.getData();
 
     unsigned result_at = 0;
     if (hasResult) {
@@ -138,6 +137,9 @@ bool Instruction::execute(
         assert(operands[idx].type == Token::Type::REF);
         result_at = std::get<unsigned>(operands[idx].raw);
     }
+
+    bool inc_pc = true;
+    ThreadAction action = ThreadAction::NONE;
 
     // Pops the current frame and returns whether we should increment the PC
     auto pop_frame = [&frame_stack]() {
@@ -256,12 +258,16 @@ bool Instruction::execute(
         break;
     }
     case spv::OpStore: {  // 62
+        if (demoted)
+            break;
         Value* val = getValue(1, data);
         Value& store_to = *getFromPointer(0, data);
         store_to.copyFrom(*val);
         break;
     }
     case spv::OpImageWrite: {  // 99
+        if (demoted)
+            break;
         Value* image_v = getValue(0, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to ImageWrite must be an image!");
@@ -288,7 +294,7 @@ bool Instruction::execute(
         break;
     }
     case spv::OpControlBarrier: {  // 224
-        blocked = true;
+        action = ThreadAction::BLOCK;
         // TODO surely there is more to do here...
         break;
     }
@@ -457,7 +463,7 @@ bool Instruction::execute(
 
         Type* ret_type = getType(0, data);
         Value* dst = ret_type->construct();
-        auto& frame_stack = frame_stacks[swap_with];
+        auto& frame_stack = thread_states[swap_with].frames;
         auto& swap_frame = *frame_stack.back();
         DataView& swap_data = swap_frame.getData();
         Value* swap_value = getValue(3, swap_data);
@@ -750,6 +756,8 @@ bool Instruction::execute(
         break;
     }
     case spv::OpCooperativeMatrixStoreKHR: {  // 4458
+        if (demoted)
+            break;
         Pointer pointer = *static_cast<Pointer*>(getValue(0, data));
         unsigned back_index = pointer.decompose();
         Value* head = getHeadValue(pointer, data);
@@ -844,11 +852,10 @@ bool Instruction::execute(
             double accum = 0.0;
 
             for (unsigned j = 0; j < shared_dim; ++j) {
-                auto extract_coop_el =
-                    [&frame_stacks, num_invocations, this](unsigned idx, unsigned opnd) -> const Primitive* {
+                auto extract_coop_el = [&thread_states, this](unsigned idx, unsigned opnd) -> const Primitive* {
                     unsigned found = 0;
-                    for (unsigned k = 0; k < num_invocations; ++k) {
-                        auto& data = frame_stacks[k].back()->getData();
+                    for (auto& thread_state : thread_states) {
+                        auto& data = thread_state.frames.back()->getData();
                         const auto& mat = static_cast<const CoopMatrix&>(*getValue(opnd, data));
                         if (unsigned next = found + mat.getSize(); next <= idx)
                             found = next;
@@ -998,6 +1005,10 @@ bool Instruction::execute(
             terminate_invocation();
         break;
     }
+    case spv::OpDemoteToHelperInvocation: {  // 5380
+        action = ThreadAction::DEMOTE;
+        break;
+    }
     }
 
     if (dst_val != nullptr) {
@@ -1008,7 +1019,7 @@ bool Instruction::execute(
     if (inc_pc)
         frame_stack.back()->incPC();
 
-    return blocked;
+    return action;
 }
 
 void Instruction::print() const {

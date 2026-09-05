@@ -608,13 +608,10 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
     unsigned num_invocations = single_invoc ? 1 : (ep.sizeX * ep.sizeY * ep.sizeZ);
 
     Debugger debugger(insts, format, num_invocations);
-    // The stack frame holds variables, temporaries, program counter, return address, etc
-    // We have a stack frame for each invocation
-    std::vector<std::vector<Frame*>> frame_stacks(num_invocations);
-    std::vector<DataView*> invoc_globals;
-    invoc_globals.reserve(num_invocations);
-    std::set<unsigned> active_threads;
+
+    std::vector<Instruction::ThreadState> threads(num_invocations);
     std::set<unsigned> live_threads;
+    std::set<unsigned> active_threads;
 
     // kernel entry point may take arguments, these have been set up on the program interface. Transfer values to the
     // function appropriately
@@ -645,10 +642,8 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
         unsigned local_y = (i / ep.sizeX) % ep.sizeY;
         unsigned local_z = (i / (ep.sizeX * ep.sizeY)) % ep.sizeZ;
 
-        DataView* invoc_global = data.makeView(&global);
-        invoc_globals.push_back(invoc_global);
-        active_threads.insert(i);
-        live_threads.insert(i);
+        DataView* statics = data.makeView(&global);
+        threads[i].statics = statics;
 
         // Copy over builtins from the global scope to the invocation's scope and populate with their values
         if (global_invoc_id != nullptr) {
@@ -672,7 +667,7 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
                 std::vector<const Value*> elements {&gid_x, &gid_y, &gid_z};
                 arr.addElements(elements);
                 v->getVal().copyFrom(arr);
-                invoc_global->local(globalInvocId).redefine(v);
+                statics->local(globalInvocId).redefine(v);
             }
         }
         if (local_invoc_id != nullptr) {
@@ -693,7 +688,7 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
                 std::vector<const Value*> elements {&gid_x, &gid_y, &gid_z};
                 arr.addElements(elements);
                 v->getVal().copyFrom(arr);
-                invoc_global->local(localInvocId).redefine(v);
+                statics->local(localInvocId).redefine(v);
             }
         }
         if (local_invoc_idx != nullptr) {
@@ -711,22 +706,20 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
                     index = i;
                 const Primitive idx(static_cast<uint64_t>(index));
                 v->getVal().copyFrom(idx);
-                invoc_global->local(localInvocIdx).redefine(v);
+                statics->local(localInvocIdx).redefine(v);
             }
         }
 
-        Frame* new_frame = new Frame(location, entry_args, 0, *invoc_global);
-        frame_stacks[i].push_back(new_frame);
+        Frame* new_frame = new Frame(location, entry_args, 0, *statics);
+        threads[i].frames.push_back(new_frame);
         unsigned pre_pc = new_frame->getPC();
 
         // initialize all thread-focused "static" vars before we start main
         for (unsigned threadVar : threadVars) {
             Instruction& inst = insts[threadVar];
             assert(inst.getOpcode() == spv::OpVariable);
-            [[maybe_unused]] bool blocked =
-                inst.execute(new_frame->getData(), frame_stacks, i, num_invocations, use_sbt);
-            assert(!blocked);
-            // Variable* var_v = global[inst.getResult()].getVariable();
+            [[maybe_unused]] auto action = inst.execute(threads, i, use_sbt);
+            assert(action == Instruction::ThreadAction::NONE);
         }
         // Restore the program counter, which may have been altered by thread var processing
         new_frame->setPC(pre_pc);
@@ -764,18 +757,23 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
         }
     } timer(timeout);
 
-    // Right now, do something like round robin scheduling. In the future, we will want to give other options
-    // through the command line
+    // All threads start as live and active
+    for (unsigned i = 0; i < threads.size(); ++i) {
+        live_threads.insert(i);
+        active_threads.insert(i);
+    }
+
     unsigned next_invoc = num_invocations - 1;
     while (!live_threads.empty()) {
         if (timeout > 0 && timer.tick())
             throw std::runtime_error("Execution timed out!");
 
-        if (active_threads.empty()) {
-            // All active threads have hit a barrier. Unblock all.
-            for (unsigned live : live_threads)
-                active_threads.insert(live);
-        }
+        // Check if all active threads have hit a barrier. If so, unblock.
+        if (active_threads.empty())
+            active_threads.insert(live_threads.begin(), live_threads.end());
+
+        // Select the next live thread to run
+        // Right now, do something like round robin scheduling. In the future, we will want to give other options
         ++next_invoc;
         while (!active_threads.contains(next_invoc)) {
             if (next_invoc >= num_invocations)
@@ -784,7 +782,7 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
                 ++next_invoc;
         }
 
-        auto& frame_stack = frame_stacks[next_invoc];
+        auto& frame_stack = threads[next_invoc].frames;
         auto& cur_frame = *frame_stack.back();
         DataView& cur_data = cur_frame.getData();
         unsigned i_at = cur_frame.getPC();
@@ -801,8 +799,11 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
 
         unsigned frame_depth = frame_stack.size();
         // If executing the instruction blocks the thread, remove it from the active list
-        if (insts[i_at].execute(cur_data, frame_stacks, next_invoc, num_invocations, use_sbt))
+        auto action = insts[i_at].execute(threads, next_invoc, use_sbt);
+        if (action == Instruction::ThreadAction::BLOCK)
             active_threads.erase(next_invoc);
+        else if (action == Instruction::ThreadAction::DEMOTE)
+            threads[next_invoc].demoted = true;
 
         // print the result if verbose
         if (unsigned result = insts[i_at].getResult();
@@ -818,7 +819,7 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
         if (frame_stack.empty()) {
             active_threads.erase(next_invoc);
             live_threads.erase(next_invoc);
-            data.destroyView(invoc_globals[next_invoc]);
+            data.destroyView(threads[next_invoc].statics);
         } else {
             // If the frame has triggered raytracing, we need to launch the substage
             auto& frame = *frame_stack.back();

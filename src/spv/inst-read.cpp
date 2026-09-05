@@ -112,6 +112,7 @@ Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vecto
     case spv::OpTerminateRayKHR:  // 4449
     case spv::OpTypeRayQueryKHR:  // 4472
     case spv::OpTypeAccelerationStructureKHR:  // 5341
+    case spv::OpDemoteToHelperInvocation:  // 5380
         // no operands to handle (besides result and type, if present)
         break;
     case spv::OpSource:  // 3
@@ -366,6 +367,7 @@ Instruction::readOp(std::vector<Instruction>& insts, uint16_t opcode, std::vecto
         memory_operands();
         break;
     case spv::OpAccessChain:  // 65
+    case spv::OpInBoundsAccessChain:  // 66
     case spv::OpInBoundsPtrAccessChain:  // 70
         to_load.push_back(Type::REF);
         to_load.push_back(Type::REF);

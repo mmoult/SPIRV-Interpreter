@@ -1,0 +1,117 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 11
+; Bound: 56
+; Schema: 0
+               OpCapability Shader
+               OpCapability Int16
+               OpCapability StoragePushConstant16
+               OpCapability DemoteToHelperInvocation
+               OpCapability FMAKHR
+               OpExtension "SPV_EXT_demote_to_helper_invocation"
+               OpExtension "SPV_KHR_16bit_storage"
+               OpExtension "SPV_KHR_fma"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %SV_Target
+               OpExecutionMode %main OriginUpperLeft
+               OpSource GLSL 450
+               OpSourceExtension "GL_EXT_buffer_reference"
+               OpSourceExtension "GL_EXT_buffer_reference2"
+               OpSourceExtension "GL_EXT_demote_to_helper_invocation"
+               OpSourceExtension "GL_EXT_nonuniform_qualifier"
+               OpSourceExtension "GL_EXT_shader_16bit_storage"
+               OpSourceExtension "GL_EXT_shader_explicit_arithmetic_types_int16"
+               OpSourceExtension "GL_EXT_spirv_intrinsics"
+               OpName %main "main"
+               OpName %_212 "_212"
+               OpName %cb0_buf "cb0_buf"
+               OpMemberName %cb0_buf 0 "_m11"
+               OpMemberName %cb0_buf 1 "_m12"
+               OpMemberName %cb0_buf 2 "_m13"
+               OpMemberName %cb0_buf 3 "_m14"
+               OpName %cb0 "cb0"
+               OpName %_215 "_215"
+               OpName %_216 "_216"
+               OpName %push_data_t "push_data_t"
+               OpMemberName %push_data_t 0 "s0"
+               OpMemberName %push_data_t 1 "sPad"
+               OpName %push_data "push_data"
+               OpName %SV_Target "SV_Target"
+               OpDecorate %cb0_buf Block
+               OpMemberDecorate %cb0_buf 0 Offset 0
+               OpMemberDecorate %cb0_buf 1 Offset 16
+               OpMemberDecorate %cb0_buf 2 Offset 32
+               OpMemberDecorate %cb0_buf 3 Offset 48
+               OpDecorate %cb0 Binding 1
+               OpDecorate %cb0 DescriptorSet 2
+               OpDecorate %33 NoContraction
+               OpDecorate %push_data_t Block
+               OpMemberDecorate %push_data_t 0 Offset 0
+               OpMemberDecorate %push_data_t 1 Offset 2
+               OpDecorate %SV_Target Location 0
+               OpDecorate %SV_Target Component 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+%_ptr_Function_float = OpTypePointer Function %float
+    %v4float = OpTypeVector %float 4
+    %cb0_buf = OpTypeStruct %float %v4float %v4float %v4float
+%_ptr_Uniform_cb0_buf = OpTypePointer Uniform %cb0_buf
+        %cb0 = OpVariable %_ptr_Uniform_cb0_buf Uniform
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+    %float_0 = OpConstant %float 0
+    %float_1 = OpConstant %float 1
+      %int_1 = OpConstant %int 1
+       %uint = OpTypeInt 32 0
+     %uint_0 = OpConstant %uint 0
+     %uint_1 = OpConstant %uint 1
+       %bool = OpTypeBool
+%_ptr_Function_bool = OpTypePointer Function %bool
+     %ushort = OpTypeInt 16 0
+%push_data_t = OpTypeStruct %ushort %ushort
+%_ptr_PushConstant_push_data_t = OpTypePointer PushConstant %push_data_t
+  %push_data = OpVariable %_ptr_PushConstant_push_data_t PushConstant
+%_ptr_PushConstant_ushort = OpTypePointer PushConstant %ushort
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+  %SV_Target = OpVariable %_ptr_Output_v4float Output
+      %int_2 = OpConstant %int 2
+%_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+       %_212 = OpVariable %_ptr_Function_float Function
+       %_215 = OpVariable %_ptr_Function_float Function
+       %_216 = OpVariable %_ptr_Function_bool Function
+         %16 = OpAccessChain %_ptr_Uniform_float %cb0 %int_0
+         %17 = OpLoad %float %16
+         %20 = OpExtInst %float %1 NClamp %17 %float_0 %float_1
+               OpStore %_212 %20
+         %22 = OpLoad %float %_212
+         %23 = OpLoad %float %_212
+         %27 = OpAccessChain %_ptr_Uniform_float %cb0 %int_1 %uint_0
+         %28 = OpLoad %float %27
+         %30 = OpAccessChain %_ptr_Uniform_float %cb0 %int_1 %uint_1
+         %31 = OpLoad %float %30
+         %32 = OpFmaKHR %float %23 %28 %31
+         %33 = OpFMul %float %22 %32
+               OpStore %_215 %33
+         %37 = OpLoad %float %_215
+         %43 = OpAccessChain %_ptr_PushConstant_ushort %push_data %int_0
+         %44 = OpLoad %ushort %43
+         %45 = OpConvertUToF %float %44
+         %46 = OpFOrdGreaterThan %bool %37 %45
+               OpStore %_216 %46
+         %47 = OpLoad %bool %_216
+               OpSelectionMerge %49 None
+               OpBranchConditional %47 %48 %49
+         %48 = OpLabel
+               OpDemoteToHelperInvocation
+               OpBranch %49
+         %49 = OpLabel
+         %54 = OpAccessChain %_ptr_Uniform_v4float %cb0 %int_2
+         %55 = OpLoad %v4float %54
+               OpStore %SV_Target %55
+               OpReturn
+               OpFunctionEnd

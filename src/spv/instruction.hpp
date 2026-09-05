@@ -200,18 +200,24 @@ public:
         return opcode == spv::OpFunction || opcode == spv::OpLabel || opcode == spv::OpVariable;
     }
 
+    enum class ThreadAction {
+        NONE,
+        BLOCK,
+        DEMOTE,
+    };
+
+    struct ThreadState {
+        std::vector<Frame*> frames;
+        DataView* statics = nullptr;
+        bool demoted = false;
+    };
+
     /// @brief Executes the instruction with the provided data, frame stack, and verbosity setting.
-    /// @param data the data view at the current frame or the global if the frame stack is empty
-    /// @param frame_stack holds variables, arguments, return addresses, and program counters
+    /// @param thread_states holds the state of all invocation threads. Only the current invocation may be edited!
+    /// @param invocation the index of the current invocation within the thread_states vector
     /// @param use_sbt whether the shader binding table should be used for raytracing interactions
-    /// @return whether the instruction execution blocks the invocation (such as by a barrier)
-    bool execute(
-        DataView& data,
-        std::vector<std::vector<Frame*>>& frame_stacks,
-        unsigned invocation,
-        unsigned num_invocations,
-        bool use_sbt
-    ) const;
+    /// @return instruction execution result, which may indicate that the thread should block or demote
+    ThreadAction execute(std::vector<ThreadState>& thread_states, unsigned invocation, bool use_sbt) const;
 
     void print() const;
 

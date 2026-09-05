@@ -25,6 +25,7 @@
 #include "../spv/ray-flags.hpp"
 #include "../util/array-math.hpp"
 #include "../util/bits.hpp"
+#include "../util/compare.hpp"
 #include "../util/fpconvert.hpp"
 #include "../values/aggregate.hpp"
 #include "../values/coop-matrix.hpp"
@@ -1296,6 +1297,7 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         break;
     }
     case spv::OpAccessChain:  // 65
+    case spv::OpInBoundsAccessChain:  // 66
     case spv::OpInBoundsPtrAccessChain: {  // 70
         std::vector<unsigned> indices;
         assert(operands[2].type == Token::Type::REF);
@@ -3396,28 +3398,23 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
     case GLSLstd450NMax: {  // 80
         bool min = (ext_opcode == GLSLstd450NMin);
         BinOp fx = [min](const Primitive* a, const Primitive* b) {
-            // Edge cases:
-            //   -0 is less than +0
-            //   if one operand is NaN, return the other
-            //   if both are NaN, return NaN
-            if (std::isnan(a->data.f))
-                return *b;
-            if (std::isnan(b->data.f))
-                return *a;
-            bool a_neg = std::signbit(a->data.f);
-            bool b_neg = std::signbit(b->data.f);
-            const Primitive* one = min ? a : b;
-            const Primitive* two = min ? b : a;
-            if (a_neg && !b_neg)
-                return *one;
-            if (b_neg && !a_neg)
-                return *two;
-            if (a->data.f < b->data.f)
-                return *a;
-            return *b;
+            return Primitive(Compare::nbound(min, a->data.f, b->data.f), 64);
         };
         OpDst dst {checkRef(dst_type_at, data_len), result_at};
         element_bin_op(checkRef(src_at, data_len), checkRef(src_at + 1, data_len), dst, data, fx, DataType::FLOAT);
+        break;
+    }
+    case GLSLstd450NClamp: {  // 81
+        // res = nmin(nmax(x, minVal), maxVal)
+        TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
+            if (minVal->data.f > maxVal->data.f)
+                Console::warn("NClamp undefined since minVal > maxVal!");
+            return Primitive(
+                Compare::nbound(true, Compare::nbound(false, x->data.f, minVal->data.f), maxVal->data.f),
+                64
+            );
+        };
+        E_TERN_OP(FLOAT, fx);
         break;
     }
     }

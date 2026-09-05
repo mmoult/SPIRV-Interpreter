@@ -6,7 +6,6 @@
 #include "compare.hpp"
 
 #include <cassert>
-#include <cmath>
 #include <sstream>
 #include <string>
 #include <tuple>
