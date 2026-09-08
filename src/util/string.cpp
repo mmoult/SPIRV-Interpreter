@@ -138,4 +138,27 @@ void print_float(std::stringstream& out, double fp, unsigned precision_digits) {
     }
 }
 
+unsigned width(unsigned x) {
+    // This is log10(x) + 1
+    if (x >= 1000000000u)
+        return 10;
+    if (x >= 100000000u)
+        return 9;
+    if (x >= 10000000u)
+        return 8;
+    if (x >= 1000000u)
+        return 7;
+    if (x >= 100000u)
+        return 6;
+    if (x >= 10000u)
+        return 5;
+    if (x >= 1000u)
+        return 4;
+    if (x >= 100u)
+        return 3;
+    if (x >= 10u)
+        return 2;
+    return 1;
+}
+
 };  // namespace Str

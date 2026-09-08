@@ -119,15 +119,15 @@ static Value* atomic_bin_op(
     return ret;
 }
 
-Instruction::ThreadAction Instruction::execute(
+Instruction::Action Instruction::execute(
     // NOTE: The instruction is strictly forbidden from modifying any but the selected frame stack
-    std::vector<ThreadState>& thread_states,
+    std::vector<Invocation>& threads,
     unsigned invocation,
     bool use_sbt
 ) const {
-    const auto num_invocations = thread_states.size();
-    const bool demoted = thread_states[invocation].demoted;
-    std::vector<Frame*>& frame_stack = thread_states[invocation].frames;
+    const auto num_invocations = threads.size();
+    const bool demoted = threads[invocation].demoted;
+    std::vector<Frame*>& frame_stack = threads[invocation].frames;
     Frame& frame = *frame_stack.back();
     DataView& data = frame.getData();
 
@@ -139,7 +139,7 @@ Instruction::ThreadAction Instruction::execute(
     }
 
     bool inc_pc = true;
-    ThreadAction action = ThreadAction::NONE;
+    Action action = Action::NONE;
 
     // Pops the current frame and returns whether we should increment the PC
     auto pop_frame = [&frame_stack]() {
@@ -294,7 +294,7 @@ Instruction::ThreadAction Instruction::execute(
         break;
     }
     case spv::OpControlBarrier: {  // 224
-        action = ThreadAction::BLOCK;
+        action = Action::BLOCK;
         // TODO surely there is more to do here...
         break;
     }
@@ -431,8 +431,15 @@ Instruction::ThreadAction Instruction::execute(
         throw std::runtime_error("Unreachable code path executed!");
         break;
     case spv::OpGroupNonUniformQuadSwap: {  // 366
-        // TODO: "An invocation will not execute a dynamic instance of this instruction (X') until all invocations in
-        // its quad have executed all dynamic instances that are program-ordered before X'."
+        // This instruction serves as a barrier plus an action:
+        //   "An invocation will not execute a dynamic instance of this instruction (X') until all invocations in its
+        //    quad have executed all dynamic instances that are program-ordered before X'."
+        // The action must be performed once the thread is unblocked.
+        if (threads[invocation].status != Invocation::Status::WAKE) {
+            inc_pc = false;
+            action = Action::BLOCK;
+            break;
+        }
 
         if (num_invocations % 4 != 0)
             throw std::runtime_error("GroupNonUniformQuadSwap must be called with exactly 4 invocations in the group!");
@@ -463,7 +470,7 @@ Instruction::ThreadAction Instruction::execute(
 
         Type* ret_type = getType(0, data);
         Value* dst = ret_type->construct();
-        auto& frame_stack = thread_states[swap_with].frames;
+        auto& frame_stack = threads[swap_with].frames;
         auto& swap_frame = *frame_stack.back();
         DataView& swap_data = swap_frame.getData();
         Value* swap_value = getValue(3, swap_data);
@@ -852,9 +859,9 @@ Instruction::ThreadAction Instruction::execute(
             double accum = 0.0;
 
             for (unsigned j = 0; j < shared_dim; ++j) {
-                auto extract_coop_el = [&thread_states, this](unsigned idx, unsigned opnd) -> const Primitive* {
+                auto extract_coop_el = [&threads, this](unsigned idx, unsigned opnd) -> const Primitive* {
                     unsigned found = 0;
-                    for (auto& thread_state : thread_states) {
+                    for (auto& thread_state : threads) {
                         auto& data = thread_state.frames.back()->getData();
                         const auto& mat = static_cast<const CoopMatrix&>(*getValue(opnd, data));
                         if (unsigned next = found + mat.getSize(); next <= idx)
@@ -1006,7 +1013,7 @@ Instruction::ThreadAction Instruction::execute(
         break;
     }
     case spv::OpDemoteToHelperInvocation: {  // 5380
-        action = ThreadAction::DEMOTE;
+        action = Action::DEMOTE;
         break;
     }
     }

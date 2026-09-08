@@ -24,13 +24,14 @@ target_sources(spv-interp
     spv/instruction.cpp
     spv/program.cpp
     spv/ray-substage.cpp
+    spv/scheduler.cpp
     util/array-math.cpp
     util/compare.cpp
     util/fpconvert.cpp
     util/geom-math.cpp
     util/string.cpp
-    util/trie.cpp
     util/stb-impl.cpp
+    util/trie.cpp
     values/raytrace/accel-struct.cpp
     values/raytrace/node.cpp
     values/raytrace/trace.cpp

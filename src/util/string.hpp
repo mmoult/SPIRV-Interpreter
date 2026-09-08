@@ -19,5 +19,9 @@ namespace Str {
 /// @param fp the float to print. Must not be NaN or infinite!
 void print_float(std::stringstream& out, double fp, unsigned precision_digits);
 
+/// @brief Calculates the number of characters x will need to print
+/// @param x the value to measure the print length of
+unsigned width(unsigned x);
+
 };  // namespace Str
 #endif

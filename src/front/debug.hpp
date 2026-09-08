@@ -16,6 +16,8 @@
 #include "../spv/data/manager.hpp"
 #include "../spv/frame.hpp"
 #include "../spv/inst-list.hpp"
+#include "../spv/invocation.hpp"
+#include "../spv/scheduler.hpp"
 #include "../util/trie.hpp"
 
 struct BreakPoint {
@@ -32,23 +34,33 @@ class Debugger {
     // Command handling:
     Trie rootCommands;
     Trie breakCommands;
+    Trie invocCommands;
     Trie progCommands;
+    Trie schedCommands;
+
     enum Cmd : unsigned {
         BAD,  // failure code
+        ADD,
+        ALL,
+        AT,
         BREAK,
-        BREAK_ADD,
-        BREAK_CLEAR,
-        BREAK_LIST,
-        BREAK_REMOVE,
+        CLEAR,
+        CUSTOM,
         DISPLAY,
         HELP,
+        INVOCATION,
+        LIST,
         NEXT,
         PROGRAM,
-        PROGRAM_ALL,
-        PROGRAM_AT,
         QUIT,
-        RUN,
+        RANDOM,
+        REMOVE,
         RETURN,
+        ROUND,
+        RUN,
+        SCHEDULE,
+        SEQUENTIAL,
+        SHOW,
         STACK,
         STEP,
     };
@@ -108,6 +120,21 @@ public:
         insts[i_at].print();
     }
 
-    bool invoke(unsigned i_at, const DataView& data, const std::vector<Frame*>& frame_stack);
+    enum class Action {
+        NONE,
+        RETRY,
+        QUIT,
+    };
+
+    /// @brief Invoke the debugger for the current invocation
+    /// @param threads the state of all invocation threads
+    /// @param invocation the index of the current invocation
+    /// @param scheduler the program scheduler
+    /// @return whether the debugger has requested to terminate execution
+    Action invoke(const std::vector<Invocation>& threads, unsigned& invocation, Scheduler& scheduler);
+
+    void suggestStop() {
+        stopNext = true;
+    }
 };
 #endif

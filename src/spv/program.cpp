@@ -12,6 +12,7 @@
 #include <tuple>
 
 #include "../front/debug.hpp"
+#include "invocation.hpp"
 #include "var-compare.hpp"
 
 bool Program::ProgramLoader::determineEndian() {
@@ -588,8 +589,12 @@ std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcep
     return std::tuple(outputs.empty(), total_tests);
 }
 
-void
-Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invoc, unsigned timeout) noexcept(false) {
+void Program::execute(ExecutionInfo& info) {
+    const bool single_invoc = info.single_invoc;
+    const unsigned timeout = info.timeout;
+    ValueFormat& format = info.format;
+    Scheduler& scheduler = info.scheduler;
+
     Instruction& entry_inst = insts[entry];
     DataView& global = data.getGlobal();
 
@@ -609,9 +614,8 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
 
     Debugger debugger(insts, format, num_invocations);
 
-    std::vector<Instruction::ThreadState> threads(num_invocations);
-    std::set<unsigned> live_threads;
-    std::set<unsigned> active_threads;
+    std::vector<Invocation> threads(num_invocations);
+    scheduler.init(num_invocations);
 
     // kernel entry point may take arguments, these have been set up on the program interface. Transfer values to the
     // function appropriately
@@ -719,7 +723,7 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
             Instruction& inst = insts[threadVar];
             assert(inst.getOpcode() == spv::OpVariable);
             [[maybe_unused]] auto action = inst.execute(threads, i, use_sbt);
-            assert(action == Instruction::ThreadAction::NONE);
+            assert(action == Instruction::Action::NONE);
         }
         // Restore the program counter, which may have been altered by thread var processing
         new_frame->setPC(pre_pc);
@@ -757,32 +761,26 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
         }
     } timer(timeout);
 
-    // All threads start as live and active
-    for (unsigned i = 0; i < threads.size(); ++i) {
-        live_threads.insert(i);
-        active_threads.insert(i);
-    }
+    enum class ThreadSelect {
+        AUTO,
+        RETRY,
+        FORCE,
+    };
+    auto select = ThreadSelect::AUTO;
 
-    unsigned next_invoc = num_invocations - 1;
-    while (!live_threads.empty()) {
-        if (timeout > 0 && timer.tick())
+    while (scheduler.hasNext()) {
+        if (select == ThreadSelect::AUTO && timeout > 0 && timer.tick())
             throw std::runtime_error("Execution timed out!");
 
-        // Check if all active threads have hit a barrier. If so, unblock.
-        if (active_threads.empty())
-            active_threads.insert(live_threads.begin(), live_threads.end());
-
-        // Select the next live thread to run
-        // Right now, do something like round robin scheduling. In the future, we will want to give other options
-        ++next_invoc;
-        while (!active_threads.contains(next_invoc)) {
-            if (next_invoc >= num_invocations)
-                next_invoc = 0;
-            else
-                ++next_invoc;
+        if (select != ThreadSelect::FORCE) {
+            if (scheduler.proceed()) {
+                for (auto& thread : threads)
+                    thread.status = Invocation::Status::WAKE;
+            }
         }
+        unsigned next = scheduler.getNext();
 
-        auto& frame_stack = threads[next_invoc].frames;
+        auto& frame_stack = threads[next].frames;
         auto& cur_frame = *frame_stack.back();
         DataView& cur_data = cur_frame.getData();
         unsigned i_at = cur_frame.getPC();
@@ -790,20 +788,33 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
             throw std::runtime_error("Program execution left program's boundaries!");
 
         // Print the line and invoke the debugger, if enabled
-        if (verbose)
-            debugger.printLine(next_invoc, i_at);
-        if (debug) {
-            if (debugger.invoke(i_at, cur_data, frame_stack))
-                break;
+        if (info.print >= PrintMode::VERBOSE) {
+            debugger.printLine(next, i_at);
+            if (info.print >= PrintMode::DEBUG) {
+                auto action = debugger.invoke(threads, next, scheduler);
+                if (action == Debugger::Action::QUIT)
+                    break;
+                else if (action == Debugger::Action::RETRY) {
+                    select = ThreadSelect::FORCE;
+                    continue;
+                } else if (!scheduler.isValid(next)) {
+                    std::cout << "The selected invocation is not active!" << std::endl;
+                    select = ThreadSelect::RETRY;
+                    debugger.suggestStop();
+                    continue;
+                }
+            }
         }
 
         unsigned frame_depth = frame_stack.size();
         // If executing the instruction blocks the thread, remove it from the active list
-        auto action = insts[i_at].execute(threads, next_invoc, use_sbt);
-        if (action == Instruction::ThreadAction::BLOCK)
-            active_threads.erase(next_invoc);
-        else if (action == Instruction::ThreadAction::DEMOTE)
-            threads[next_invoc].demoted = true;
+        auto action = insts[i_at].execute(threads, next, use_sbt);
+        threads[next].status = Invocation::Status::READY;
+        if (action == Instruction::Action::BLOCK) {
+            threads[next].status = Invocation::Status::SLEEP;
+            scheduler.block(next);
+        } else if (action == Instruction::Action::DEMOTE)
+            threads[next].demoted = true;
 
         // print the result if verbose
         if (unsigned result = insts[i_at].getResult();
@@ -811,15 +822,14 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
             // - verbose mode is enabled
             // - the instruction has a result to print
             // - the instruction didn't add or remove a frame (in which case, the value may be undefined)
-            verbose && result > 0 && frame_stack.size() == frame_depth) {
+            (info.print >= PrintMode::VERBOSE) && result > 0 && frame_stack.size() == frame_depth) {
             debugger.print(result, cur_data);
         }
 
         // If the frame stack is empty, the thread has completed (and is no longer alive)
         if (frame_stack.empty()) {
-            active_threads.erase(next_invoc);
-            live_threads.erase(next_invoc);
-            data.destroyView(threads[next_invoc].statics);
+            scheduler.finish(next);
+            threads[next].status = Invocation::Status::FINISH;
         } else {
             // If the frame has triggered raytracing, we need to launch the substage
             auto& frame = *frame_stack.back();
@@ -831,6 +841,9 @@ Program::execute(bool verbose, ValueFormat& format, bool debug, bool single_invo
             }
         }
     }
+
+    for (auto& thread : threads)
+        data.destroyView(thread.statics);
 }
 
 ValueMap Program::getVariables(const std::vector<unsigned>& vars, bool prefer_location) const {

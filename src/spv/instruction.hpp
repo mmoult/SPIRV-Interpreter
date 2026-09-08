@@ -20,6 +20,7 @@
 #include "data/data.hpp"
 #include "data/manager.hpp"
 #include "frame.hpp"
+#include "invocation.hpp"
 #include "token.hpp"
 
 enum class Extension : unsigned {
@@ -200,24 +201,18 @@ public:
         return opcode == spv::OpFunction || opcode == spv::OpLabel || opcode == spv::OpVariable;
     }
 
-    enum class ThreadAction {
-        NONE,
-        BLOCK,
-        DEMOTE,
-    };
-
-    struct ThreadState {
-        std::vector<Frame*> frames;
-        DataView* statics = nullptr;
-        bool demoted = false;
+    enum class Action {
+        NONE,  // continue as usual
+        BLOCK,  // block the current invocation's execution until all others have reached this point
+        DEMOTE,  // the invocation may no longer write to memory
     };
 
     /// @brief Executes the instruction with the provided data, frame stack, and verbosity setting.
-    /// @param thread_states holds the state of all invocation threads. Only the current invocation may be edited!
-    /// @param invocation the index of the current invocation within the thread_states vector
+    /// @param threads holds the state of all invocation threads. Only the current invocation may be edited!
+    /// @param invocation the index of the current invocation within the threads vector
     /// @param use_sbt whether the shader binding table should be used for raytracing interactions
     /// @return instruction execution result, which may indicate that the thread should block or demote
-    ThreadAction execute(std::vector<ThreadState>& thread_states, unsigned invocation, bool use_sbt) const;
+    Action execute(std::vector<Invocation>& threads, unsigned invocation, bool use_sbt) const;
 
     void print() const;
 

@@ -18,6 +18,7 @@
 #include "front/console.hpp"
 #include "spv/program.hpp"
 #include "spv/ray-substage.hpp"
+#include "spv/scheduler.hpp"
 #include "util/spirv.hpp"
 #include "values/raytrace/shader-binding-table.hpp"
 #include "values/value.hpp"
@@ -326,8 +327,13 @@ int main(int argc, char* argv[]) {
     }
 
     // Peform the rest of the option actions
+    Program::PrintMode mode;
     if (debug.enabled)
-        verbose.enabled = true;
+        mode = Program::PrintMode::DEBUG;
+    else if (verbose.enabled)
+        mode = Program::PrintMode::VERBOSE;
+    else
+        mode = Program::PrintMode::NORMAL;
     if ((generate.enabled || rt_template.enabled) && !template_arg.hasValue())
         template_arg.setValue("-");
     suppress_warnings = quiet.enabled;
@@ -337,6 +343,10 @@ int main(int argc, char* argv[]) {
         std::cerr << "Unknown format preference: " << format_arg.getValue() << std::endl;
         return ReturnCode::BAD_ARGS;
     }
+
+    Scheduler scheduler;
+    scheduler.setMode(Scheduler::Mode::ROUND_ROBIN);
+    // TODO: include controls for the scheduler here
 
 #define REQUIRE(COND) \
     { \
@@ -454,7 +464,8 @@ int main(int argc, char* argv[]) {
 
     // Run the program
     try {
-        program.execute(verbose.enabled, *format, debug.enabled, single_invoc.enabled, timeout.getValue());
+        Program::ExecutionInfo info {*format, scheduler, timeout.getValue(), mode, single_invoc.enabled};
+        program.execute(info);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return ReturnCode::FAILED_EXE;

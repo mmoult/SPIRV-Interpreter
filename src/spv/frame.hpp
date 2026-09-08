@@ -122,6 +122,10 @@ public:
     DataView& getData() {
         return *view;
     }
+    const DataView& getData() const {
+        return *view;
+    }
+
     /// @brief removes the data view from this frame
     /// Necessary to preserve the data view, since deleting this frame deletes the data by default
     void removeData() {
