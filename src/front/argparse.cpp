@@ -14,14 +14,14 @@ namespace ArgParse {
 
 std::optional<unsigned> UintOption::isValid(const std::string& str) {
     try {
-        int parsed = std::stoi(str, nullptr);
+        unsigned parsed = std::stoul(str, nullptr);
         if (parsed <= 0) {
-            std::cerr << "The argument must be > 0, but " << parsed << " was found!";
+            std::cerr << "The argument must be > 0, but " << parsed << " was found!" << std::endl;
             return {};
         }
         return {parsed};
     } catch (const std::exception& ex) {
-        std::cerr << "Could not parse integer argument! Found string: \"" << str << "\"";
+        std::cerr << "Could not parse integer argument! Found string: \"" << str << "\"" << std::endl;
         return {};
     }
 }

@@ -230,6 +230,8 @@ int main(int argc, char* argv[]) {
         "comparing output(s).",
         "l"
     );
+    ArgParse::StringOption order("PATTERN");
+    parser.addOption(&order, "order", "Specify a custom invocation ordering to follow.", "O");
     ArgParse::StringOption out_arg("FILE", "-");
     parser.addOption(&out_arg, "out", "Specify a file to output to. By default, output prints to stdout.", "o");
     ArgParse::Flag verbose;
@@ -242,6 +244,20 @@ int main(int argc, char* argv[]) {
         "raytrace",
         "Treat the input as a ray tracing substage when creating an input template. Enables --template implicitly.",
         "r"
+    );
+    ArgParse::StringOption schedule("MODE", "round-robin");
+    parser.addOption(
+        &schedule,
+        "schedule",
+        "Select an invocation scheduling mode from {\"random\", \"round-robin\" [default], and \"sequential\"}.",
+        "m"
+    );
+    ArgParse::UintOption seed("SEED", 0);
+    parser.addOption(
+        &seed,
+        "seed",
+        "Specify the seed for random scheduling (selects that mode implicitly). The seed must be a whole number.",
+        "e"
     );
     ArgParse::StringOption set_arg("KEY_VAL");
     parser.addOption(
@@ -345,8 +361,35 @@ int main(int argc, char* argv[]) {
     }
 
     Scheduler scheduler;
-    scheduler.setMode(Scheduler::Mode::ROUND_ROBIN);
-    // TODO: include controls for the scheduler here
+    if (seed.isPresent())
+        scheduler.setMode(Scheduler::Mode::RANDOM, seed.getValue());
+    else if (schedule.isPresent()) {
+        Trie scheduling_modes;
+        scheduling_modes.insert("random", Scheduler::Mode::RANDOM);
+        scheduling_modes.insert("round-robin", Scheduler::Mode::ROUND_ROBIN);
+        scheduling_modes.insert("sequential", Scheduler::Mode::SEQUENTIAL);
+
+        auto [found, missing] = scheduling_modes.next(schedule.getValue());
+        if (found == nullptr) {
+            std::cerr << "Could not select scheduling mode from \"" << scheduling_modes.getValue() << "\"!";
+            return ReturnCode::BAD_ARGS;
+        }
+        auto mode = static_cast<Scheduler::Mode>(found->getValue());
+        auto to_seed = scheduler.setMode(mode, 0);
+        if (mode == Scheduler::Mode::RANDOM) {
+            assert(to_seed != 0);
+            std::cerr << "Random seed: " << to_seed << std::endl;
+        }
+    } else
+        scheduler.setMode(Scheduler::Mode::ROUND_ROBIN);
+
+    if (order.isPresent()) {
+        bool ok = scheduler.applyPattern(order.getValue());
+        if (!ok) {
+            std::cerr << "Could not apply invocation pattern \"" << order.getValue() << "\"!";
+            return ReturnCode::BAD_ARGS;
+        }
+    }
 
 #define REQUIRE(COND) \
     { \

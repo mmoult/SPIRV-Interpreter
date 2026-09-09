@@ -27,7 +27,7 @@ class Scheduler {
     unsigned next = 0;
 
 public:
-    enum class Mode {
+    enum Mode : unsigned {
         RANDOM,
         ROUND_ROBIN,
         SEQUENTIAL,

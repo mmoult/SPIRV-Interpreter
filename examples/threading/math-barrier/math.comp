@@ -28,11 +28,11 @@ void main()
 {
     shared_samples[gl_LocalInvocationIndex] = in_buf.values[gl_LocalInvocationIndex];
     barrier();
-    for (mediump uint i = gl_WorkGroupSize.x; i > 0u; i = i >> 1u)
+    for (mediump uint i = gl_WorkGroupSize.x / 2u; i > 0u; i >>= 1u)
     {
         if (gl_LocalInvocationIndex < i)
         {
-            shared_samples[gl_LocalInvocationIndex] += shared_samples[i - gl_LocalInvocationIndex - 1];
+            shared_samples[gl_LocalInvocationIndex] += shared_samples[gl_LocalInvocationIndex + i];
         }
         barrier();
     }

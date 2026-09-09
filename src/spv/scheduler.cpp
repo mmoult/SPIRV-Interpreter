@@ -25,7 +25,7 @@ unsigned Scheduler::setMode(Mode new_mode, unsigned seed) {
     mode = new_mode;
     if (mode == Mode::RANDOM) {
         // If not specified, choose the seed from hardware randomness.
-        if (seed == 0) {
+        while (seed == 0) {
             // Choose a seed from hardware randomness, if available
             std::random_device rd;
             seed = rd();

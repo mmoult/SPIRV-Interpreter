@@ -34,11 +34,13 @@ def recursive_test(interp_path, launch_dir, verbose):
             seen = f.read()
         return seen == stdout
 
-    def print_case(status, root, program, to_print, num=None):
+    def print_case(status, root, program, to_print, num=None, seed=""):
         if to_print:
-            print(status, os.path.relpath(os.path.join(root, program), launch_dir), end=' ')
+            print(status, os.path.relpath(os.path.join(root, program), launch_dir), end='')
             if len(configs) > 1:
-                print("#", num, sep='', end='')
+                print(" #", num, sep='', end='')
+            if len(seed) > 0:
+                print(" R", seed, sep='', end='')
             print()
 
     # Read through passlist.txt:
@@ -81,7 +83,7 @@ def recursive_test(interp_path, launch_dir, verbose):
         if program is not None and not multiple_programs:
             for num, files in configs.items():
                 # A timeout of 5 is 100,000 dynamic instruction executions
-                cmd = [interp_path, program, "-T", "5"]
+                cmd = [interp_path, program, "-T", "5", "-m", "rand"]
                 output = False
                 out_file = None
 
@@ -124,6 +126,7 @@ def recursive_test(interp_path, launch_dir, verbose):
 
                 status = "?"
                 to_print = verbose
+                seed = ""
                 if output:
                     total += 1
                     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root, check=False)
@@ -132,10 +135,14 @@ def recursive_test(interp_path, launch_dir, verbose):
                         status = "X"
                         fails += 1
                         to_print = True  # print errors, regardless of whether verbose is on
+
+                        # Random seed: X
+                        seed = res.stderr.decode("utf-8")
+                        seed = seed[13:seed.index("\n")]
                     else:
                         status = "-"
 
-                print_case(status, root, program, to_print, num if len(configs) > 1 else None)
+                print_case(status, root, program, to_print, num if len(configs) > 1 else None, seed)
             if len(configs) == 0:
                 print_case("?", root, program, verbose)
 

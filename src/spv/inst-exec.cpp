@@ -119,6 +119,17 @@ static Value* atomic_bin_op(
     return ret;
 }
 
+#define CHECK_DEMOTE \
+    if (demoted) \
+        break;
+
+#define BARRIER \
+    if (threads[invocation].status != Invocation::Status::WAKE) { \
+        inc_pc = false; \
+        action = Action::BLOCK; \
+        break; \
+    }
+
 Instruction::Action Instruction::execute(
     // NOTE: The instruction is strictly forbidden from modifying any but the selected frame stack
     std::vector<Invocation>& threads,
@@ -258,16 +269,14 @@ Instruction::Action Instruction::execute(
         break;
     }
     case spv::OpStore: {  // 62
-        if (demoted)
-            break;
+        CHECK_DEMOTE;
         Value* val = getValue(1, data);
         Value& store_to = *getFromPointer(0, data);
         store_to.copyFrom(*val);
         break;
     }
     case spv::OpImageWrite: {  // 99
-        if (demoted)
-            break;
+        CHECK_DEMOTE;
         Value* image_v = getValue(0, data);
         if (image_v->getType().getBase() != DataType::IMAGE)
             throw std::runtime_error("The third operand to ImageWrite must be an image!");
@@ -435,11 +444,7 @@ Instruction::Action Instruction::execute(
         //   "An invocation will not execute a dynamic instance of this instruction (X') until all invocations in its
         //    quad have executed all dynamic instances that are program-ordered before X'."
         // The action must be performed once the thread is unblocked.
-        if (threads[invocation].status != Invocation::Status::WAKE) {
-            inc_pc = false;
-            action = Action::BLOCK;
-            break;
-        }
+        BARRIER;
 
         if (num_invocations % 4 != 0)
             throw std::runtime_error("GroupNonUniformQuadSwap must be called with exactly 4 invocations in the group!");
@@ -763,8 +768,9 @@ Instruction::Action Instruction::execute(
         break;
     }
     case spv::OpCooperativeMatrixStoreKHR: {  // 4458
-        if (demoted)
-            break;
+        CHECK_DEMOTE;
+        BARRIER;
+
         Pointer pointer = *static_cast<Pointer*>(getValue(0, data));
         unsigned back_index = pointer.decompose();
         Value* head = getHeadValue(pointer, data);
@@ -812,6 +818,8 @@ Instruction::Action Instruction::execute(
         break;
     }
     case spv::OpCooperativeMatrixMulAddKHR: {  // 4459
+        BARRIER;
+
         // A * B + C, where
         // - A has M rows and K columns
         // - B has K rows and N columns
