@@ -23,18 +23,18 @@
 #include "values/raytrace/shader-binding-table.hpp"
 #include "values/value.hpp"
 
-constexpr auto VERSION = "0.10.0";
+constexpr auto VERSION = "0.11.0";
 
 enum ReturnCode : int {
     OK = 0,
     INFO = 0,
-    BAD_ARGS = 2,
-    BAD_FILE = 3,
-    BAD_PARSE = 4,
-    BAD_PROGRAM = 5,
-    BAD_PROG_INPUT = 6,
-    FAILED_EXE = 7,
-    BAD_COMPARE = 8,
+    BAD_ARGS = 1,
+    BAD_FILE = 2,
+    BAD_PARSE = 3,
+    BAD_PROGRAM = 4,
+    BAD_PROG_INPUT = 5,
+    FAILED_EXE = 6,
+    BAD_COMPARE = 7,
 };
 
 Yaml yaml;

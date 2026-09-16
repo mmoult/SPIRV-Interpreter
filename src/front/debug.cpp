@@ -103,7 +103,7 @@ Debugger::Debugger(const InstList& insts, ValueFormat& format, unsigned num_invo
     progCommands.insert("all", Cmd::ALL);
     progCommands.insert("at", Cmd::AT);
 
-    // schedCommands.insert("custom", Cmd::CUSTOM);
+    schedCommands.insert("custom", Cmd::CUSTOM);
     schedCommands.insert("random", Cmd::RANDOM);
     schedCommands.insert("round-robin", Cmd::ROUND);
     schedCommands.insert("sequential", Cmd::SEQUENTIAL);
@@ -299,7 +299,7 @@ Debugger::Action Debugger::invoke(const std::vector<Invocation>& threads, unsign
                 "active, but if it isn't, it shouldn't be executed.",
                 "  <invoc>"
             );
-            // console.print("Specify a custom ordering pattern", "  custom <pattern>");
+            console.print("Specify a custom ordering pattern", "  custom <pattern>");
             console.print(
                 "Invocations execute a single instruction before ceding control to a randomly chosen thread.",
                 "  random"
@@ -586,9 +586,12 @@ Debugger::Action Debugger::invoke(const std::vector<Invocation>& threads, unsign
                         break;
                     }
                     warnExtraArgs("schedule custom <pattern>", 0, tokens.size() - 3);
-                    if (!scheduler.applyPattern(tokens[2]))
+                    if (!scheduler.applyPattern(tokens[2])) {
                         std::cout << "The provided pattern could not be parsed!" << std::endl;
-                    break;
+                        break;
+                    }
+                    stopNext = true;
+                    return Action::RETRY;
                 }
                 case Cmd::RANDOM: {
                     unsigned seed = 0;
