@@ -23,7 +23,7 @@ protected:
         bool special;
         unsigned value;
 
-        Token(bool special, unsigned value): special(special), value(value) {}
+        Token(bool special, unsigned value) : special(special), value(value) {}
     };
     std::vector<Token> pattern;
     unsigned pattern_index = 0;

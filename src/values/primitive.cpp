@@ -11,6 +11,7 @@
 #include "../util/bits.hpp"
 #include "../util/compare.hpp"
 #include "../util/fpconvert.hpp"
+#include "aggregate.hpp"
 
 void Primitive::copyFrom(const Value& new_val) noexcept(false) {
     // Verify that the other is a primitive type
@@ -130,48 +131,69 @@ uint64_t Primitive::getRaw() const {
 }
 
 void Primitive::copyReinterp(const Value& other) noexcept(false) {
-    // We can reinterpret from any other primitive
-    if (!other.getType().isPrimitive())
-        throw std::runtime_error("Cannot copy reinterp from other non-primitive value!");
     const auto to_base = type.getBase();
     const auto to_prec = type.getPrecision();
-    uint64_t from_other = static_cast<const Primitive&>(other).getRaw();
 
-    switch (to_base) {
-    case FLOAT:
-        switch (to_prec) {
-        case 64:
+    const auto otype = other.getType();
+
+    // We can reinterpret from any other primitive
+    if (otype.isPrimitive()) {
+        uint64_t from_other = static_cast<const Primitive&>(other).getRaw();
+
+        switch (to_base) {
+        case FLOAT:
+            switch (to_prec) {
+            case 64:
+                data.all = from_other;
+                break;
+            case 32:
+                data.f = static_cast<double>(std::bit_cast<float>(static_cast<uint32_t>(from_other)));
+                break;
+            case 16:
+                data.f = static_cast<double>(FpConvert::decode_flt16(static_cast<uint16_t>(from_other)));
+                break;
+            default:
+                assert(false);  // unsupported precision
+                break;
+            }
+            break;
+        case UINT:
             data.all = from_other;
             break;
-        case 32:
-            data.f = static_cast<double>(std::bit_cast<float>(static_cast<uint32_t>(from_other)));
-            break;
-        case 16:
-            data.f = static_cast<double>(FpConvert::decode_flt16(static_cast<uint16_t>(from_other)));
-            break;
-        default:
-            assert(false);  // unsupported precision
+        case INT: {
+            data.all = from_other;
+            uint64_t bitmask = Bits::ones<uint64_t>(to_prec);
+            // If the sign bit for the precision is set, copy across to all emulation bits
+            if (data.all & (1ULL << (to_prec - 1)))
+                data.all |= ~bitmask;
+            else
+                data.all &= bitmask;
             break;
         }
-        break;
-    case UINT:
-        data.all = from_other;
-        break;
-    case INT: {
-        data.all = from_other;
-        uint64_t bitmask = Bits::ones<uint64_t>(to_prec);
-        // If the sign bit for the precision is set, copy across to all emulation bits
-        if (data.all & (1ULL << (to_prec - 1)))
-            data.all |= ~bitmask;
-        else
-            data.all &= bitmask;
-        break;
-    }
-    default:
-        assert(to_base == BOOL);
-        data.all = 0;
-        data.b = (from_other != 0);
-        break;
+        default:
+            assert(to_base == BOOL);
+            data.all = 0;
+            data.b = (from_other != 0);
+            break;
+        }
+    } else if (otype.getBase() == DataType::ARRAY) {
+        // The other is an aggregate. If the bit count sums, we can reinterpret
+        const Aggregate& agg = static_cast<const Aggregate&>(other);
+        if (!otype.getElement().isPrimitive())
+            throw std::runtime_error("Cannot reinterpret aggregate of non-primitives as a primitive!");
+        unsigned bit_sum = 0;
+        decltype(data.all) raw = 0;
+        for (const Value* element : agg) {
+            raw |= static_cast<const Primitive*>(element)->getRaw() << bit_sum;
+            bit_sum += element->getType().getPrecision();
+        }
+        if (bit_sum != to_prec)
+            throw std::runtime_error("Cannot reinterpret aggregate with non-matching bit total as a primitive!");
+
+        Primitive prim(raw, bit_sum);
+        copyFrom(prim);
+    } else {
+        throw std::runtime_error("Cannot reinterpret non-primitive type as a primitive!");
     }
 }
 

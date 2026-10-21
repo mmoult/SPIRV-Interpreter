@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "../../external/GLSL.std.450.h"
+#include "../../external/OpenCL.std.h"
 #include "../front/console.hpp"
 #include "../spv/ray-flags.hpp"
 #include "../util/array-math.hpp"
@@ -536,7 +537,10 @@ using UnOp = std::function<Primitive(const Primitive*)>;
 static void
 element_unary_op([[maybe_unused]] DataType chtype, unsigned unary, const OpDst& dst, DataView& data, UnOp& op) {
     const Value* src1 = data[unary].getValue();
-    assert(element_base(*src1) == chtype && "Cannot do unary operation on other-typed element!");
+    assert(
+        (chtype == DataType::VOID || element_base(*src1) == chtype) &&
+        "Cannot do unary operation on other-typed element!"
+    );
 
     const Type& type = *data[dst.type].getType();
     Value* res = type.construct();
@@ -729,16 +733,19 @@ static void element_tern_op(
         break; \
     }
 #define E_TERN_OP(E_TYPE, OP_LAMBDA) \
-    OpDst dst {checkRef(dst_type_at, data_len), result_at}; \
-    element_tern_op( \
-        DataType::E_TYPE, \
-        checkRef(src_at, data_len), \
-        checkRef(src_at + 1, data_len), \
-        checkRef(src_at + 2, data_len), \
-        dst, \
-        data, \
-        OP_LAMBDA \
-    );
+    { \
+        OpDst dst {checkRef(dst_type_at, data_len), result_at}; \
+        element_tern_op( \
+            DataType::E_TYPE, \
+            checkRef(src_at, data_len), \
+            checkRef(src_at + 1, data_len), \
+            checkRef(src_at + 2, data_len), \
+            dst, \
+            data, \
+            OP_LAMBDA \
+        ); \
+        break; \
+    }
 
 bool Instruction::makeResult(DataView& data, unsigned location, Instruction::DecoQueue* queue) const noexcept(false) {
     if (!hasResult && opcode != spv::OpTypeForwardPointer)
@@ -795,9 +802,10 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
         case Extension::NONSEMANTIC_SHADER_DEBUG_INFO:
         case Extension::NONSEMANTIC_CLSPV_REFLECTION:
             break;  // do nothing presently. Debug info only which could be printed.
-        case Extension::NONSEMANTIC_DEBUG_PRINTF: {
+        case Extension::NONSEMANTIC_DEBUG_PRINTF:
             return makeResultPrintf(data);
-        }
+        case Extension::OPENCL_STD:
+            return makeResultOpenCl(data, result_at);
         default:
             assert(false);
             throw std::runtime_error("Attempt to use `OpExtInst` from unsupported extension!");
@@ -2284,7 +2292,6 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             return (a->data.f * b->data.f) + c->data.f;
         };
         E_TERN_OP(FLOAT, fx);
-        break;
     }
     case spv::OpConvertUToAccelerationStructureKHR: {  // 4447
         assert(hasResultType);
@@ -2678,7 +2685,6 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
     // https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.pdf
     // extension opcode at operand[3]
     unsigned ext_opcode = std::get<unsigned>(operands[3].raw);
-    bool made = true;
 
     constexpr unsigned dst_type_at = 0;
     constexpr unsigned src_at = 4;
@@ -2717,7 +2723,8 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
     case GLSLstd450FAbs:  // 4
         TYPICAL_E_UNARY_OP(FLOAT, std::abs(a->data.f));
     case GLSLstd450SAbs:  // 5
-        TYPICAL_E_UNARY_OP(INT, (a->data.i > 0) ? a->data.i : -a->data.i);
+        // Can be either signed or unsigned int, but always interpreted as signed
+        TYPICAL_E_UNARY_OP(VOID, (a->data.i > 0) ? a->data.i : -a->data.i);
     case GLSLstd450FSign: {  // 6
         UnOp op = [](const Primitive* a) {
             bool sgnbit = std::signbit(a->data.f);
@@ -2919,7 +2926,6 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
             return std::clamp(x->data.f, minVal->data.f, maxVal->data.f);
         };
         E_TERN_OP(FLOAT, fx);
-        break;
     }
     case GLSLstd450UClamp: {  // 44
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
@@ -2928,7 +2934,6 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
             return std::clamp(x->data.u, minVal->data.u, maxVal->data.u);
         };
         E_TERN_OP(UINT, fx);
-        break;
     }
     case GLSLstd450SClamp: {  // 45
         TernOp fx = [](const Primitive* x, const Primitive* minVal, const Primitive* maxVal) {
@@ -2937,7 +2942,6 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
             return std::clamp(x->data.i, minVal->data.i, maxVal->data.i);
         };
         E_TERN_OP(INT, fx);
-        break;
     }
     case GLSLstd450FMix: {  // 46
         //   GLSL's FMix = x * (1 - a) + y * a
@@ -2948,7 +2952,6 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
             return x->data.f * (1.0 - a->data.f) + y->data.f * a->data.f;
         };
         E_TERN_OP(FLOAT, fx);
-        break;
     }
     // GLSLstd450IMix missing documentation
     case GLSLstd450Step:  // 48
@@ -2959,14 +2962,12 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
             return t * t * (3.0 - 2.0 * t);
         };
         E_TERN_OP(FLOAT, fx);
-        break;
     }
     case GLSLstd450Fma: {  // 50
         TernOp fx = [](const Primitive* a, const Primitive* b, const Primitive* c) {
             return (a->data.f * b->data.f) + c->data.f;
         };
         E_TERN_OP(FLOAT, fx);
-        break;
     }
     case GLSLstd450PackSnorm2x16:  // 56
     case GLSLstd450PackUnorm2x16:  // 57
@@ -3415,10 +3416,53 @@ bool Instruction::makeResultGlsl(DataView& data, unsigned result_at) const noexc
             );
         };
         E_TERN_OP(FLOAT, fx);
+    }
+    }
+    return true;
+}
+
+bool Instruction::makeResultOpenCl(DataView& data, unsigned result_at) const noexcept(false) {
+    unsigned data_len = data.getBound();
+    // https://registry.khronos.org/SPIR-V/specs/unified1/OpenCL.ExtendedInstructionSet.100.html
+    // extension opcode at operand[3]
+    unsigned ext_opcode = std::get<unsigned>(operands[3].raw);
+
+    constexpr unsigned dst_type_at = 0;
+    constexpr unsigned src_at = 4;
+
+    switch (ext_opcode) {
+    default: {
+        std::stringstream err;
+        err << "Unknown OpenCL opcode: " << ext_opcode;
+        throw std::runtime_error(err.str());
+    }
+    case OpenCLLIB::Entrypoints::Fma: {  // 26
+        TernOp fx = [](const Primitive* a, const Primitive* b, const Primitive* c) {
+            return (a->data.f * b->data.f) + c->data.f;
+        };
+        E_TERN_OP(FLOAT, fx);
+    }
+    case OpenCLLIB::Entrypoints::Vloadn: {  // 171
+        /*
+        // %call2_i = OpExtInst %v4float %1 vloadn %conv1_i %input_data 4
+        // n components from the address computed as (p + (offset * n))
+        const auto& offset = *getValue(src_at + 0, data);
+        const auto& p = *getValue(src_at + 1, data);
+        unsigned n = std::get<unsigned>(operands[src_at + 2].raw);
+
+        const Type* res_type = getType(dst_type_at, data);
+        unsigned offs = static_cast<const Primitive&>(offset).data.u;
+        Value* ret = res_type->construct();
+        assert(ret->getType().getBase() == DataType::ARRAY && "Vloadn result type must be an array!");
+        Array& arr = *static_cast<Array*>(ret);
+        */
+
+        throw std::runtime_error("Vloadn not implemented yet!");  // TODO: implement Vloadn
+        // data[result_at].redefine(ret);
         break;
     }
     }
-    return made;
+    return true;
 }
 #undef TYPICAL_E_BIN_OP
 #undef INT_E_BIN_OP

@@ -83,6 +83,7 @@ private:
     Value* getFromPointer(unsigned index, DataView& data) const noexcept(false);
 
     bool makeResultGlsl(DataView& data, unsigned result_at) const noexcept(false);
+    bool makeResultOpenCl(DataView& data, unsigned result_at) const noexcept(false);
     bool makeResultPrintf(DataView& data) const noexcept(false);
 
     /// @brief Resolves an image operation's coordinate and qualifier operands into the point it accesses.

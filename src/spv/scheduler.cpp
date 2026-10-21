@@ -171,7 +171,7 @@ bool Scheduler::applyPattern(const std::string& pattern_str) {
         for (int i = start; i <= stop; i += step) {
             if (i > start && range_type == RangeType::DOT)
                 parsed.emplace_back(true, 0);
-            unsigned val = static_cast<unsigned>(reverse? -i : i);
+            unsigned val = static_cast<unsigned>(reverse ? -i : i);
             parsed.emplace_back(false, val);
         }
         range_type = RangeType::NONE;

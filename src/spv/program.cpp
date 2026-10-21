@@ -289,6 +289,10 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
             break;
         [[maybe_unused]] bool made = inst.makeResult(data, i, &decorations);
         assert(made);
+        // If the parameter is a pointer, where does the pointed data live? The naive approach is that it exists as a
+        // single instance. The actual answer is that no such constraint exists.
+        // TODO: Support pointers in the interface. I think this is best done by allowing definitions of scratch space
+        // (arrays of arbitrary type), then the pointers can point to that location.
         process_visible_io(inst, 0);
     }
 

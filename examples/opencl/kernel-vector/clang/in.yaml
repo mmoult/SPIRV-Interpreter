@@ -1,0 +1,14 @@
+# All three of these values are actually pointers to float data. We must support pointers for this shader test to be
+# supported. Until then, we get out of bounds accesses.
+add_vec: 1.5
+
+input_data: 2.6
+
+mul_vec: 3.7
+
+out: [
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0
+]
