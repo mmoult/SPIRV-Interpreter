@@ -1,0 +1,5 @@
+payload:
+  weights: [ 0.25, 0.25, 0.5 ]
+  distance: 2.0
+  hits: 1
+  primitive: 1

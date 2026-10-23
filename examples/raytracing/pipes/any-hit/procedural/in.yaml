@@ -1,0 +1,44 @@
+# Origin (0, 0, 0), direction (0, 0, 1). Passes through a procedural box, which is not opaque, so the hit reported by
+# the intersection shader (at t = 2) goes through the any hit shader. The any hit shader accepts it (primitive 1), and
+# should see t = 2 as the distance of the hit.
+ray:
+  origin: [ 0.0, 0.0, 0.0 ]
+  direction: [ 0.0, 0.0, 1.0 ]
+
+opacity:
+  alpha: [ 0.0, 1.0 ]
+
+topLevelAS:
+  tlas: [ 1, 0 ]
+  box_nodes: []
+  instance_nodes:
+  -
+    world_to_obj:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+    - [ 0.0, 0.0, 0.0 ]
+    child_node: [ 3, 0 ]
+    id: 0
+    custom_index: 0
+    mask: 255
+    sbt_record_offset: 0
+  triangle_nodes: []
+  procedural_nodes:
+  -
+    min_bounds: [ -1.0, -1.0, 1.5 ]
+    max_bounds: [ 1.0, 1.0, 2.5 ]
+    opaque: false
+    geometry_index: 0
+    primitive_index: 1
+
+'@shader-binding-table':
+  miss_records:
+  - { shader: "../substages/rmiss.spv", input: "" }
+  hit_group_records:
+  -
+    any: { shader: "../substages/rahit.spv", input: "" }
+    closest: { shader: "../substages/rchit.spv", input: "" }
+    # The intersection shader is a new addition to this example not present in root.
+    intersection: { shader: "./substages/rint.spv", input: "" }
+  callable_records: []

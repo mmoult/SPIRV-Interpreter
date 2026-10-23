@@ -1,0 +1,5 @@
+payload:
+  weights: [ 0.0, 0.0, 0.2 ]
+  distance: -1.0
+  hits: 0
+  primitive: 4294967295

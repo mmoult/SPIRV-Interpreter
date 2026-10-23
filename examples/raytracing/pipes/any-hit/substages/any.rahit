@@ -1,0 +1,34 @@
+/* © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+#version 460
+#extension GL_EXT_ray_tracing : enable
+
+struct HitInfo
+{
+    vec3 weights;    // Barycentric weights of the closest hit
+    float distance;  // Distance of the latest accepted hit
+    uint hits;       // Number of hits accepted
+    uint primitive;  // Primitive of the closest hit
+};
+layout(location = 0) rayPayloadInEXT HitInfo payload;
+
+// The opacity of each primitive is in a buffer bound to the pipeline.
+layout(binding = 2, set = 0) readonly buffer Opacity
+{
+    float alpha[];
+} opacity;
+
+void main()
+{
+    // Alpha test: reject hits on primitives which are not opaque enough.
+    if (opacity.alpha[gl_PrimitiveID] < 0.5)
+         ignoreIntersectionEXT;
+
+    // Count the hits which are accepted and note the distance of the latest. Here, gl_RayTmaxEXT is the distance of
+    // the candidate hit.
+    payload.hits += 1u;
+    payload.distance = gl_RayTmaxEXT;
+}

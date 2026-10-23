@@ -149,18 +149,25 @@ void Program::launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack
         AccelStruct* as = launched_from.getAccelStruct();
 
         const InstanceNode* instance = nullptr;
+        unsigned primitive_index = 0;
+        // The ray's maximum t is the best committed hit so far (or the original). An any hit shader instead sees the t
+        // of the candidate it is considering.
+        double ray_t_max = (as != nullptr) ? as->getTrace().rayTMax : 0.0;
         glm::vec2 barycentrics(0.0);
         if (stage == RtStageKind::CLOSEST || stage == RtStageKind::INTERSECTION || stage == RtStageKind::ANY_HIT) {
             assert(as != nullptr);
             Intersection& cand = (stage == RtStageKind::CLOSEST) ? as->getCommitted() : as->getCandidate();
             instance = cand.instance;
+            primitive_index = cand.primitiveIndex;
+            if (stage == RtStageKind::ANY_HIT)
+                ray_t_max = cand.hitT;
             barycentrics = cand.barycentrics;
         }
 
         // the instruction which called launchSubstage is responsible for cleaning up the data too.
         DataView& data = *rt_stage.data->clone();
         launched_from.setRtData(data);
-        rt_stage.setUpInputs(data, as, *launched_from.getRtResult(), instance);
+        rt_stage.setUpInputs(data, as, *launched_from.getRtPayload(), instance, primitive_index, ray_t_max);
 
         Value* hit_attrib = rt_stage.setUpHitAttribute(stage, data, barycentrics, launched_from.getHitAttribute());
         if (hit_attrib != nullptr) {

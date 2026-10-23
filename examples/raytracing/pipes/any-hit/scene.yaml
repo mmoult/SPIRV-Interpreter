@@ -1,0 +1,54 @@
+# Read with https://github.com/mmoult/scene-builder
+# scene-builder -w -r -i 2 scene.yaml -o scene.obj
+#
+# The scene of in0.yaml, in1.yaml, and in2.yaml. Two triangles stacked along +Z in one geometry, neither perpendicular
+# to the rays, which all point along +Z. Both are not opaque so that the any hit shader runs for them. The any hit
+# shader rejects primitive 0, the nearer one.
+#   primitive 0: vertices (-2, 0, 1.5), (-0.5, -4, 2.5), (3.5, 3, 2). Obtuse and counterclockwise, the larger.
+#   primitive 1: vertices (2, -1.5, 3.5), (-3, -1.5, 2.5), (0.5, 1.5, 3). Acute and clockwise.
+# The rays are drawn from the points where they meet a triangle:
+#   in0: through both, hits primitive 0 (t about 1.88, rejected) then primitive 1 (t = 3, accepted)
+#   in1: through primitive 0 only (t about 1.98, rejected), so nothing is hit
+#   in2: through primitive 1 only (t about 2.63, accepted)
+# The procedural box of in3.yaml is in scene-procedural.yaml.
+data:
+- origin: [0.0, 0.0, 0.0]
+  direction: [0.0, 0.0, 1.0]
+  min: 0.001
+  max: 5.0
+- point: [0.0, 0.0, 0.0]
+- point: [0.0, 0.0, 1.8774]
+- point: [0.0, 0.0, 3.0]
+- origin: [1.5, 1.0, 0.0]
+  direction: [0.0, 0.0, 1.0]
+  min: 0.001
+  max: 5.0
+- point: [1.5, 1.0, 0.0]
+- point: [1.5, 1.0, 1.9811]
+- origin: [-2.25, -1.25, 0.0]
+  direction: [0.0, 0.0, 1.0]
+  min: 0.001
+  max: 5.0
+- point: [-2.25, -1.25, 0.0]
+- point: [-2.25, -1.25, 2.6333]
+- instance:
+    data:
+    - strip:
+      - [-2.0, 0.0, 1.5]
+      - [-0.5, -4.0, 2.5]
+      - [3.5, 3.0, 2.0]
+      color: [140, 220, 120]
+      opaque: false
+      geometry_index: 0
+      primitive_index: 0
+    - strip:
+      - [2.0, -1.5, 3.5]
+      - [-3.0, -1.5, 2.5]
+      - [0.5, 1.5, 3.0]
+      color: [255, 190, 80]
+      opaque: false
+      geometry_index: 0
+      primitive_index: 1
+  scale: [1, 1, 1]
+  rotate: [0, 0, 0]
+  translate: [0, 0, 0]

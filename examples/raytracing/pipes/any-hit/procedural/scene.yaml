@@ -1,0 +1,23 @@
+# Read with https://github.com/mmoult/scene-builder
+# scene-builder -w -r -i 2 scene-procedural.yaml -o scene-procedural.obj
+#
+# One procedural box, which is not opaque, so the hit which the intersection shader reports (at t = 2) goes through the
+# any hit shader. The ray enters the box at t = 1.5.
+data:
+- origin: [0.0, 0.0, 0.0]
+  direction: [0.0, 0.0, 1.0]
+  min: 0.001
+  max: 5.0
+- point: [0.0, 0.0, 0.0]
+- point: [0.0, 0.0, 2.0]
+- instance:
+    data:
+    - min: [-1.0, -1.0, 1.5]
+      max: [1.0, 1.0, 2.5]
+      color: [90, 140, 255]
+      opaque: false
+      geometry_index: 0
+      primitive_index: 1
+  scale: [1, 1, 1]
+  rotate: [0, 0, 0]
+  translate: [0, 0, 0]

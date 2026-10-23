@@ -15,7 +15,14 @@ static void copy_into(Value* into, std::vector<Primitive>& src) {
         into_arr[i]->copyFrom(src[i]);
 }
 
-void RayTraceSubstage::setUpInputs(DataView& dat, AccelStruct* as, Value& payload, const InstanceNode* instance) const {
+void RayTraceSubstage::setUpInputs(
+    DataView& dat,
+    AccelStruct* as,
+    Value& payload,
+    const InstanceNode* instance,
+    unsigned primitive_index,
+    double ray_t_max
+) const {
 #define REQUIRE_AS(VAR_TYPE) \
     if (as == nullptr) { \
         throw std::runtime_error("Cannot set up " VAR_TYPE " variable without an acceleration struct in the frame!"); \
@@ -41,8 +48,7 @@ void RayTraceSubstage::setUpInputs(DataView& dat, AccelStruct* as, Value& payloa
     }
     if (!rayTMax.empty()) {
         REQUIRE_AS("ray t maximum");
-        const Trace& trace = as->getTrace();
-        Primitive tmax(trace.rayTMax);
+        Primitive tmax(ray_t_max);
         for (unsigned loc : rayTMax) {
             Variable* var = dat[loc].getVariable();
             assert(var != nullptr);
@@ -69,6 +75,12 @@ void RayTraceSubstage::setUpInputs(DataView& dat, AccelStruct* as, Value& payloa
             assert(var != nullptr);
             var->getVal().copyFrom(geom_index);
         }
+    }
+    Primitive primitive(primitive_index);
+    for (unsigned loc : primitiveId) {
+        Variable* var = dat[loc].getVariable();
+        assert(var != nullptr);
+        var->getVal().copyFrom(primitive);
     }
     Primitive custom_idx((instance == nullptr) ? 0 : instance->getCustomIndex());
     for (unsigned loc : instanceCustomIndex) {
@@ -118,6 +130,9 @@ bool RayTraceSubstage::handleStaticInst(const Instruction& inst) {
         return true;
     case spv::BuiltIn::BuiltInRayGeometryIndexKHR:
         geomIndex.push_back(loc);
+        return true;
+    case spv::BuiltIn::BuiltInPrimitiveId:
+        primitiveId.push_back(loc);
         return true;
     default:
         break;
@@ -194,12 +209,12 @@ ValueMap RayTraceSubstage::getRecordInputs() const {
 
 void RayTraceSubstage::cleanUp(Frame& frame) const {
     DataView& dat = *frame.getRtData();
-    // Save from the frame rt result into the payload (as necessary)
+    // Save the substage's payload back to the one it was launched with (as necessary)
     auto stage = frame.getRtTrigger();
     if (payload != 0) {
         Variable* var = dat[payload].getVariable();
         assert(var != nullptr);
-        frame.getRtResult()->copyFrom(var->getVal());
+        frame.getRtPayload()->copyFrom(var->getVal());
     }
     // Save updates to the hit attribute (if present)
     if (stage == RtStageKind::INTERSECTION && hitAttribute != 0) {

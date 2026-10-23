@@ -32,8 +32,16 @@
 #include "frame.hpp"
 #include "token.hpp"
 
-static void
-invoke_substage_shader(RtStageKind kind, Frame& frame, AccelStruct& as, Value* hit_attrib, Value* payload = nullptr) {
+// The payload is both the input and output for closest hit and miss. Intersection and any hit use separate result
+// values to report up, so they take the payload of the trace separately (as trace_payload).
+static void invoke_substage_shader(
+    RtStageKind kind,
+    Frame& frame,
+    AccelStruct& as,
+    Value* hit_attrib,
+    Value* payload = nullptr,
+    Value* trace_payload = nullptr
+) {
     const Trace& trace = as.getTrace();
     int geom_index = 0;
     unsigned instance_sbt_offset = 0;
@@ -71,7 +79,7 @@ invoke_substage_shader(RtStageKind kind, Frame& frame, AccelStruct& as, Value* h
         break;
     }
     }
-    frame.triggerRaytrace(kind, index, payload, hit_attrib, as);
+    frame.triggerRaytrace(kind, index, payload, hit_attrib, as, trace_payload);
 }
 
 static Frame* get_launching_frame(std::vector<Frame*>& frame_stack, RtStageKind expected) {
@@ -557,7 +565,9 @@ Instruction::Action Instruction::execute(
                                                                                         : RtStageKind::INTERSECTION,
                     frame,
                     as,
-                    nullptr
+                    nullptr,
+                    nullptr,
+                    &getVariable(10, data)->getVal()
                 );
                 inc_pc = false;
                 break;
@@ -980,7 +990,16 @@ Instruction::Action Instruction::execute(
 
                 // Invoke the any hit shader if running a ray tracing pipeline and the geometry is non-opaque
                 if (!trace.getCandidate().isOpaque) {
-                    invoke_substage_shader(RtStageKind::ANY_HIT, frame, *accel_struct, launch_frame->getHitAttribute());
+                    // The any hit shader sees the reported t as the distance of the candidate hit
+                    accel_struct->getCandidate().hitT = t_hit;
+                    invoke_substage_shader(
+                        RtStageKind::ANY_HIT,
+                        frame,
+                        *accel_struct,
+                        launch_frame->getHitAttribute(),
+                        nullptr,
+                        launch_frame->getRtPayload()
+                    );
                     inc_pc = false;
                     break;
                 }

@@ -1,0 +1,63 @@
+# Origin (-2.25, -1.25, 0), direction (0, 0, 1). Only passes through the farther triangle (primitive 1, hit at t of
+# about 2.63). The any hit shader accepts it and the closest hit shader reports it.
+ray:
+  origin: [ -2.25, -1.25, 0.0 ]
+  direction: [ 0.0, 0.0, 1.0 ]
+
+opacity:
+  alpha: [ 0.0, 1.0 ]
+
+topLevelAS:
+  tlas: [ 0, 0 ]
+  box_nodes:
+  -
+    min_bounds: [ -3.0, -4.0, 1.5 ]
+    max_bounds: [ 3.5, 3.0, 3.5 ]
+    child_nodes:
+    - [ 1, 0 ]
+  -
+    min_bounds: [ -3.0, -4.0, 1.5 ]
+    max_bounds: [ 3.5, 3.0, 3.5 ]
+    child_nodes:
+    - [ 2, 0 ]
+    - [ 2, 1 ]
+  instance_nodes:
+  -
+    world_to_obj:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+    - [ 0.0, 0.0, 0.0 ]
+    child_node: [ 0, 1 ]
+    id: 0
+    custom_index: 0
+    mask: 255
+    sbt_record_offset: 0
+  triangle_nodes:
+  -
+    geometry_index: 0
+    primitive_index: 0
+    opaque: false
+    vertices:
+    - [ -2.0, 0.0, 1.5 ]
+    - [ -0.5, -4.0, 2.5 ]
+    - [ 3.5, 3.0, 2.0 ]
+  -
+    geometry_index: 0
+    primitive_index: 1
+    opaque: false
+    vertices:
+    - [ 2.0, -1.5, 3.5 ]
+    - [ -3.0, -1.5, 2.5 ]
+    - [ 0.5, 1.5, 3.0 ]
+  procedural_nodes: []
+
+'@shader-binding-table':
+  miss_records:
+  - { shader: "./substages/rmiss.spv", input: "" }
+  hit_group_records:
+  -
+    any: { shader: "./substages/rahit.spv", input: "" }
+    closest: { shader: "./substages/rchit.spv", input: "" }
+    intersection: { shader: "", input: "" }
+  callable_records: []

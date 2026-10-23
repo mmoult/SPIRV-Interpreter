@@ -71,6 +71,9 @@ class Frame {
         // The result of an intersection or any hit shader is made for the launch and is owned by the frame until it is
         // taken. The others refer to values which are owned elsewhere.
         Value* result = nullptr;
+        // The payload of the trace which launched the substage. Only set when the result is not itself the payload
+        // (intersection and any hit), so the substage can still see and update the payload.
+        Value* payload = nullptr;
         // The hit attribute is made for an intersection shader. The frame owns it while it is launching an intersection
         // or closest hit shader, and otherwise it refers to the attribute of the frame which launched it.
         Value* hitAttribute = nullptr;
@@ -140,7 +143,14 @@ public:
         return rt.trigger;
     }
 
-    void triggerRaytrace(RtStageKind stage, unsigned index, Value* payload, Value* hit_attrib, AccelStruct& as);
+    void triggerRaytrace(
+        RtStageKind stage,
+        unsigned index,
+        Value* result,
+        Value* hit_attrib,
+        AccelStruct& as,
+        Value* payload = nullptr
+    );
     void triggerCallable(unsigned index, Value* callable, AccelStruct* as);
 
     void disableRaytrace();
@@ -174,6 +184,10 @@ public:
         Value* taken = this->rt.result;
         this->rt.result = nullptr;
         return taken;
+    }
+    // The payload which the substage reads and updates. For most stages, this is the same as the result.
+    Value* getRtPayload() const {
+        return (this->rt.payload != nullptr) ? this->rt.payload : this->rt.result;
     }
     Value* getHitAttribute() const {
         return this->rt.hitAttribute;

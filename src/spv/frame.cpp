@@ -46,11 +46,19 @@ void Frame::incPC() noexcept(false) {
     ++pc;
 }
 
-void Frame::triggerRaytrace(RtStageKind stage, unsigned index, Value* payload, Value* hit_attrib, AccelStruct& as) {
+void Frame::triggerRaytrace(
+    RtStageKind stage,
+    unsigned index,
+    Value* result,
+    Value* hit_attrib,
+    AccelStruct& as,
+    Value* payload
+) {
     this->rt.trigger = stage;
     this->rt.index = index;
     this->rt.as = &as;
-    this->rt.result = payload;
+    this->rt.result = result;
+    this->rt.payload = payload;
     this->rt.hitAttribute = hit_attrib;
     this->rt.callableReturning = false;
     if (this->rt.data != nullptr) {
@@ -64,6 +72,7 @@ void Frame::triggerCallable(unsigned index, Value* callable, AccelStruct* as) {
     this->rt.index = index;
     this->rt.as = as;
     this->rt.result = callable;
+    this->rt.payload = nullptr;
 
     // Callable substages have no hit attribute.
     this->rt.hitAttribute = nullptr;
@@ -82,6 +91,7 @@ void Frame::disableRaytrace() {
     this->rt.callableReturning = false;
     this->rt.index = 0;
     this->rt.as = nullptr;
+    this->rt.payload = nullptr;
     delete this->rt.data;
     this->rt.data = nullptr;
 }

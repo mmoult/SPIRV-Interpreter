@@ -25,6 +25,7 @@ struct RayTraceSubstage {
     std::vector<unsigned> rayTMin;
     std::vector<unsigned> instanceCustomIndex;
     std::vector<unsigned> geomIndex;
+    std::vector<unsigned> primitiveId;
 
     // The location of the output payload, which should be the only variable with storage class IncomingRayPayloadKHR.
     // Note: it is called "incoming" because the payload is input (and may be modified) before output.
@@ -62,7 +63,14 @@ public:
     bool handleStaticInst(const Instruction& inst);
 
     /// @brief Set up all inputs except the hit attribute, which takes some special processing
-    void setUpInputs(DataView& dat, AccelStruct* as, Value& payload, const InstanceNode* instance) const;
+    void setUpInputs(
+        DataView& dat,
+        AccelStruct* as,
+        Value& payload,
+        const InstanceNode* instance,
+        unsigned primitive_index,
+        double ray_t_max
+    ) const;
 
     /// @brief Set up the hit attribute
     /// The set up will fall into one of these four cases:
