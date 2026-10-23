@@ -142,40 +142,46 @@ RayTraceSubstage& Program::getSubstage(RtStageKind stage, unsigned index) {
 }
 
 void Program::launchSubstage(RtStageKind stage, std::vector<Frame*>& frame_stack) {
-    Frame& launched_from = *frame_stack.back();
-    RayTraceSubstage& rt_stage = getSubstage(stage, launched_from.getRtIndex());
-    // fill in builtins into the data
-    AccelStruct* as = launched_from.getAccelStruct();
+    try {
+        Frame& launched_from = *frame_stack.back();
+        RayTraceSubstage& rt_stage = getSubstage(stage, launched_from.getRtIndex());
+        // fill in builtins into the data
+        AccelStruct* as = launched_from.getAccelStruct();
 
-    const InstanceNode* instance = nullptr;
-    glm::vec2 barycentrics(0.0);
-    if (stage == RtStageKind::CLOSEST || stage == RtStageKind::INTERSECTION || stage == RtStageKind::ANY_HIT) {
-        assert(as != nullptr);
-        Intersection& cand = (stage == RtStageKind::CLOSEST) ? as->getCommitted() : as->getCandidate();
-        instance = cand.instance;
-        barycentrics = cand.barycentrics;
+        const InstanceNode* instance = nullptr;
+        glm::vec2 barycentrics(0.0);
+        if (stage == RtStageKind::CLOSEST || stage == RtStageKind::INTERSECTION || stage == RtStageKind::ANY_HIT) {
+            assert(as != nullptr);
+            Intersection& cand = (stage == RtStageKind::CLOSEST) ? as->getCommitted() : as->getCandidate();
+            instance = cand.instance;
+            barycentrics = cand.barycentrics;
+        }
+
+        // the instruction which called launchSubstage is responsible for cleaning up the data too.
+        DataView& data = *rt_stage.data->clone();
+        launched_from.setRtData(data);
+        rt_stage.setUpInputs(data, as, *launched_from.getRtResult(), instance);
+
+        Value* hit_attrib = rt_stage.setUpHitAttribute(stage, data, barycentrics, launched_from.getHitAttribute());
+        if (hit_attrib != nullptr) {
+            // We should not be generating a new hit attribute if there already was one. The setUpHitAttribute function
+            // currently prevents this categorically, but the following assert is a good future-proof for memory safety.
+            assert(launched_from.getHitAttribute() == nullptr);
+            launched_from.setHitAttribute(hit_attrib);
+        }
+        // Load from the extra input file
+        const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
+        std::vector<Data*> entry_args;  // no formal arguments to the substage's main
+
+        // Note: a frame assumes that it owns its data (and will therefore delete it upons deconstruction). We avoid
+        // this problem by making a change to instruction's execute and preventing data delete if the frame before has
+        // a raytracing trigger enabled.
+        frame_stack.push_back(new Frame(ep.getLocation(), entry_args, 0, data, as));
+    } catch (...) {
+        // The substage did not start, so the raytracing state which was set up for it is dropped.
+        frame_stack.back()->disableRaytrace();
+        throw;
     }
-
-    // the instruction which called launchSubstage is responsible for cleaning up the data too.
-    DataView& data = *rt_stage.data->clone();
-    launched_from.setRtData(data);
-    rt_stage.setUpInputs(data, as, *launched_from.getRtResult(), instance);
-
-    Value* hit_attrib = rt_stage.setUpHitAttribute(stage, data, barycentrics, launched_from.getHitAttribute());
-    if (hit_attrib != nullptr) {
-        // We should not be generating a new hit attribute if there already was one. The setUpHitAttribute function
-        // currently prevents this categorically, but the following assert is a good future-proof for memory safety.
-        assert(launched_from.getHitAttribute() == nullptr);
-        launched_from.setHitAttribute(hit_attrib);
-    }
-    // Load from the extra input file
-    const EntryPoint& ep = insts[rt_stage.entry].getEntryPoint(data);
-    std::vector<Data*> entry_args;  // no formal arguments to the substage's main
-
-    // Note: a frame assumes that it owns its data (and will therefore delete it upons deconstruction). We avoid
-    // this problem by making a change to instruction's execute and preventing data delete if the frame before has
-    // a raytracing trigger enabled.
-    frame_stack.push_back(new Frame(ep.getLocation(), entry_args, 0, data, as));
 }
 
 void Program::completeSubstage(RtStageKind stage, Frame& launched_from) {
@@ -845,9 +851,6 @@ void Program::execute(ExecutionInfo& info) {
             }
         }
     }
-
-    for (auto& thread : threads)
-        data.destroyView(thread.statics);
 }
 
 ValueMap Program::getVariables(const std::vector<unsigned>& vars, bool prefer_location) const {

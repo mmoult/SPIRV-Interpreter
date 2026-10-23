@@ -68,7 +68,11 @@ class Frame {
         // - bool hit data (for intersection)
         // - [intersection_valid: bool, continue_search: bool] (for any hit)
         // - callable_data for callable substages
+        // The result of an intersection or any hit shader is made for the launch and is owned by the frame until it is
+        // taken. The others refer to values which are owned elsewhere.
         Value* result = nullptr;
+        // The hit attribute is made for an intersection shader. The frame owns it while it is launching an intersection
+        // or closest hit shader, and otherwise it refers to the attribute of the frame which launched it.
         Value* hitAttribute = nullptr;
         // For CALLABLE only: false while entering the substage, true once returning from it.
         bool callableReturning = false;
@@ -165,8 +169,20 @@ public:
     Value* getRtResult() const {
         return this->rt.result;
     }
+    // Take the result from the frame, along with the responsibility to delete it.
+    Value* takeRtResult() {
+        Value* taken = this->rt.result;
+        this->rt.result = nullptr;
+        return taken;
+    }
     Value* getHitAttribute() const {
         return this->rt.hitAttribute;
+    }
+    // Take the hit attribute from the frame, along with the responsibility to delete it.
+    Value* takeHitAttribute() {
+        Value* taken = this->rt.hitAttribute;
+        this->rt.hitAttribute = nullptr;
+        return taken;
     }
     // Unlike rt result, we cannot merely copy the hit attribute since it is output only (for intersection), and thus we
     // don't necessarily have a starting value.

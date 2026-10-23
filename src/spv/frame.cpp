@@ -6,7 +6,21 @@
 #include "frame.hpp"
 
 
+static void delete_owned_result(Value*& result, RtStageKind trigger) {
+    if (result != nullptr && (trigger == RtStageKind::INTERSECTION || trigger == RtStageKind::ANY_HIT))
+        delete result;
+    result = nullptr;
+}
+
+static void delete_owned_hit_attribute(Value*& hit_attribute, RtStageKind trigger) {
+    if (hit_attribute != nullptr && (trigger == RtStageKind::INTERSECTION || trigger == RtStageKind::CLOSEST))
+        delete hit_attribute;
+    hit_attribute = nullptr;
+}
+
 Frame::~Frame() {
+    delete_owned_result(this->rt.result, this->rt.trigger);
+    delete_owned_hit_attribute(this->rt.hitAttribute, this->rt.trigger);
     if (view != nullptr) {
         view->getSource()->destroyView(view);
         view = nullptr;  // to prevent double deletion or after-deletion use
@@ -62,11 +76,12 @@ void Frame::triggerCallable(unsigned index, Value* callable, AccelStruct* as) {
 }
 
 void Frame::disableRaytrace() {
+    delete_owned_result(this->rt.result, this->rt.trigger);
+    delete_owned_hit_attribute(this->rt.hitAttribute, this->rt.trigger);
     this->rt.trigger = RtStageKind::NONE;
     this->rt.callableReturning = false;
     this->rt.index = 0;
     this->rt.as = nullptr;
-    this->rt.result = nullptr;
     delete this->rt.data;
     this->rt.data = nullptr;
 }
