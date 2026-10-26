@@ -1,0 +1,46 @@
+# Read with https://github.com/mmoult/scene-builder
+# scene-builder -w -r -i 2 scene.yaml -o scene.obj
+#
+# The geometry of in0.yaml, in1.yaml, and in2.yaml. Three procedural boxes which coincide, and a ray which starts inside
+# them. The intersection shader of each reports a hit at t = 0.3, 0.5, and 0.7 for primitives 0, 1, and 2. The ray
+# starts inside the boxes, so the interpreter runs all three shaders whichever order the boxes are visited in.
+# The inputs differ only in the order of the child nodes of the box node:
+# - in0: 1, 2, 0
+# - in1: 0, 1, 2
+# - in2: 2, 0, 1
+data:
+- origin: [0.5, -1.0, 0.5]
+  direction: [0.0, 1.0, 0.0]
+  min: 0.001
+  max: 5.0
+- point: [0.5, -1.0, 0.5]
+- point: [0.5, -0.7, 0.5]
+- point: [0.5, -0.5, 0.5]
+- point: [0.5, -0.3, 0.5]
+
+- instance:
+    box_min: [0.0, -2.0, 0.0]
+    box_max: [1.0, 2.0, 1.0]
+
+    data:
+    - min: box_min
+      max: box_max
+      color: [255, 120, 120]
+      opaque: true
+      geometry_index: 0
+      primitive_index: 0
+    - min: box_min
+      max: box_max
+      color: [120, 255, 120]
+      opaque: true
+      geometry_index: 0
+      primitive_index: 1
+    - min: box_min
+      max: box_max
+      color: [120, 120, 255]
+      opaque: true
+      geometry_index: 0
+      primitive_index: 2
+  scale: [1, 1, 1]
+  rotate: [0, 0, 0]
+  translate: [0, 0, 0]

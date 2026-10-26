@@ -1,0 +1,31 @@
+/* © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+#version 460
+#extension GL_EXT_ray_tracing : enable
+
+layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
+layout(binding = 1, set = 0) uniform RayProperties
+{
+   vec3 origin;
+   vec3 direction;
+} ray;
+
+struct HitInfo
+{
+   uint value;      // Attribute value of the closest hit
+   uint primitive;  // Primitive of the closest hit
+   float distance;  // Distance of the closest hit
+};
+layout(location = 0) rayPayloadEXT HitInfo payload;
+
+void main()
+{
+   payload.value = 0u;
+   payload.primitive = 0xFFFFFFFFu;  // None
+   payload.distance = -1.0;
+
+   traceRayEXT(topLevelAS, gl_RayFlagsNoneEXT, 0xff, 0, 0, 0, ray.origin, 0.001, ray.direction, 5.0, 0);
+}

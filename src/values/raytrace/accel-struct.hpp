@@ -181,6 +181,14 @@ public:
         trace.committed = trace.candidate;
     }
 
+    /// @brief Include the current AABB/procedural intersection, and report whether it became the closest hit.
+    /// The candidate intersection must be of type AABB, and its distance must already be set.
+    /// @return whether the candidate is now the committed (closest) hit.
+    bool commitProcedural() {
+        generateIntersection(trace.getCandidate().hitT);
+        return trace.committed == trace.candidate;
+    }
+
     /// @brief Include the current triangle intersection in determining the closest hit.
     /// The candidate intersection must be of type triangle.
     void confirmIntersection() {

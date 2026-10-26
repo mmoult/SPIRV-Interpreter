@@ -534,10 +534,16 @@ Instruction::Action Instruction::execute(
 
                 if (prev_stage == RtStageKind::INTERSECTION) {
                     // handle the result of the intersection shader
-                    hit_attrib = frame.takeHitAttribute();
+                    Value* candidate_attrib = frame.takeHitAttribute();
                     Primitive* intersected = static_cast<Primitive*>(frame.takeRtResult());
                     valid_intersect = intersected->data.b;
                     delete intersected;
+                    // The closest hit shader must see the attribute of the hit which is committed, which is not
+                    // always the hit which was reported last.
+                    if (valid_intersect && as.commitProcedural())
+                        frame.setCommittedHitAttribute(candidate_attrib);
+                    else
+                        delete candidate_attrib;
                 } else {
                     assert(prev_stage == RtStageKind::ANY_HIT);
                     // Return from any hit for non-opaque triangle geometry
@@ -586,6 +592,9 @@ Instruction::Action Instruction::execute(
                 if (trace.hasCommitted()) {
                     // Closest hit
                     if (!trace.rayFlags.skipClosestHitShader()) {
+                        // Triangle hits have no kept attribute, and the closest hit makes it from barycentrics
+                        if (trace.getCommitted().type == Intersection::Type::AABB)
+                            hit_attrib = frame.takeCommittedHitAttribute();
                         invoke_substage_shader(RtStageKind::CLOSEST, frame, as, hit_attrib, payload);
                         used_sbt = true;
                     }
@@ -692,6 +701,7 @@ Instruction::Action Instruction::execute(
             if (Value* hit_attrib = frame.takeHitAttribute(); hit_attrib != nullptr)
                 delete hit_attrib;
         }
+        delete frame.takeCommittedHitAttribute();
         frame.disableRaytrace();
         break;
     }

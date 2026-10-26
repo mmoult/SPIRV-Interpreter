@@ -83,6 +83,10 @@ class Frame {
         DataView* data = nullptr;
     } rt;
 
+    // The hit attribute of the closest procedural hit so far in the trace which this frame is running. The frame owns
+    // it, and it is kept apart from the raytracing state above since that is reset each time a shader is launched.
+    Value* committedHitAttribute = nullptr;
+
 public:
     Frame(unsigned pc, std::vector<Data*>& args, unsigned ret_at, DataView& data, AccelStruct* from_as = nullptr)
         : pc(pc)
@@ -196,6 +200,17 @@ public:
     Value* takeHitAttribute() {
         Value* taken = this->rt.hitAttribute;
         this->rt.hitAttribute = nullptr;
+        return taken;
+    }
+    // Keep the hit attribute of the new closest procedural hit, in place of any which was kept before.
+    void setCommittedHitAttribute(Value* hit_attrib) {
+        delete committedHitAttribute;
+        committedHitAttribute = hit_attrib;
+    }
+    // Take the kept hit attribute from the frame, along with the responsibility to delete it.
+    Value* takeCommittedHitAttribute() {
+        Value* taken = committedHitAttribute;
+        committedHitAttribute = nullptr;
         return taken;
     }
     // Unlike rt result, we cannot merely copy the hit attribute since it is output only (for intersection), and thus we

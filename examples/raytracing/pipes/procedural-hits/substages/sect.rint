@@ -1,0 +1,17 @@
+/* © SPIRV-Interpreter @ https://github.com/mmoult/SPIRV-Interpreter
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+#version 460
+#extension GL_EXT_ray_tracing : enable
+
+hitAttributeEXT uint value;
+
+void main()
+{
+   // The attribute names the primitive. The hit is reported nearer for the lower primitives, and it does not need to
+   // be where the ray meets the box, as long as it is within the interval of the ray.
+   value = uint(gl_PrimitiveID) + 1u;
+   reportIntersectionEXT(0.3 + 0.2 * float(gl_PrimitiveID), 0u);
+}

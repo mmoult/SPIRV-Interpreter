@@ -57,9 +57,13 @@ Ternary AccelStruct::traceRay(bool skip_trace) {
         }
     } while (found_primitive == Ternary::YES);
 
+    // A candidate which needs a shader to decide it must be launched before anything else is reported, even if hits
+    // were already committed in this call. The trace resumes from that candidate once the shader is done.
+    if (found_primitive == Ternary::MAYBE)
+        return Ternary::MAYBE;
     if (intersect_once)
         return Ternary::YES;
-    return found_primitive;  // could be no for no more to trace or maybe for something to check
+    return found_primitive;  // could be no for no more to trace
 }
 
 [[nodiscard]] Struct* AccelStruct::toStruct() const {

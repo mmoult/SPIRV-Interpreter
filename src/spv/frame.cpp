@@ -19,6 +19,7 @@ static void delete_owned_hit_attribute(Value*& hit_attribute, RtStageKind trigge
 }
 
 Frame::~Frame() {
+    delete committedHitAttribute;
     delete_owned_result(this->rt.result, this->rt.trigger);
     delete_owned_hit_attribute(this->rt.hitAttribute, this->rt.trigger);
     if (view != nullptr) {
