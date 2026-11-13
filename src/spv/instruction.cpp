@@ -74,6 +74,19 @@ Value* Instruction::getFromPointer(unsigned index, DataView& data) const noexcep
     return pointer.dereference(*head);
 }
 
+bool Instruction::isStoreToInvocationLocal(unsigned index, DataView& data) const noexcept(false) {
+    uint32_t storage = Pointer::UNKNOWN_STORAGE;
+    if (const Variable* var = getVariable(index, data); var != nullptr) {
+        storage = var->getStorageClass();
+    } else if (
+        const Value* ptr = getValue(index, data); ptr != nullptr && ptr->getType().getBase() == DataType::POINTER
+    ) {
+        // The class is a property of the pointer's type, wherever it points
+        storage = static_cast<const Pointer*>(ptr)->getStorage();
+    }
+    return storage == spv::StorageClassFunction || storage == spv::StorageClassPrivate;
+}
+
 bool Instruction::canInterface() const {
     switch (opcode) {
     case spv::OpFunctionParameter:

@@ -277,7 +277,9 @@ Instruction::Action Instruction::execute(
         break;
     }
     case spv::OpStore: {  // 62
-        CHECK_DEMOTE;
+        // A demoted invocation keeps running, so stores to its own variables must still take effect.
+        if (demoted && !isStoreToInvocationLocal(0, data))
+            break;
         Value* val = getValue(1, data);
         Value& store_to = *getFromPointer(0, data);
         store_to.copyFrom(*val);

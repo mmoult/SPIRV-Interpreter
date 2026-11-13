@@ -6,6 +6,8 @@
 #ifndef VALUES_POINTER_HPP
 #define VALUES_POINTER_HPP
 
+#include <cstdint>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -22,12 +24,22 @@ class Pointer final : public Value {
     std::vector<unsigned> indices;
 
 public:
+    /// The storage class value of a pointer which was made without one
+    static constexpr uint32_t UNKNOWN_STORAGE = std::numeric_limits<uint32_t>::max();
+
     /// @param point_to the pointee type. Type::pointer stores its ADDRESS without taking ownership (see the note on
     ///                 Type::subElement), so this must be a Type which outlives the Pointer - typically one owned by
     ///                 the module's Data. Taking it by value here would store the address of the parameter itself,
     ///                 which dies as soon as the constructor returns.
-    Pointer(unsigned head, const std::vector<unsigned>& indices, const Type& point_to)
-        : Value(Type::pointer(point_to, -1)), head(head), indices(indices) {}
+    /// @param storage the storage class of the pointer. The class is part of a pointer's type, so a pointer knows it
+    ///                without its head being a variable.
+    Pointer(
+        unsigned head,
+        const std::vector<unsigned>& indices,
+        const Type& point_to,
+        uint32_t storage = UNKNOWN_STORAGE
+    )
+        : Value(Type::pointer(point_to, storage)), head(head), indices(indices) {}
 
     /// @brief Construct a scratch pointer with no meaningful pointee type.
     Pointer(unsigned head, const std::vector<unsigned>& indices)
@@ -52,6 +64,11 @@ public:
 
     [[nodiscard]] Pointer* clone() const {
         return new Pointer(*this);
+    }
+
+    /// @return the storage class of this pointer, or UNKNOWN_STORAGE if it was not given
+    uint32_t getStorage() const {
+        return getType().getStorage();
     }
 
     unsigned getHead() const {

@@ -1317,9 +1317,12 @@ bool Instruction::makeResult(DataView& data, unsigned location, Instruction::Dec
             const Primitive& pat = *static_cast<const Primitive*>(at);
             indices.push_back(pat.data.u);
         }
-        Type* point_to = getType(dst_type_at, data);
-        assert(point_to != nullptr);
-        data[result_at].redefine(new Pointer(head, indices, *point_to));
+        Type* result_type = getType(dst_type_at, data);
+        assert(result_type != nullptr);
+        // The result type is the pointer type, which has the storage class
+        const uint32_t storage =
+            result_type->getBase() == DataType::POINTER ? result_type->getStorage() : Pointer::UNKNOWN_STORAGE;
+        data[result_at].redefine(new Pointer(head, indices, *result_type, storage));
         break;
     }
     case spv::OpVectorShuffle: {  // 79

@@ -82,6 +82,10 @@ private:
 
     Value* getFromPointer(unsigned index, DataView& data) const noexcept(false);
 
+    /// @brief Whether the operand names storage that only the executing invocation can see: a variable, or a pointer,
+    /// of the Function or Private storage class. If the storage class is not known, returns false.
+    bool isStoreToInvocationLocal(unsigned index, DataView& data) const noexcept(false);
+
     bool makeResultGlsl(DataView& data, unsigned result_at) const noexcept(false);
     bool makeResultOpenCl(DataView& data, unsigned result_at) const noexcept(false);
     bool makeResultPrintf(DataView& data) const noexcept(false);
