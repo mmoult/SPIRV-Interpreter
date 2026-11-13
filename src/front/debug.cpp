@@ -26,17 +26,7 @@ Debugger::Cmd Debugger::process(std::string command, Trie& options) const {
     }
     if (!trie->hasValue()) {
         std::cout << "Ambiguous command \"" << command << "\"";
-        std::cout << "! Cannot decide between: ";
-        bool first_command = true;
-        command += missing;
-        for (std::string& opt : trie->enumerate()) {
-            if (first_command)
-                first_command = false;
-            else
-                std::cout << ", ";
-            std::cout << command << opt;
-        }
-        std::cout << std::endl;
+        std::cout << "! Cannot decide between: " << trie->list(command + missing) << std::endl;
         return Cmd::BAD;
     }
     return static_cast<Cmd>(trie->getValue());

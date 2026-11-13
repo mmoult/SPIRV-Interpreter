@@ -115,6 +115,18 @@ std::tuple<const Trie*, std::string> Trie::next(const std::string& key) const {
     return std::tuple(nullptr, "");
 }
 
+std::string Trie::list(const std::string& prefix) const {
+    std::string result;
+    bool first = true;
+    for (const std::string& option : enumerate()) {
+        if (!first)
+            result += ", ";
+        first = false;
+        result += prefix + option;
+    }
+    return result;
+}
+
 std::string Trie::toString() const {
     std::stringstream properties;
     std::stringstream connections;

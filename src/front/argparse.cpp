@@ -118,16 +118,8 @@ bool Parser::parse(int argc, char* argv[]) {
                     if (trie != nullptr) {
                         if (!trie->hasValue()) {
                             std::cerr << "Ambiguous option name \"" << arg << "\"! Cannot decide between: ";
-                            bool first_command = true;
                             arg += missing;
-                            for (std::string& opt : trie->enumerate()) {
-                                if (first_command)
-                                    first_command = false;
-                                else
-                                    std::cerr << ", ";
-                                std::cerr << arg << opt;
-                            }
-                            std::cerr << std::endl;
+                            std::cerr << trie->list(arg) << std::endl;
                         } else
                             args_to_process.push_back(trie->getValue());
                     }

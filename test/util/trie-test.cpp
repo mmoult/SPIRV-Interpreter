@@ -155,3 +155,18 @@ TEST_CASE("enumerate", "[trie]") {
     // Enumerate should not repeat prior or the current key
     CHECK(t->enumerate() == std::vector<std::string>{"add", "clear", "remove"});
 }
+
+TEST_CASE("list", "[trie]") {
+    Trie trie;
+    trie.insert("flame", 0);
+    trie.insert("flash", 1);
+    trie.insert("flat", 2);
+
+    CHECK(trie.list() == "flame, flash, flat");
+
+    auto [t, missing] = trie.next("fla");
+    REQUIRE(t != nullptr);
+    CHECK(t->list() == "me, sh, t");
+    CHECK(t->list("fla") == "flame, flash, flat");
+    CHECK(Trie().list("x") == "");
+}

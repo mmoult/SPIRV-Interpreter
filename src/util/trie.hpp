@@ -69,6 +69,11 @@ public:
         return options;
     }
 
+    /// @brief List all expanded children's keys, separated by commas
+    /// @param prefix text to put in front of each key
+    /// @return the list, such as "add, clear, remove"
+    std::string list(const std::string& prefix = "") const;
+
     /// @brief Print the trie in graphviz-readable syntax
     /// @return a string which represents the trie
     std::string toString() const;

@@ -43,6 +43,26 @@ const unsigned NUM_FORMATS = 2;
 std::string format_names[] = {"yaml", "json", "yml"};
 ValueFormat* format_vals[] = {&yaml, &json, &yaml};
 
+/// @brief Selects the one choice which the given text is an abbreviation of.
+/// @param choices the keys to select from, with their values
+/// @param what what is being selected, for the error message
+/// @param given the text from the command line
+/// @return the value of the selected choice, or nothing (after printing the reason) if the text abbreviates no choice
+///         or several
+std::optional<unsigned> select_choice(const Trie& choices, const std::string& what, const std::string& given) {
+    auto [found, missing] = choices.next(given);
+    if (found == nullptr) {
+        std::cerr << "Unknown " << what << " \"" << given << "\"! Select from {" << choices.list() << "}." << std::endl;
+        return std::nullopt;
+    }
+    if (!found->hasValue()) {
+        std::cerr << "Ambiguous " << what << " \"" << given
+                  << "\"! Cannot decide between: " << found->list(given + missing) << std::endl;
+        return std::nullopt;
+    }
+    return found->getValue();
+}
+
 ValueFormat* determine_format(const std::string& file_name, ValueFormat* preference, bool exact = false) {
     std::string to_match = file_name;
     if (!exact) {
@@ -369,12 +389,10 @@ int main(int argc, char* argv[]) {
         scheduling_modes.insert("round-robin", Scheduler::Mode::ROUND_ROBIN);
         scheduling_modes.insert("sequential", Scheduler::Mode::SEQUENTIAL);
 
-        auto [found, missing] = scheduling_modes.next(schedule.getValue());
-        if (found == nullptr) {
-            std::cerr << "Could not select scheduling mode from \"" << scheduling_modes.getValue() << "\"!";
+        auto selected = select_choice(scheduling_modes, "scheduling mode", schedule.getValue());
+        if (!selected.has_value())
             return ReturnCode::BAD_ARGS;
-        }
-        auto mode = static_cast<Scheduler::Mode>(found->getValue());
+        auto mode = static_cast<Scheduler::Mode>(*selected);
         auto to_seed = scheduler.setMode(mode, 0);
         if (mode == Scheduler::Mode::RANDOM) {
             assert(to_seed != 0);

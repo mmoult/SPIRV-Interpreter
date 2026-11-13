@@ -16,15 +16,21 @@
 #include <iostream>
 
 void Console::refresh(unsigned header_width) {
+    constexpr unsigned DEFAULT_WIDTH = 80;
     headerWidth = header_width;
+    // A stdout which is not a console (when redirected, for example) does not have a width
 #if defined(WIN32) || defined(_WIN32)
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    width = static_cast<unsigned>(csbi.srWindow.Right - csbi.srWindow.Left + 1);
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+        width = static_cast<unsigned>(csbi.srWindow.Right - csbi.srWindow.Left + 1);
+    else
+        width = DEFAULT_WIDTH;
 #else
     struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    width = w.ws_col;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col != 0)
+        width = w.ws_col;
+    else
+        width = DEFAULT_WIDTH;
 #endif
 }
 
