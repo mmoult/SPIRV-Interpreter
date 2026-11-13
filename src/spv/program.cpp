@@ -5,8 +5,10 @@
  */
 #include "program.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <tuple>
@@ -250,11 +252,14 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
     Instruction::DecoQueue decorations(insts.getInstructions());
     bool entry_found = false;  // whether the entry instruction has been found
     bool static_sec = true;  // whether we can construct results statically (until first OpFunction)
+    bool can_discard = false;  // whether the fragment can be discarded
     std::vector<unsigned> static_vars;
 
     for (unsigned location = insts.getLastBreak(); location < insts.size(); ++location) {
         Instruction& inst = insts[location];
         auto opcode = inst.getOpcode();
+        if (opcode == spv::OpKill || opcode == spv::OpTerminateInvocation || opcode == spv::OpDemoteToHelperInvocation)
+            can_discard = true;
 
         if (static_sec) {
             // silently ignore all but the first entry found
@@ -294,6 +299,17 @@ unsigned Program::init(ValueMap& provided, DataView& data, RayTraceSubstage* sta
     // TODO: store stage type in the entry point rather than using an instruction lookup.
     if (!entry_found)
         throw std::runtime_error("Program is missing entry function!");
+
+    // Whether the fragment is discarded is an implicit output, so make a variable for it
+    if (can_discard && stage == nullptr && discardedVar == 0) {
+        discardedVar = this->data.allocateNew();
+        const Type boolean = Type::primitive(DataType::BOOL);
+        auto var = new Variable(spv::StorageClassOutput, false);
+        var->initValue(Type::pointer(boolean, spv::StorageClassOutput));
+        var->getVal().copyFrom(Primitive(false));
+        this->data.getGlobal()[discardedVar].redefine(var);
+    }
+
     // Once the entry point is selected, we can determine if there is extra io in that function's parameters
     const EntryPoint& ep = insts[entry].getEntryPoint(data);
     for (unsigned i = ep.getLocation() + 1; i < insts.size(); ++i) {
@@ -546,16 +562,43 @@ void Program::checkInputs(ValueMap& provided, bool unused) noexcept(false) {
     }
 }
 
-std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcept(false) {
+std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks, Api api) const noexcept(false) {
     // First, create a list of variables from outputs
     std::vector<const Variable*> outputs;
+    std::vector<const Variable*> skipped;
     const auto& global = data.getGlobal();
+    const bool discarded =
+        discardedVar != 0 && static_cast<const Primitive&>(global[discardedVar].getVariable()->getVal()).data.b;
+    // Vulkan and OpenGL do not write the outputs of a discarded fragment
+    const bool skip = discarded && (api == Api::VULKAN || api == Api::OPENGL);
     for (const auto out : outs) {
         auto var = global[out].getVariable();
         // var already checked not null in registerInterface
-        outputs.push_back(var);
+        if (skip && var->getStorageClass() == spv::StorageClassOutput)
+            skipped.push_back(var);
+        else
+            outputs.push_back(var);
     }
     unsigned total_tests = outputs.size();
+
+    // Whether the fragment was discarded is checked if the check file asks for it
+    if (auto at = checks.find(DISCARDED_NAME); at != checks.end()) {
+        if (discardedVar == 0)
+            return std::tuple(false, total_tests);  // this program cannot discard, so there is nothing to compare
+        const Value& actual = global[discardedVar].getVariable()->getVal();
+        std::unique_ptr<Value> expected(actual.getType().construct());
+        try {
+            expected->copyFrom(*at->second);
+        } catch (const std::exception&) {
+            return std::tuple(false, total_tests);
+        }
+        if (!expected->equals(actual)) {
+            std::cerr << "Output variable \"" << DISCARDED_NAME << "\" did not match the expected value!" << std::endl;
+            return std::tuple(false, total_tests);
+        }
+        ++total_tests;
+        checks.erase(at);
+    }
 
     // Next go through checks and find the corresponding in outputs
     for (const auto& [name, val] : checks) {
@@ -597,8 +640,13 @@ std::tuple<bool, unsigned> Program::checkOutputs(ValueMap& checks) const noexcep
             break;
         }
 
-        if (!found)
-            return std::tuple(false, total_tests);
+        if (!found) {
+            // A check for a variable which was left out on purpose is ignored
+            const bool left_out =
+                std::any_of(skipped.begin(), skipped.end(), [&](const Variable* var) { return comp.isMatch(*var); });
+            if (!left_out)
+                return std::tuple(false, total_tests);
+        }
     }
 
     // At this point, all outputs should be removed. If not, there are more outputs than in the check file
@@ -857,6 +905,13 @@ void Program::execute(ExecutionInfo& info) {
                     completeSubstage(substage, frame);
             }
         }
+    }
+
+    if (discardedVar != 0) {
+        const bool any_discarded = std::any_of(threads.begin(), threads.end(), [](const Invocation& thread) {
+            return thread.terminated || thread.demoted;
+        });
+        global[discardedVar].getVariable()->getVal().copyFrom(Primitive(any_discarded));
     }
 }
 

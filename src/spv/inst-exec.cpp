@@ -402,6 +402,7 @@ Instruction::Action Instruction::execute(
     case spv::OpKill:  // 252
     case spv::OpTerminateInvocation: {  // 4416
         // Completely stops execution
+        threads[invocation].terminated = true;
         terminate_invocation();
         break;
     }

@@ -22,6 +22,7 @@ struct Invocation {
     DataView* statics = nullptr;
     Status status = Status::READY;
     bool demoted = false;
+    bool terminated = false;
 
     Invocation() = default;
     // The invocation owns its frames and view, so it must not be copied.

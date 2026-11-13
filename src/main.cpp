@@ -23,7 +23,7 @@
 #include "values/raytrace/shader-binding-table.hpp"
 #include "values/value.hpp"
 
-constexpr auto VERSION = "0.11.0";
+constexpr auto VERSION = "0.12.0";
 
 enum ReturnCode : int {
     OK = 0,
@@ -204,6 +204,14 @@ ReturnCode handle_hit_record(Program& program, const HitGroupRecord& hit, ValueF
 int main(int argc, char* argv[]) {
     ArgParse::Parser parser;
 
+    ArgParse::StringOption api_arg("api");
+    parser.addOption(
+        &api_arg,
+        "api",
+        "Use extra rules from the provided api, one of opencl, opengl, or vulkan. See usage-help.md for the changes "
+        "each one makes.",
+        "a"
+    );
     ArgParse::StringOption check("FILE");
     parser.addOption(&check, "check", "Check the output against the specified file. Returns 0 if equal.", "c");
     ArgParse::Flag debug;
@@ -379,6 +387,27 @@ int main(int argc, char* argv[]) {
         std::cerr << "Unknown format preference: " << format_arg.getValue() << std::endl;
         return ReturnCode::BAD_ARGS;
     }
+
+    Program::Api api = Program::Api::NONE;
+    if (api_arg.isPresent()) {
+        Trie apis;
+        apis.insert("opencl", static_cast<unsigned>(Program::Api::OPENCL));
+        apis.insert("opengl", static_cast<unsigned>(Program::Api::OPENGL));
+        apis.insert("vulkan", static_cast<unsigned>(Program::Api::VULKAN));
+
+        auto selected = select_choice(apis, "API", api_arg.getValue());
+        if (!selected.has_value())
+            return ReturnCode::BAD_ARGS;
+        api = static_cast<Program::Api>(*selected);
+    }
+    // Rules of these APIs which the interpreter does not enforce (it runs the shaders it is given without validating
+    // them). All of them disallow recursion:
+    // - OpenCL, SPIR-V environment validation rules: "Recursion is not supported. The static function call graph for
+    //   an entry point must not contain cycles."
+    // - OpenGL, ARB_gl_spirv, "Recursion": "For all entry points, the static function-call graph rooted at that entry
+    //   point must not contain cycles."
+    // - Vulkan, VUID-StandaloneSpirv-None-04634: "The static function-call graph for an entry point must not contain
+    //   cycles; that is, static recursion is not allowed"
 
     Scheduler scheduler;
     if (seed.isPresent())
@@ -564,7 +593,7 @@ int main(int argc, char* argv[]) {
         owned_checks.reserve(check_map.size());
         for (const auto& [_, val] : check_map)
             owned_checks.emplace_back(val);
-        auto [ok, total_tests] = program.checkOutputs(check_map);
+        auto [ok, total_tests] = program.checkOutputs(check_map, api);
         if (!ok) {
             std::cerr << "Output did NOT match!" << std::endl;
             return ReturnCode::BAD_COMPARE;

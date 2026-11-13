@@ -71,6 +71,49 @@ template (this is why matching the template file formats is recommended- it make
 Data is printed in the "default format". This is decided by matching the given output file (.yaml or .json), if present.
 If not, the format can be given with the `--format` option.
 
+### Discard
+
+A fragment shader invocation may discard its fragment by terminating (with `OpKill` or `OpTerminateInvocation`) or by
+demoting to a helper invocation (`OpDemoteToHelperInvocation`). If a shader contains any of these instructions, the
+output has an extra Boolean named `@discarded`, which is `true` if the invocation was terminated or demoted and `false`
+if it was not. Shaders which cannot discard do not have the extra output.
+
+When checking with `--check`, `@discarded` is compared only if it appears in the check file. Check files which do not
+mention it are unaffected.
+
+SPIR-V alone does not say what happens to the output variables of a discarded invocation: they hold whatever they were
+assigned before the discard. By default, they are checked like any other output. Some APIs do not write the outputs of
+a discarded fragment (see [API](#api)). Under those, variables with the Output storage class are left unchecked when
+the invocation was discarded, and they need not appear in the check file. Buffers and images are always checked, since
+what the invocation wrote to them before it was discarded is unaffected.
+
+## API
+
+SPIR-V defines the rules common to every environment. Each API that consumes SPIR-V builds on them with rules of its
+own, so the rules of SPIR-V are a subset of the rules of any API. The interpreter applies the rules of SPIR-V by
+default. The `--api` option also applies the rules of an API. The API is one of `opencl`, `opengl`, and `vulkan`, and
+may be abbreviated as long as the abbreviation is not ambiguous (`vul` is Vulkan, but `op` could be OpenCL or OpenGL).
+The extra rules of each API follow, with links to the specifications they come from.
+
+### OpenCL
+
+None yet. The rules for SPIR-V modules in OpenCL are the
+[validation rules](https://registry.khronos.org/OpenCL/specs/unified/html/OpenCL_Env.html#validation-rules) of the
+OpenCL environment specification.
+
+### OpenGL
+
+The output variables of a discarded fragment are not checked (see [Discard](#discard)). This follows the
+[`discard` statement](https://registry.khronos.org/OpenGL/specs/gl/GLSLangSpec.4.60.html#jumps) of the OpenGL Shading
+Language specification. The SPIR-V environment is described in
+[ARB_gl_spirv](https://registry.khronos.org/OpenGL/extensions/ARB/ARB_gl_spirv.txt).
+
+### Vulkan
+
+The output variables of a discarded fragment are not checked (see [Discard](#discard)). This follows
+[Shader Termination and Demotion](https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#fragops-shader-termination)
+in the Vulkan specification.
+
 ## Printing
 
 Enables the printing of an execution traces. Instructions are printed as they are executed with their result data.

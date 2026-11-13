@@ -12,7 +12,7 @@ program for given inputs.
 - Generate template files for expected inputs
 - Check against expected results
 - Verbose trace and interactive program execution
-- 122 test examples, and counting
+- 135 test examples, and counting
 
 ## Limitations
 

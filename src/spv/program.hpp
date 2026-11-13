@@ -46,6 +46,12 @@ class Program {
     ShaderBindingTable sbt;
 
     constexpr static const char* SBT_NAME = "@shader-binding-table";
+    constexpr static const char* DISCARDED_NAME = "@discarded";
+
+    /// A variable which is not in the SPIR-V, but is made to hold whether the invocation of the last execution was
+    /// terminated or demoted. Zero if the program has no instruction which discards (OpKill, OpTerminateInvocation,
+    /// or OpDemoteToHelperInvocation).
+    unsigned discardedVar = 0;
 
     /// @brief Parses instructions from the binary words.
     /// Should identify whether the whole program is valid before any instructions are executed.
@@ -76,6 +82,14 @@ class Program {
     void completeSubstage(RtStageKind stage, Frame& launched_from);
 
 public:
+    /// An API whose rules the program runs under, when they add to what SPIR-V says
+    enum class Api {
+        NONE,
+        OPENCL,
+        OPENGL,
+        VULKAN,
+    };
+
     void parse(std::string file_path, uint8_t* buffer, int length) noexcept(false);
 
     inline unsigned getInstLength() const {
@@ -108,7 +122,10 @@ public:
     ///               default values.
     void checkInputs(ValueMap& provided, bool unused) noexcept(false);
 
-    [[nodiscard]] std::tuple<bool, unsigned> checkOutputs(ValueMap& checks) const noexcept(false);
+    /// @brief Compares the outputs from the last execution against the expected values in checks.
+    /// @param checks map of names to expected values
+    /// @param api the API the program runs under, which may change what is checked
+    [[nodiscard]] std::tuple<bool, unsigned> checkOutputs(ValueMap& checks, Api api = Api::NONE) const noexcept(false);
 
     enum PrintMode : unsigned {
         NORMAL = 0,
@@ -146,7 +163,13 @@ public:
         return input_map;
     }
     ValueMap getOutputs(bool prefer_location) const {
-        return getVariables(outs, prefer_location);
+        auto output_map = getVariables(outs, prefer_location);
+
+        // Whether a program discards its fragment is an implicit output, so make it explicit
+        if (discardedVar != 0)
+            output_map[DISCARDED_NAME] = &data.getGlobal()[discardedVar].getVariable()->getVal();
+
+        return output_map;
     }
 
     std::map<std::string, spv::StorageClass> getStorageClasses() const {

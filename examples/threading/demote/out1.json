@@ -1,3 +1,4 @@
 {
-	"SV_Target" : [ "NaN", "NaN", "NaN", "NaN" ]
+	"SV_Target" : [ "NaN", "NaN", "NaN", "NaN" ],
+	"@discarded" : true
 }
